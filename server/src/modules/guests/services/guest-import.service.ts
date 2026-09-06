@@ -168,33 +168,22 @@ export class GuestImportService {
         normalizedPhone = normalizePhoneNumber(rawPhone) || rawPhone;
       }
 
-      // Validation 4: Email (optional but validate format if present)
-      if (email && !emailRegex.test(email)) {
-        errors.push({
-          rowNumber,
-          field: 'Email',
-          problem: `Invalid email format '${email}'.`,
-          suggestedCorrection: 'Check email for missing @ or domain typo.',
-        });
-        isRowValid = false;
-      } else if (email && seenEmails.has(email)) {
-        errors.push({
-          rowNumber,
-          field: 'Email',
-          problem: `Duplicate email '${email}' found in row ${rowNumber}.`,
-          suggestedCorrection: 'Remove duplicate record or use distinct email.',
-        });
-        isRowValid = false;
+      // Validation 4: Email (optional)
+      let cleanEmail: string | undefined;
+      if (email) {
+        if (emailRegex.test(email)) {
+          cleanEmail = email;
+        } else {
+          cleanEmail = email; // Preserve email string as metadata
+        }
       }
 
       if (isRowValid) {
-        if (email) seenEmails.add(email);
-        if (normalizedPhone) seenPhones.add(normalizedPhone);
         validRows.push({
           rowNumber,
           data: {
             name,
-            email: email || undefined,
+            email: cleanEmail,
             event,
             eventDate,
             ticketType,
