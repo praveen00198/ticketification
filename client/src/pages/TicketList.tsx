@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TicketCard } from '../components/ticket/TicketCard';
 import { Ticket } from '../types';
-import { apiClient, API_BASE_URL } from '../api/client';
+import { apiClient, API_BASE_URL, getTicketPreviewUrl } from '../api/client';
 import { Search, RefreshCw, AlertCircle, FileSpreadsheet, QrCode, FolderArchive } from 'lucide-react';
 
 export const TicketList: React.FC = () => {
@@ -71,6 +71,21 @@ export const TicketList: React.FC = () => {
   };
 
   const handleDownloadSingleTicket = async (ticket: Ticket) => {
+    const safeName = ticket.name.replace(/[/\\?%*:|"<>]/g, '_').trim();
+    const fileName = `${safeName || 'Guest'}_${ticket.ticketId}.png`;
+
+    // 1. Instant download from MongoDB Base64 data if present
+    if (ticket.imageBase64 && ticket.imageBase64.startsWith('data:image/')) {
+      const a = document.createElement('a');
+      a.href = ticket.imageBase64;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
+
+    // 2. Fetch from backend download endpoint
     try {
       const token = localStorage.getItem('admin_token');
       const res = await fetch(`${API_BASE_URL}/tickets/${ticket.ticketId}/download?token=${token || ''}`, {
@@ -83,8 +98,7 @@ export const TicketList: React.FC = () => {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const safeName = ticket.name.replace(/[/\\?%*:|"<>]/g, '_').trim();
-      a.download = `${safeName || 'Guest'}_${ticket.ticketId}.png`;
+      a.download = fileName;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -92,7 +106,7 @@ export const TicketList: React.FC = () => {
     } catch (err: any) {
       console.error('Download error:', err);
       if (ticket.ticketImageUrl) {
-        window.open(ticket.ticketImageUrl, '_blank');
+        window.open(getTicketPreviewUrl(ticket.ticketImageUrl), '_blank');
       }
     }
   };

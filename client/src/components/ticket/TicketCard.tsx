@@ -44,11 +44,11 @@ export const TicketCard: React.FC<TicketCardProps> = ({ ticket, onDownload }) =>
     e.stopPropagation();
     if (onDownload) {
       onDownload(ticket);
-    } else if (ticket.ticketImageUrl) {
-      const previewUrl = getTicketPreviewUrl(ticket.ticketImageUrl);
+    } else if (ticket.imageBase64 || ticket.ticketImageUrl) {
+      const downloadUrl = ticket.imageBase64 || getTicketPreviewUrl(ticket.ticketImageUrl);
       const safeName = ticket.name.replace(/[/\\?%*:|"<>]/g, '_').trim();
       const a = document.createElement('a');
-      a.href = previewUrl;
+      a.href = downloadUrl;
       a.download = `${safeName || 'Guest'}_${ticket.ticketId}.png`;
       a.target = '_blank';
       document.body.appendChild(a);
@@ -121,9 +121,9 @@ export const TicketCard: React.FC<TicketCardProps> = ({ ticket, onDownload }) =>
 
       {/* Footer Actions */}
       <div className="bg-surface-bg px-5 py-3 border-t border-surface-border flex justify-between items-center text-xs">
-        {ticket.ticketImageUrl ? (
+        {ticket.imageBase64 || ticket.ticketImageUrl ? (
           <a
-            href={getTicketPreviewUrl(ticket.ticketImageUrl)}
+            href={ticket.imageBase64 || getTicketPreviewUrl(ticket.ticketImageUrl)}
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-600 hover:text-brand-600 transition-colors"

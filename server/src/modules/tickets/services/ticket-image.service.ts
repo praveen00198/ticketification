@@ -142,12 +142,12 @@ export class TicketImageService {
   }
 
   /**
-   * Generate a ticket image PNG and save it to disk.
-   * Returns the absolute file path and public URL.
+   * Generate a ticket image PNG, save to disk, and return persistent Base64 + public URL.
    */
-  async generateTicketImage(data: TicketImageData): Promise<{ filePath: string; publicUrl: string }> {
+  async generateTicketImage(data: TicketImageData): Promise<{ filePath: string; publicUrl: string; imageBase64: string }> {
     const fileName = `ticket-${data.ticketId}.png`;
     const filePath = path.join(this.outputDir, fileName);
+    let imageBase64 = '';
 
     const html = this.buildHtml(data);
 
@@ -168,8 +168,14 @@ export class TicketImageService {
       await page.setViewport({ width: 1620, height: 2025 });
       await page.setContent(html, { waitUntil: 'networkidle0' });
       await page.evaluateHandle('document.fonts.ready');
-      await page.screenshot({ path: filePath, type: 'png', fullPage: true });
+      const screenshotBuffer = await page.screenshot({ path: filePath, type: 'png', fullPage: true });
       await browser.close();
+
+      if (Buffer.isBuffer(screenshotBuffer)) {
+        imageBase64 = `data:image/png;base64,${screenshotBuffer.toString('base64')}`;
+      } else if (fs.existsSync(filePath)) {
+        imageBase64 = `data:image/png;base64,${fs.readFileSync(filePath).toString('base64')}`;
+      }
     } catch (error) {
       console.warn('[TicketImageService] Puppeteer failed, saving HTML fallback:', error);
       // Fallback: save HTML as file for debugging
@@ -184,7 +190,7 @@ export class TicketImageService {
       (config.env.isProduction ? 'https://ticketification.onrender.com' : `http://localhost:${config.env.port}`);
     const publicUrl = `${baseUrl.replace(/\/+$/, '')}/uploads/tickets/${fileName}`;
 
-    return { filePath, publicUrl };
+    return { filePath, publicUrl, imageBase64 };
   }
 }
 

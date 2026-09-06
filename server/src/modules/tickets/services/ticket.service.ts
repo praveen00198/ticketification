@@ -120,7 +120,7 @@ export class TicketService {
       const qrDataUrl = await this.qrServ.generateQrDataUrl(verificationToken);
 
       // 3. Generate ticket image (PNG)
-      const { filePath, publicUrl } = await this.imageServ.generateTicketImage({
+      const { filePath, publicUrl, imageBase64 } = await this.imageServ.generateTicketImage({
         ticketId: ticket.ticketId,
         guestName: ticket.name,
         eventName: ticket.event,
@@ -131,9 +131,10 @@ export class TicketService {
         phone: ticket.phone,
       });
 
-      // 4. Store the public URL in DB
-      await this.ticketRepo.updateTicketImageUrl(ticket._id.toString(), publicUrl);
+      // 4. Store the public URL and persistent Base64 in MongoDB
+      await this.ticketRepo.updateTicketImageUrl(ticket._id.toString(), publicUrl, imageBase64);
       ticket.ticketImageUrl = publicUrl;
+      ticket.imageBase64 = imageBase64;
 
       generatedTickets.push(ticket);
     }
@@ -284,21 +285,30 @@ export class TicketService {
     const fileName = `ticket-${ticket.ticketId}.png`;
     let filePath = path.resolve(process.cwd(), config.env.uploadDir, 'tickets', fileName);
 
-    // If image not generated yet, generate it on demand
+    // If image not on disk, restore from MongoDB imageBase64 or generate
     if (!fs.existsSync(filePath)) {
-      const qrDataUrl = await this.qrServ.generateQrDataUrl(ticket.verificationToken);
-      const res = await this.imageServ.generateTicketImage({
-        ticketId: ticket.ticketId,
-        guestName: ticket.name,
-        eventName: ticket.event,
-        eventDate: '',
-        ticketType: ticket.ticketType,
-        qrCodeDataUrl: qrDataUrl,
-        organization: ticket.organization,
-        phone: ticket.phone,
-      });
-      filePath = res.filePath;
-      await this.ticketRepo.updateTicketImageUrl(ticket._id.toString(), res.publicUrl);
+      if (ticket.imageBase64 && ticket.imageBase64.startsWith('data:image/')) {
+        const base64Data = ticket.imageBase64.replace(/^data:image\/\w+;base64,/, '');
+        const dir = path.dirname(filePath);
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+        fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
+      } else {
+        const qrDataUrl = await this.qrServ.generateQrDataUrl(ticket.verificationToken);
+        const res = await this.imageServ.generateTicketImage({
+          ticketId: ticket.ticketId,
+          guestName: ticket.name,
+          eventName: ticket.event,
+          eventDate: '',
+          ticketType: ticket.ticketType,
+          qrCodeDataUrl: qrDataUrl,
+          organization: ticket.organization,
+          phone: ticket.phone,
+        });
+        filePath = res.filePath;
+        await this.ticketRepo.updateTicketImageUrl(ticket._id.toString(), res.publicUrl, res.imageBase64);
+      }
     }
 
     return { filePath, fileName: downloadFileName };
@@ -327,35 +337,49 @@ export class TicketService {
     archive.pipe(res);
 
     for (const ticket of tickets) {
+      const safeName = ticket.name.replace(/[/\\?%*:|"<>]/g, '_').trim();
+      const zipEntryName = `${safeName || 'Guest'}_${ticket.ticketId}.png`;
+
+      // 1. Fast path: Direct MongoDB Base64 buffer (0 disk / 0 puppeteer overhead)
+      if (ticket.imageBase64 && ticket.imageBase64.startsWith('data:image/')) {
+        const base64Data = ticket.imageBase64.replace(/^data:image\/\w+;base64,/, '');
+        const buf = Buffer.from(base64Data, 'base64');
+        archive.append(buf, { name: zipEntryName });
+        continue;
+      }
+
+      // 2. Disk path: If file already exists on server disk
       const fileName = `ticket-${ticket.ticketId}.png`;
       let filePath = path.resolve(process.cwd(), config.env.uploadDir, 'tickets', fileName);
 
-      if (!fs.existsSync(filePath)) {
-        try {
-          const qrDataUrl = await this.qrServ.generateQrDataUrl(ticket.verificationToken);
-          const gen = await this.imageServ.generateTicketImage({
-            ticketId: ticket.ticketId,
-            guestName: ticket.name,
-            eventName: ticket.event,
-            eventDate: '',
-            ticketType: ticket.ticketType,
-            qrCodeDataUrl: qrDataUrl,
-            organization: ticket.organization,
-            phone: ticket.phone,
-          });
-          filePath = gen.filePath;
-          await this.ticketRepo.updateTicketImageUrl(ticket._id.toString(), gen.publicUrl);
-        } catch (e) {
-          console.warn(`[TicketService Zip Warning] Could not render image for ${ticket.ticketId}:`, e);
-          continue;
-        }
+      if (fs.existsSync(filePath)) {
+        archive.file(filePath, { name: zipEntryName });
+        continue;
       }
 
-      if (fs.existsSync(filePath)) {
-        // Sanitize name for clean zip filename starting with guest name: GuestName_TicketID.png
-        const safeName = ticket.name.replace(/[/\\?%*:|"<>]/g, '_').trim();
-        const zipEntryName = `${safeName || 'Guest'}_${ticket.ticketId}.png`;
-        archive.file(filePath, { name: zipEntryName });
+      // 3. Fallback: Generate image on demand and persist Base64 to MongoDB
+      try {
+        const qrDataUrl = await this.qrServ.generateQrDataUrl(ticket.verificationToken);
+        const gen = await this.imageServ.generateTicketImage({
+          ticketId: ticket.ticketId,
+          guestName: ticket.name,
+          eventName: ticket.event,
+          eventDate: '',
+          ticketType: ticket.ticketType,
+          qrCodeDataUrl: qrDataUrl,
+          organization: ticket.organization,
+          phone: ticket.phone,
+        });
+        await this.ticketRepo.updateTicketImageUrl(ticket._id.toString(), gen.publicUrl, gen.imageBase64);
+
+        if (gen.imageBase64) {
+          const base64Data = gen.imageBase64.replace(/^data:image\/\w+;base64,/, '');
+          archive.append(Buffer.from(base64Data, 'base64'), { name: zipEntryName });
+        } else if (fs.existsSync(gen.filePath)) {
+          archive.file(gen.filePath, { name: zipEntryName });
+        }
+      } catch (e) {
+        console.warn(`[TicketService Zip Warning] Could not render image for ${ticket.ticketId}:`, e);
       }
     }
 

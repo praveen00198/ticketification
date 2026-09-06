@@ -27,6 +27,7 @@ export interface Ticket {
   deliveryStatus?: DeliveryStatus;
   providerMessageId?: string;
   ticketImageUrl?: string;
+  imageBase64?: string;
   pdfPath?: string;
   usedAt?: string;
   verifiedBy?: string;

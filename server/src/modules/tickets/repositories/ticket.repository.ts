@@ -93,10 +93,14 @@ export class TicketRepository {
   }
 
   /**
-   * Update ticket image URL after generation.
+   * Update ticket image URL and persistent image Base64 data in MongoDB.
    */
-  async updateTicketImageUrl(id: string, ticketImageUrl: string): Promise<ITicketDocument | null> {
-    return Ticket.findByIdAndUpdate(id, { ticketImageUrl }, { new: true }).exec();
+  async updateTicketImageUrl(id: string, ticketImageUrl: string, imageBase64?: string): Promise<ITicketDocument | null> {
+    const updateData: any = { ticketImageUrl };
+    if (imageBase64) {
+      updateData.imageBase64 = imageBase64;
+    }
+    return Ticket.findByIdAndUpdate(id, updateData, { new: true }).exec();
   }
 
   async countStats(userId?: string) {

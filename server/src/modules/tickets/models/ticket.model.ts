@@ -24,6 +24,7 @@ export interface ITicketDocument extends Document {
   deliveryStatus: DeliveryStatus;
   providerMessageId?: string;
   ticketImageUrl?: string;
+  imageBase64?: string;
   pdfPath?: string;
   usedAt?: Date;
   verifiedBy?: string;
@@ -70,6 +71,7 @@ const ticketSchema = new Schema<ITicketDocument>(
     },
     providerMessageId: { type: String },
     ticketImageUrl: { type: String },
+    imageBase64: { type: String },
     pdfPath: { type: String },
     usedAt: { type: Date },
     verifiedBy: { type: String },
