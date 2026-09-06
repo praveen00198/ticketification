@@ -187,7 +187,7 @@ export class GuestImportService {
             event,
             eventDate,
             ticketType,
-            phone: normalizedPhone || undefined,
+            // phone: normalizedPhone || undefined,
             organization: organization || undefined,
             designation: designation || undefined,
           },
