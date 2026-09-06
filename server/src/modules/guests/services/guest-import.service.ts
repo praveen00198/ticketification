@@ -141,7 +141,7 @@ export class GuestImportService {
       const designation = String(row[desigKey] || '').trim();
 
       // Validation 1: Check empty row
-      if (!name && !email && !rawPhone) {
+      if (!name && !email && !rawPhone && !organization && !designation) {
         errors.push({
           rowNumber,
           field: 'Row',
@@ -162,17 +162,9 @@ export class GuestImportService {
         isRowValid = false;
       }
 
-      // Validation 3: Phone number validation (required for WhatsApp delivery)
+      // Validation 3: Phone number validation (optional)
       let normalizedPhone: string | undefined;
-      if (!rawPhone) {
-        errors.push({
-          rowNumber,
-          field: 'Phone',
-          problem: 'Phone/WhatsApp number is missing.',
-          suggestedCorrection: 'Add a valid phone number with country code (e.g. +919876543210).',
-        });
-        isRowValid = false;
-      } else {
+      if (rawPhone) {
         const normalized = normalizePhoneNumber(rawPhone);
         if (!normalized || !isValidE164(normalized)) {
           errors.push({

@@ -14,6 +14,8 @@ describe('VerificationService & QrService Logic', () => {
   it('should return INVALID for unrecognized token lookup', async () => {
     const mockRepo: any = {
       findByVerificationToken: jest.fn().mockResolvedValue(null),
+      findByTicketId: jest.fn().mockResolvedValue(null),
+      findById: jest.fn().mockResolvedValue(null),
     };
 
     const service = new (verificationService.constructor as any)(mockRepo);
@@ -33,6 +35,7 @@ describe('VerificationService & QrService Logic', () => {
 
     const mockRepo: any = {
       findById: jest.fn().mockResolvedValue(mockTicket),
+      findByIdOrTicketId: jest.fn().mockResolvedValue(mockTicket),
     };
 
     const service = new (verificationService.constructor as any)(mockRepo);
