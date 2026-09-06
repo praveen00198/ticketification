@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TicketCard } from '../components/ticket/TicketCard';
+import { TicketPreviewModal } from '../components/ticket/TicketPreviewModal';
 import { Ticket } from '../types';
 import { apiClient, API_BASE_URL, getTicketPreviewUrl } from '../api/client';
+import { downloadTicketPng, downloadAllTicketsZipClient } from '../utils/ticketCanvas';
 import { Search, RefreshCw, AlertCircle, FileSpreadsheet, QrCode, FolderArchive } from 'lucide-react';
 
 export const TicketList: React.FC = () => {
@@ -12,7 +14,9 @@ export const TicketList: React.FC = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [downloadingZip, setDownloadingZip] = useState(false);
+  const [zipProgress, setZipProgress] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [selectedPreviewTicket, setSelectedPreviewTicket] = useState<Ticket | null>(null);
 
   const fetchTickets = async () => {
     setLoading(true);
@@ -40,71 +44,52 @@ export const TicketList: React.FC = () => {
 
     setDownloadingZip(true);
     setMessage(null);
+    setZipProgress('Initializing ZIP archive...');
 
     try {
-      const token = localStorage.getItem('admin_token');
-      const response = await fetch(`${API_BASE_URL}/tickets/download-zip?token=${token || ''}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      // 1. Instant client-side ZIP generation
+      await downloadAllTicketsZipClient(tickets, (current, total) => {
+        setZipProgress(`Rendering ticket ${current} of ${total} (${Math.round((current / total) * 100)}%)...`);
       });
-
-      if (!response.ok) {
-        const errorJson = await response.json().catch(() => null);
-        throw new Error(errorJson?.error?.message || `Server returned status ${response.status}`);
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `ticketification-tickets-${new Date().toISOString().split('T')[0]}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
       setMessage('✓ All ticket images downloaded successfully in ZIP archive!');
-    } catch (err: any) {
-      setMessage(`ZIP download error: ${err.message}`);
+    } catch (clientErr: any) {
+      console.warn('Client ZIP failed, falling back to server download:', clientErr);
+      try {
+        const token = localStorage.getItem('admin_token');
+        const response = await fetch(`${API_BASE_URL}/tickets/download-zip?token=${token || ''}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+
+        if (!response.ok) {
+          const errorJson = await response.json().catch(() => null);
+          throw new Error(errorJson?.error?.message || `Server returned status ${response.status}`);
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ticketification-tickets-${new Date().toISOString().split('T')[0]}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+
+        setMessage('✓ All ticket images downloaded successfully in ZIP archive!');
+      } catch (serverErr: any) {
+        setMessage(`ZIP download error: ${serverErr.message}`);
+      }
     } finally {
       setDownloadingZip(false);
+      setZipProgress(null);
     }
   };
 
   const handleDownloadSingleTicket = async (ticket: Ticket) => {
-    const safeName = ticket.name.replace(/[/\\?%*:|"<>]/g, '_').trim();
-    const fileName = `${safeName || 'Guest'}_${ticket.ticketId}.png`;
-
-    // 1. Instant download from MongoDB Base64 data if present
-    if (ticket.imageBase64 && ticket.imageBase64.startsWith('data:image/')) {
-      const a = document.createElement('a');
-      a.href = ticket.imageBase64;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      return;
-    }
-
-    // 2. Fetch from backend download endpoint
     try {
-      const token = localStorage.getItem('admin_token');
-      const res = await fetch(`${API_BASE_URL}/tickets/${ticket.ticketId}/download?token=${token || ''}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) {
-        throw new Error('Failed to download ticket image.');
-      }
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      await downloadTicketPng(ticket);
     } catch (err: any) {
-      console.error('Download error:', err);
+      console.error('Download error, falling back:', err);
       if (ticket.ticketImageUrl) {
         window.open(getTicketPreviewUrl(ticket.ticketImageUrl), '_blank');
       }
@@ -144,7 +129,7 @@ export const TicketList: React.FC = () => {
           >
             {downloadingZip ? (
               <>
-                <RefreshCw className="w-4 h-4 animate-spin" /> Archiving ZIP...
+                <RefreshCw className="w-4 h-4 animate-spin" /> {zipProgress || 'Archiving ZIP...'}
               </>
             ) : (
               <>
@@ -235,10 +220,17 @@ export const TicketList: React.FC = () => {
               key={ticket._id}
               ticket={ticket}
               onDownload={handleDownloadSingleTicket}
+              onPreview={(t) => setSelectedPreviewTicket(t)}
             />
           ))}
         </div>
       )}
+
+      {/* In-App High Resolution Preview Modal */}
+      <TicketPreviewModal
+        ticket={selectedPreviewTicket}
+        onClose={() => setSelectedPreviewTicket(null)}
+      />
     </div>
   );
 };

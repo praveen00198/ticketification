@@ -141,8 +141,51 @@ export class TicketImageService {
     `;
   }
 
+  public buildSvg(data: TicketImageData): string {
+    const bgImage = this.templateBase64
+      ? `<image href="${this.templateBase64}" width="1620" height="2025" preserveAspectRatio="none"/>`
+      : `<rect width="1620" height="2025" fill="#7f1d1d"/>`;
+
+    const safeGuestName = (data.guestName || 'Guest')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1620 2025" width="1620" height="2025">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Mukta:wght@700;800&amp;family=Noto+Sans+Devanagari:wght@700;800;900&amp;display=swap');
+      .guest-text {
+        font-family: 'Noto Sans Devanagari', 'Mukta', 'Hind', sans-serif;
+        font-size: 72px;
+        font-weight: 800;
+        fill: #FFE680;
+        text-anchor: middle;
+        filter: drop-shadow(0px 4px 10px rgba(0,0,0,0.9));
+      }
+    </style>
+    <filter id="card-shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  ${bgImage}
+
+  <!-- QR White Card -->
+  <g transform="translate(604, 960)">
+    <rect width="412" height="412" rx="24" fill="#FFFFFF" stroke="#FCD34D" stroke-width="4" filter="url(#card-shadow)"/>
+    <image href="${data.qrCodeDataUrl}" x="16" y="16" width="380" height="380"/>
+  </g>
+
+  <!-- Guest Name -->
+  <text x="810" y="1485" class="guest-text">${safeGuestName}</text>
+</svg>`;
+  }
+
   /**
-   * Generate a ticket image PNG, save to disk, and return persistent Base64 + public URL.
+   * Generate a ticket image PNG/SVG, save to disk, and return persistent Base64 + public URL.
    */
   async generateTicketImage(data: TicketImageData): Promise<{ filePath: string; publicUrl: string; imageBase64: string }> {
     const fileName = `ticket-${data.ticketId}.png`;
@@ -177,10 +220,14 @@ export class TicketImageService {
         imageBase64 = `data:image/png;base64,${fs.readFileSync(filePath).toString('base64')}`;
       }
     } catch (error) {
-      console.warn('[TicketImageService] Puppeteer failed, saving HTML fallback:', error);
-      // Fallback: save HTML as file for debugging
-      const htmlFallbackPath = path.join(this.outputDir, `ticket-${data.ticketId}.html`);
-      fs.writeFileSync(htmlFallbackPath, html, 'utf-8');
+      console.warn('[TicketImageService] Puppeteer failed on host, building high-res SVG fallback:', error);
+      const svg = this.buildSvg(data);
+      imageBase64 = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+      try {
+        fs.writeFileSync(filePath, svg, 'utf-8');
+      } catch (writeErr) {
+        console.warn('[TicketImageService] Could not write fallback to disk:', writeErr);
+      }
     }
 
     // Construct public URL based on storage base URL (Render supplies RENDER_EXTERNAL_URL)

@@ -6,11 +6,12 @@ import { getTicketPreviewUrl } from '../../api/client';
 interface TicketCardProps {
   ticket: TicketType;
   onDownload?: (ticket: TicketType) => void;
+  onPreview?: (ticket: TicketType) => void;
   onResend?: (ticketId: string) => void;
   isResending?: boolean;
 }
 
-export const TicketCard: React.FC<TicketCardProps> = ({ ticket, onDownload }) => {
+export const TicketCard: React.FC<TicketCardProps> = ({ ticket, onDownload, onPreview }) => {
   const getStatusBadge = (status: TicketType['status']) => {
     switch (status) {
       case 'ACTIVE':
@@ -121,18 +122,12 @@ export const TicketCard: React.FC<TicketCardProps> = ({ ticket, onDownload }) =>
 
       {/* Footer Actions */}
       <div className="bg-surface-bg px-5 py-3 border-t border-surface-border flex justify-between items-center text-xs">
-        {ticket.imageBase64 || ticket.ticketImageUrl ? (
-          <a
-            href={ticket.imageBase64 || getTicketPreviewUrl(ticket.ticketImageUrl)}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-600 hover:text-brand-600 transition-colors"
-          >
-            <ExternalLink className="w-3.5 h-3.5" /> Preview Card
-          </a>
-        ) : (
-          <span className="text-[11px] text-zinc-400">Card Generated</span>
-        )}
+        <button
+          onClick={() => (onPreview ? onPreview(ticket) : window.open(ticket.imageBase64 || getTicketPreviewUrl(ticket.ticketImageUrl), '_blank'))}
+          className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-600 hover:text-brand-600 transition-colors"
+        >
+          <ExternalLink className="w-3.5 h-3.5" /> Preview Card
+        </button>
 
         <button
           onClick={handleDownloadClick}
