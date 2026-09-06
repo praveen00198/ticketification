@@ -7,6 +7,7 @@ import { Dashboard } from './pages/Dashboard';
 import { GuestImport } from './pages/GuestImport';
 import { TicketList } from './pages/TicketList';
 import { ScannerPage } from './pages/ScannerPage';
+import { VerifyTicket } from './pages/VerifyTicket';
 import { apiClient } from './api/client';
 
 export const App: React.FC = () => {
@@ -63,35 +64,47 @@ export const App: React.FC = () => {
     );
   }
 
-  if (!token || !user) {
-    if (authView === 'register') {
-      return (
-        <Register
-          onRegisterSuccess={handleLoginSuccess}
-          onNavigateToLogin={handleNavigateToLogin}
-        />
-      );
-    }
-
-    return (
-      <Login
-        onLoginSuccess={handleLoginSuccess}
-        onNavigateToRegister={handleNavigateToRegister}
-      />
-    );
-  }
-
   return (
     <Router>
-      <Layout user={user} onLogout={handleLogout}>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/import" element={<GuestImport />} />
-          <Route path="/tickets" element={<TicketList />} />
-          <Route path="/scan" element={<ScannerPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Layout>
+      <Routes>
+        {/* Public Verification Route (Open to any smartphone scan without login) */}
+        <Route path="/verify/:token" element={<VerifyTicket />} />
+
+        {/* Protected Admin Routes */}
+        {token && user ? (
+          <Route
+            path="/*"
+            element={
+              <Layout user={user} onLogout={handleLogout}>
+                <Routes>
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/import" element={<GuestImport />} />
+                  <Route path="/tickets" element={<TicketList />} />
+                  <Route path="/scan" element={<ScannerPage />} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </Layout>
+            }
+          />
+        ) : (
+          <Route
+            path="/*"
+            element={
+              authView === 'register' ? (
+                <Register
+                  onRegisterSuccess={handleLoginSuccess}
+                  onNavigateToLogin={handleNavigateToLogin}
+                />
+              ) : (
+                <Login
+                  onLoginSuccess={handleLoginSuccess}
+                  onNavigateToRegister={handleNavigateToRegister}
+                />
+              )
+            }
+          />
+        )}
+      </Routes>
     </Router>
   );
 };

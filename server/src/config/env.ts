@@ -16,7 +16,11 @@ export interface EnvConfig {
   uploadDir: string;
   puppeteerHeadless: boolean;
   isProduction: boolean;
-  // New variables for delivery provider selection and WhatsApp integration
+  // Supabase Storage Configuration
+  supabaseUrl: string;
+  supabaseKey: string;
+  supabaseBucket: string;
+  // Delivery provider selection and WhatsApp integration
   deliveryProvider: string;
   whatsappEnabled: boolean;
   whatsappMock: boolean;
@@ -58,6 +62,10 @@ function validateAndLoadEnv(): EnvConfig {
     uploadDir: process.env.UPLOAD_DIR || 'uploads',
     puppeteerHeadless: process.env.PUPPETEER_HEADLESS !== 'false',
     isProduction,
+    // Supabase Storage (Bucket: ticket-images)
+    supabaseUrl: process.env.SUPABASE_URL || '',
+    supabaseKey: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || '',
+    supabaseBucket: process.env.SUPABASE_BUCKET || 'ticket-images',
     // Delivery provider defaults to email; can be overridden to whatsapp
     deliveryProvider: process.env.DELIVERY_PROVIDER || 'email',
     whatsappEnabled: (process.env.WHATSAPP_ENABLED || 'true').toLowerCase() === 'true',

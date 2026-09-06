@@ -8,14 +8,15 @@ export class QrService {
   }
 
   async generateQrDataUrl(verificationToken: string): Promise<string> {
-    const verifyUrl = `${config.env.appUrl}/verify/${verificationToken}`;
+    const baseUrl = config.env.appUrl || 'https://ticketification.vercel.app';
+    const verifyUrl = `${baseUrl.replace(/\/+$/, '')}/verify/${verificationToken}`;
     return QRCode.toDataURL(verifyUrl, {
       errorCorrectionLevel: 'H',
       type: 'image/png',
-      margin: 2,
-      width: 300,
+      margin: 3,
+      width: 400,
       color: {
-        dark: '#18181B',
+        dark: '#000000',
         light: '#FFFFFF',
       },
     });

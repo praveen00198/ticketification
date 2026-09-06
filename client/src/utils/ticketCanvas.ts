@@ -47,12 +47,14 @@ export async function renderTicketToCanvas(ticket: Ticket): Promise<HTMLCanvasEl
     ctx.fillRect(0, 0, 1620, 2025);
   }
 
-  // 2. Generate QR Code Canvas
-  const qrData = ticket.verificationToken || ticket.ticketId;
+  // 2. Generate Real High-Resolution QR Code Canvas
+  const appOrigin = window.location.origin;
+  const token = ticket.verificationToken || ticket.ticketId;
+  const qrData = `${appOrigin}/verify/${token}`;
   const qrCanvas = document.createElement('canvas');
   await QRCode.toCanvas(qrCanvas, qrData, {
     width: 380,
-    margin: 1,
+    margin: 2,
     color: {
       dark: '#000000',
       light: '#FFFFFF',

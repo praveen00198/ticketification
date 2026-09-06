@@ -9,7 +9,16 @@ export class VerificationService {
       throw new AppError('Verification token is required.', 400);
     }
 
-    const ticket = await this.ticketRepo.findByVerificationToken(token.trim());
+    const cleanToken = token.trim();
+    let ticket = await this.ticketRepo.findByVerificationToken(cleanToken);
+
+    if (!ticket) {
+      ticket = await this.ticketRepo.findByTicketId(cleanToken);
+    }
+
+    if (!ticket && cleanToken.match(/^[0-9a-fA-F]{24}$/)) {
+      ticket = await this.ticketRepo.findById(cleanToken);
+    }
 
     if (!ticket) {
       return {

@@ -5,6 +5,7 @@ import { userRepository, UserRepository } from '../../auth/repositories/user.rep
 import { qrService, QrService } from './qr.service';
 import { ticketImageService, TicketImageService } from './ticket-image.service';
 import { deliveryService, DeliveryService } from '../../delivery/services/delivery.service';
+import { supabaseStorageService, SupabaseStorageService } from './supabase-storage.service';
 import { ITicketDocument } from '../models/ticket.model';
 import { AppError } from '../../../middlewares/error.middleware';
 import config from '../../../config/env';
@@ -119,7 +120,7 @@ export class TicketService {
       // 2. Generate QR code Data URL
       const qrDataUrl = await this.qrServ.generateQrDataUrl(verificationToken);
 
-      // 3. Generate ticket image (PNG)
+      // 3. Generate ticket image (PNG / SVG)
       const { filePath, publicUrl, imageBase64 } = await this.imageServ.generateTicketImage({
         ticketId: ticket.ticketId,
         guestName: ticket.name,
@@ -131,9 +132,23 @@ export class TicketService {
         phone: ticket.phone,
       });
 
-      // 4. Store the public URL and persistent Base64 in MongoDB
-      await this.ticketRepo.updateTicketImageUrl(ticket._id.toString(), publicUrl, imageBase64);
-      ticket.ticketImageUrl = publicUrl;
+      // 4. Upload to persistent Supabase Storage bucket ('ticket-images') if configured
+      let finalImageUrl = publicUrl;
+      const fileName = `ticket-${ticket.ticketId}.png`;
+      if (supabaseStorageService.isConfigured()) {
+        const supabaseUrl = await supabaseStorageService.uploadTicketImage(
+          fileName,
+          imageBase64 || filePath,
+          'image/png'
+        );
+        if (supabaseUrl) {
+          finalImageUrl = supabaseUrl;
+        }
+      }
+
+      // 5. Store image URL and persistent Base64 in MongoDB
+      await this.ticketRepo.updateTicketImageUrl(ticket._id.toString(), finalImageUrl, imageBase64);
+      ticket.ticketImageUrl = finalImageUrl;
       ticket.imageBase64 = imageBase64;
 
       generatedTickets.push(ticket);

@@ -18,12 +18,13 @@ export const ScannerPage: React.FC = () => {
   const [checkInError, setCheckInError] = useState<string | null>(null);
 
   const handleScanSuccess = async (scannedPayload: string) => {
-    // Extract token if scanned payload is full URL e.g. https://APP_DOMAIN/verify/<TOKEN>
-    let token = scannedPayload;
-    if (scannedPayload.includes('/verify/')) {
-      const parts = scannedPayload.split('/verify/');
+    // Extract token if scanned payload is a URL (e.g. https://.../verify/<TOKEN> or /api/tickets/verify/<TOKEN>)
+    let token = scannedPayload.trim();
+    if (token.includes('/verify/')) {
+      const parts = token.split('/verify/');
       token = parts[parts.length - 1];
     }
+    token = token.split('?')[0].split('#')[0].replace(/\/+$/, '').trim();
 
     setVerifying(true);
     setScanResult(null);
