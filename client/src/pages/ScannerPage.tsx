@@ -137,7 +137,7 @@ export const ScannerPage: React.FC = () => {
               <div className="space-y-3 text-xs mb-6">
                 <div className="flex justify-between py-1 border-b border-zinc-100">
                   <span className="text-surface-muted font-medium">Guest Name</span>
-                  <span className="font-extrabold text-sm text-surface-charcoal">{scanResult.ticket.name}</span>
+                  <span className="font-extrabold text-sm text-surface-charcoal">{scanResult.ticket.name || (scanResult.ticket as any).guestName || 'Guest'}</span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-zinc-100">
                   <span className="text-surface-muted font-medium">Ticket ID</span>
@@ -167,7 +167,7 @@ export const ScannerPage: React.FC = () => {
 
               <div className="flex gap-3">
                 <button
-                  onClick={() => handleCheckIn(scanResult.ticket!._id)}
+                  onClick={() => handleCheckIn(scanResult.ticket!._id || (scanResult.ticket as any)!.id || scanResult.ticket!.ticketId)}
                   disabled={checkingIn || !!checkInSuccess}
                   className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-base rounded-xl transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
                 >
@@ -197,7 +197,7 @@ export const ScannerPage: React.FC = () => {
               <div className="space-y-3 text-xs mb-6">
                 <div className="flex justify-between py-1 border-b border-zinc-100">
                   <span className="text-surface-muted">Guest Name</span>
-                  <span className="font-bold text-surface-charcoal">{scanResult.ticket.name}</span>
+                  <span className="font-bold text-surface-charcoal">{scanResult.ticket.name || (scanResult.ticket as any).guestName || 'Guest'}</span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-zinc-100">
                   <span className="text-surface-muted">Ticket Reference</span>

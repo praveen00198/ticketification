@@ -78,7 +78,7 @@ export const VerifyTicket: React.FC = () => {
             <div className="space-y-3 text-xs divide-y divide-zinc-100">
               <div className="flex justify-between items-center py-2">
                 <span className="text-surface-muted font-medium">Guest Name</span>
-                <span className="font-extrabold text-base text-surface-charcoal">{result.ticket.name}</span>
+                <span className="font-extrabold text-base text-surface-charcoal">{result.ticket.name || (result.ticket as any).guestName || 'Guest'}</span>
               </div>
               <div className="flex justify-between items-center py-2">
                 <span className="text-surface-muted font-medium">Ticket ID</span>
@@ -111,7 +111,7 @@ export const VerifyTicket: React.FC = () => {
             <div className="space-y-3 text-xs divide-y divide-zinc-100">
               <div className="flex justify-between items-center py-2">
                 <span className="text-surface-muted font-medium">Guest Name</span>
-                <span className="font-bold text-surface-charcoal">{result.ticket.name}</span>
+                <span className="font-bold text-surface-charcoal">{result.ticket.name || (result.ticket as any).guestName || 'Guest'}</span>
               </div>
               <div className="flex justify-between items-center py-2">
                 <span className="text-surface-muted font-medium">Ticket ID</span>

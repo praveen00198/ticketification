@@ -50,8 +50,12 @@ export class VerificationService {
     };
   }
 
-  async checkInTicket(ticketId: string, verifiedBy: string = 'Admin Scanner') {
-    const ticket = await this.ticketRepo.findById(ticketId);
+  async checkInTicket(idOrTicketId: string, verifiedBy: string = 'Admin Scanner') {
+    if (!idOrTicketId || idOrTicketId === 'undefined' || idOrTicketId === 'null') {
+      throw new AppError('Valid ticket ID or database ID is required for check-in.', 400);
+    }
+
+    const ticket = await this.ticketRepo.findByIdOrTicketId(idOrTicketId);
 
     if (!ticket) {
       throw new AppError('Ticket not found for check-in.', 404);

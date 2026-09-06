@@ -134,12 +134,16 @@ export class TicketService {
 
       // 4. Upload to persistent Supabase Storage bucket ('ticket-images') if configured
       let finalImageUrl = publicUrl;
-      const fileName = `ticket-${ticket.ticketId}.png`;
+      const isSvg = imageBase64.startsWith('data:image/svg');
+      const fileExt = isSvg ? 'svg' : 'png';
+      const fileName = `ticket-${ticket.ticketId}.${fileExt}`;
+      const mimeType = isSvg ? 'image/svg+xml' : 'image/png';
+
       if (supabaseStorageService.isConfigured()) {
         const supabaseUrl = await supabaseStorageService.uploadTicketImage(
           fileName,
           imageBase64 || filePath,
-          'image/png'
+          mimeType
         );
         if (supabaseUrl) {
           finalImageUrl = supabaseUrl;

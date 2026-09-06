@@ -11,9 +11,11 @@ export type DeliveryStatus = 'PENDING' | 'SENDING' | 'SENT' | 'FAILED';
 
 export interface Ticket {
   _id: string;
+  id?: string;
   ticketId: string;
   verificationToken: string;
   name: string;
+  guestName?: string;
   email?: string;
   phone?: string;
   event: string;
