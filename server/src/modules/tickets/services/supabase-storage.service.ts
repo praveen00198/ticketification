@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import fs from 'fs';
 import config from '../../../config/env';
 
 export class SupabaseStorageService {
@@ -26,7 +27,7 @@ export class SupabaseStorageService {
   }
 
   /**
-   * Upload a generated ticket image (Buffer or Base64) to Supabase Storage bucket 'ticket-images'.
+   * Upload a generated ticket image (Buffer, File path, or Base64) to Supabase Storage bucket 'ticket-images'.
    * Returns the permanent public CDN URL.
    */
   async uploadTicketImage(
@@ -52,6 +53,8 @@ export class SupabaseStorageService {
             const rawBase64 = fileData.replace(/^data:[^;]+;base64,/, '');
             buffer = Buffer.from(rawBase64, 'base64');
           }
+        } else if (fs.existsSync(fileData)) {
+          buffer = fs.readFileSync(fileData);
         } else {
           buffer = Buffer.from(fileData, 'utf-8');
         }

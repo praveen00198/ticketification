@@ -31,15 +31,21 @@ export class VerificationService {
       status: ticket.status,
       ticket: {
         id: ticket._id,
+        _id: ticket._id,
         ticketId: ticket.ticketId,
+        name: ticket.name,
         guestName: ticket.name,
         email: ticket.email,
+        phone: ticket.phone,
         event: ticket.event,
         eventDate: ticket.eventDate,
         ticketType: ticket.ticketType,
+        organization: ticket.organization,
+        designation: ticket.designation,
         status: ticket.status,
         usedAt: ticket.usedAt,
         verifiedBy: ticket.verifiedBy,
+        ticketImageUrl: ticket.ticketImageUrl,
       },
     };
   }

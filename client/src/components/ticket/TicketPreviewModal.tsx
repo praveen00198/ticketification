@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Ticket } from '../../types';
 import { renderTicketToDataUrl, downloadTicketPng } from '../../utils/ticketCanvas';
+import { getTicketPreviewUrl } from '../../api/client';
 import { X, Download, ExternalLink, RefreshCw } from 'lucide-react';
 
 interface TicketPreviewModalProps {
@@ -21,6 +22,22 @@ export const TicketPreviewModal: React.FC<TicketPreviewModalProps> = ({ ticket, 
     let isMounted = true;
     setLoading(true);
 
+    // 1. Direct Base64 data (Canonical stored artifact)
+    if (ticket.imageBase64 && ticket.imageBase64.startsWith('data:image/')) {
+      setDataUrl(ticket.imageBase64);
+      setLoading(false);
+      return;
+    }
+
+    // 2. Direct Supabase / Backend Storage URL (Canonical stored artifact)
+    if (ticket.ticketImageUrl) {
+      const resolved = getTicketPreviewUrl(ticket.ticketImageUrl);
+      setDataUrl(resolved);
+      setLoading(false);
+      return;
+    }
+
+    // 3. Fallback Canvas renderer (if legacy ticket lacks stored image)
     renderTicketToDataUrl(ticket)
       .then((url) => {
         if (isMounted) {

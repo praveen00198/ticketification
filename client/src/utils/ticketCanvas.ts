@@ -2,8 +2,21 @@ import QRCode from 'qrcode';
 import JSZip from 'jszip';
 import templateImgSrc from '../../assets/ticket_template.png';
 import { Ticket } from '../types';
+import { getTicketPreviewUrl } from '../api/client';
 
 let cachedTemplateImg: HTMLImageElement | null = null;
+
+/**
+ * Helper to trigger a browser file download from a URL or Blob URL
+ */
+function triggerBrowserDownload(url: string, fileName: string) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
 
 /**
  * Preload and cache the template image for high-speed repeated renders
@@ -26,7 +39,7 @@ function loadTemplateImage(): Promise<HTMLImageElement> {
 }
 
 /**
- * Renders a high-resolution 1620x2025 ticket on HTML5 Canvas
+ * Renders a high-resolution 1620x2025 ticket on HTML5 Canvas (fallback engine)
  */
 export async function renderTicketToCanvas(ticket: Ticket): Promise<HTMLCanvasElement> {
   const canvas = document.createElement('canvas');
@@ -54,7 +67,7 @@ export async function renderTicketToCanvas(ticket: Ticket): Promise<HTMLCanvasEl
   const qrCanvas = document.createElement('canvas');
   await QRCode.toCanvas(qrCanvas, qrData, {
     width: 380,
-    margin: 2,
+    margin: 3,
     color: {
       dark: '#000000',
       light: '#FFFFFF',
@@ -101,7 +114,7 @@ export async function renderTicketToCanvas(ticket: Ticket): Promise<HTMLCanvasEl
   ctx.shadowOffsetY = 4;
 
   ctx.fillStyle = '#FFE680';
-  ctx.fillText(ticket.name, 810, 1470);
+  ctx.fillText(ticket.name || 'Guest', 810, 1475);
   ctx.restore();
 
   return canvas;
@@ -119,19 +132,37 @@ export async function renderTicketToDataUrl(ticket: Ticket): Promise<string> {
 }
 
 /**
- * Instantly downloads a single ticket PNG to the user's browser
+ * Downloads the single canonical ticket image to the user's browser
  */
 export async function downloadTicketPng(ticket: Ticket): Promise<void> {
-  const dataUrl = await renderTicketToDataUrl(ticket);
-  const safeName = ticket.name.replace(/[/\\?%*:|"<>]/g, '_').trim();
-  const fileName = `${safeName || 'Guest'}_${ticket.ticketId}.png`;
+  const fileName = `ticket-${ticket.ticketId}.png`;
 
-  const a = document.createElement('a');
-  a.href = dataUrl;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  // 1. Direct Base64 data download
+  if (ticket.imageBase64 && ticket.imageBase64.startsWith('data:image/')) {
+    triggerBrowserDownload(ticket.imageBase64, fileName);
+    return;
+  }
+
+  // 2. Fetch canonical Supabase/Server image as Blob
+  if (ticket.ticketImageUrl) {
+    try {
+      const resolvedUrl = getTicketPreviewUrl(ticket.ticketImageUrl);
+      const res = await fetch(resolvedUrl, { mode: 'cors' });
+      if (res.ok) {
+        const blob = await res.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        triggerBrowserDownload(blobUrl, fileName);
+        setTimeout(() => window.URL.revokeObjectURL(blobUrl), 2000);
+        return;
+      }
+    } catch (fetchErr) {
+      console.warn('[downloadTicketPng] Direct image fetch failed, fallback to canvas:', fetchErr);
+    }
+  }
+
+  // 3. Canvas render fallback
+  const dataUrl = await renderTicketToDataUrl(ticket);
+  triggerBrowserDownload(dataUrl, fileName);
 }
 
 /**
@@ -152,12 +183,38 @@ export async function downloadAllTicketsZipClient(
       onProgress(i + 1, tickets.length);
     }
 
-    const dataUrl = await renderTicketToDataUrl(t);
-    const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, '');
-    const safeName = t.name.replace(/[/\\?%*:|"<>]/g, '_').trim();
-    const fileName = `${safeName || 'Guest'}_${t.ticketId}.png`;
+    const fileName = `ticket-${t.ticketId}.png`;
 
-    folder.file(fileName, base64Data, { base64: true });
+    // 1. Base64
+    if (t.imageBase64 && t.imageBase64.startsWith('data:image/')) {
+      const base64Data = t.imageBase64.replace(/^data:image\/\w+;base64,/, '');
+      folder.file(fileName, base64Data, { base64: true });
+      continue;
+    }
+
+    // 2. Supabase / Remote image fetch
+    if (t.ticketImageUrl) {
+      try {
+        const resolvedUrl = getTicketPreviewUrl(t.ticketImageUrl);
+        const res = await fetch(resolvedUrl, { mode: 'cors' });
+        if (res.ok) {
+          const blob = await res.blob();
+          folder.file(fileName, blob);
+          continue;
+        }
+      } catch (err) {
+        console.warn(`[downloadAllTicketsZipClient] Could not fetch ${t.ticketImageUrl}:`, err);
+      }
+    }
+
+    // 3. Canvas Fallback
+    try {
+      const dataUrl = await renderTicketToDataUrl(t);
+      const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+      folder.file(fileName, base64Data, { base64: true });
+    } catch (canvasErr) {
+      console.warn(`[downloadAllTicketsZipClient] Could not render canvas for ${t.ticketId}:`, canvasErr);
+    }
   }
 
   const content = await zip.generateAsync({ type: 'blob' });
@@ -170,3 +227,4 @@ export async function downloadAllTicketsZipClient(
   window.URL.revokeObjectURL(url);
   document.body.removeChild(a);
 }
+
