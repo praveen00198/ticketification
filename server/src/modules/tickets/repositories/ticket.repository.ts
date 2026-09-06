@@ -39,7 +39,7 @@ export class TicketRepository {
   }
 
   async updateStatus(
-    id: string,
+    idOrTicketId: string,
     status: TicketStatus,
     verifiedBy?: string
   ): Promise<ITicketDocument | null> {
@@ -48,7 +48,11 @@ export class TicketRepository {
       update.usedAt = new Date();
       if (verifiedBy) update.verifiedBy = verifiedBy;
     }
-    return Ticket.findByIdAndUpdate(id, update, { new: true }).exec();
+    if (idOrTicketId && idOrTicketId.match(/^[0-9a-fA-F]{24}$/)) {
+      const updated = await Ticket.findByIdAndUpdate(idOrTicketId, update, { new: true }).exec();
+      if (updated) return updated;
+    }
+    return Ticket.findOneAndUpdate({ ticketId: idOrTicketId }, update, { new: true }).exec();
   }
 
   async updateEmailStatus(id: string, emailStatus: EmailStatus): Promise<ITicketDocument | null> {
@@ -95,12 +99,16 @@ export class TicketRepository {
   /**
    * Update ticket image URL and persistent image Base64 data in MongoDB.
    */
-  async updateTicketImageUrl(id: string, ticketImageUrl: string, imageBase64?: string): Promise<ITicketDocument | null> {
+  async updateTicketImageUrl(idOrTicketId: string, ticketImageUrl: string, imageBase64?: string): Promise<ITicketDocument | null> {
     const updateData: any = { ticketImageUrl };
     if (imageBase64) {
       updateData.imageBase64 = imageBase64;
     }
-    return Ticket.findByIdAndUpdate(id, updateData, { new: true }).exec();
+    if (idOrTicketId && idOrTicketId.match(/^[0-9a-fA-F]{24}$/)) {
+      const updated = await Ticket.findByIdAndUpdate(idOrTicketId, updateData, { new: true }).exec();
+      if (updated) return updated;
+    }
+    return Ticket.findOneAndUpdate({ ticketId: idOrTicketId }, updateData, { new: true }).exec();
   }
 
   async countStats(userId?: string) {
