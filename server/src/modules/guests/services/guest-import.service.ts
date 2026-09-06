@@ -162,29 +162,10 @@ export class GuestImportService {
         isRowValid = false;
       }
 
-      // Validation 3: Phone number validation (optional)
+      // Validation 3: Phone number is completely optional (never invalidates or rejects an entry)
       let normalizedPhone: string | undefined;
       if (rawPhone) {
-        const normalized = normalizePhoneNumber(rawPhone);
-        if (!normalized || !isValidE164(normalized)) {
-          errors.push({
-            rowNumber,
-            field: 'Phone',
-            problem: `Invalid phone number '${rawPhone}'.`,
-            suggestedCorrection: 'Use international format: +CountryCodeNumber (e.g. +919876543210).',
-          });
-          isRowValid = false;
-        } else if (seenPhones.has(normalized)) {
-          errors.push({
-            rowNumber,
-            field: 'Phone',
-            problem: `Duplicate phone number '${normalized}' found.`,
-            suggestedCorrection: 'Remove duplicate record or use a distinct phone number.',
-          });
-          isRowValid = false;
-        } else {
-          normalizedPhone = normalized;
-        }
+        normalizedPhone = normalizePhoneNumber(rawPhone) || rawPhone;
       }
 
       // Validation 4: Email (optional but validate format if present)

@@ -141,7 +141,7 @@ export const GuestImport: React.FC = () => {
           <FileSpreadsheet className="w-12 h-12 text-zinc-400 mx-auto mb-3" />
           <h3 className="font-bold text-base text-surface-charcoal">Choose or Drop .xlsx Spreadsheet</h3>
           <p className="text-xs text-surface-muted mt-1 max-w-sm mx-auto">
-            Requires columns for <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono">Name</code> and <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono">Phone</code> (or WhatsApp/Mobile). Optional: Email, Organization, Designation.
+            Requires only a <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono font-bold">Name</code> column. Optional columns: <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono">Phone</code>, <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono">Email</code>, <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono">Event</code>, <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono">Ticket Type</code>, <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono">Organization</code>.
           </p>
 
           <input
