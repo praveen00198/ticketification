@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment
+.env
+.env.*
+!.env.example
+server/.env
+client/.env
+client/.env.local
+
+# Build
+dist/
+build/
+.vite/
+
+# Runtime files
+uploads/
+server/uploads/
+server/uploads/**
+*.log
+logs/
+
+# Generated ticket/email files
+mock-emails/
+server/uploads/mock-emails/
+*.pdf
+*.tmp
+
+# Testing
+coverage/
+.nyc_output/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+
+# Temporary files
+tmp/
+temp/
+
+# Cache
+.cache/
+.parcel-cache/

@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  /* Signature Ticket Perforation Notches */
+  .ticket-perforation-left {
+    position: relative;
+  }
+  .ticket-perforation-left::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: -10px;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    background-color: #FAF9F6;
+    border-radius: 50%;
+    border-right: 1px solid #E4E4E7;
+    z-index: 10;
+  }
+
+  .ticket-perforation-right {
+    position: relative;
+  }
+  .ticket-perforation-right::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    right: -10px;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    background-color: #FAF9F6;
+    border-radius: 50%;
+    border-left: 1px solid #E4E4E7;
+    z-index: 10;
+  }
+
+  .dashed-perforation {
+    border-style: dashed;
+    border-width: 1px;
+    border-color: #D4D4D8;
+  }
+}
