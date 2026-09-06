@@ -53,43 +53,43 @@ export interface ImportValidationSummary {
  *   "919876543210"  → "+919876543210"
  *   "+1-555-123-4567" → "+15551234567"
  */
-export function normalizePhoneNumber(raw: string): string | null {
+// export function normalizePhoneNumber(raw: string): string | null {
   // Strip all non-digit characters except leading +
-  let cleaned = raw.replace(/[^\d+]/g, '');
+  // let cleaned = raw.replace(/[^\d+]/g, '');
 
-  if (!cleaned) return null;
+  // if (!cleaned) return null;
 
   // If it already starts with +, validate length
-  if (cleaned.startsWith('+')) {
-    const digits = cleaned.slice(1);
-    if (digits.length >= 10 && digits.length <= 15) {
-      return `+${digits}`;
-    }
-    return null;
-  }
+  // if (cleaned.startsWith('+')) {
+  //   const digits = cleaned.slice(1);
+  //   if (digits.length >= 10 && digits.length <= 15) {
+  //     return `+${digits}`;
+  //   }
+  //   return null;
+  // }
 
   // Remove leading zeros
-  cleaned = cleaned.replace(/^0+/, '');
+  // cleaned = cleaned.replace(/^0+/, '');
 
   // Indian numbers: 10 digits starting with 6-9
-  if (cleaned.length === 10 && /^[6-9]/.test(cleaned)) {
-    return `+91${cleaned}`;
-  }
+  // if (cleaned.length === 10 && /^[6-9]/.test(cleaned)) {
+  //   return `+91${cleaned}`;
+  // }
 
   // Already has country code (11+ digits)
-  if (cleaned.length >= 11 && cleaned.length <= 15) {
-    return `+${cleaned}`;
-  }
+//   if (cleaned.length >= 11 && cleaned.length <= 15) {
+//     return `+${cleaned}`;
+//   }
 
-  return null;
-}
+//   return null;
+// }
 
 /**
  * Validate that a phone number looks correct in E.164 format.
  */
-export function isValidE164(phone: string): boolean {
-  return /^\+[1-9]\d{9,14}$/.test(phone);
-}
+// export function isValidE164(phone: string): boolean {
+//   return /^\+[1-9]\d{9,14}$/.test(phone);
+// }
 
 export class GuestImportService {
   parseAndValidateExcel(filePath: string): ImportValidationSummary {
@@ -163,10 +163,10 @@ export class GuestImportService {
       }
 
       // Validation 3: Phone number is completely optional (never invalidates or rejects an entry)
-      let normalizedPhone: string | undefined;
-      if (rawPhone) {
-        normalizedPhone = normalizePhoneNumber(rawPhone) || rawPhone;
-      }
+      // let normalizedPhone: string | undefined;
+      // if (rawPhone) {
+      //   normalizedPhone = normalizePhoneNumber(rawPhone) || rawPhone;
+      // }
 
       // Validation 4: Email (optional)
       let cleanEmail: string | undefined;
