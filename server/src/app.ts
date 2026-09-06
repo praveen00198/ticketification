@@ -60,43 +60,52 @@ app.get('/uploads/tickets/:filename', async (req, res) => {
     return res.sendFile(filePath);
   }
 
-  // Extract ticketId: e.g. "ticket-GACH-00004.png" or "ticket-GACH-00004.svg" -> "GACH-00004"
-  const match = req.params.filename.match(/^ticket-(.+)\.(png|svg|html)$/i);
-  if (match && match[1]) {
-    try {
-      const ticketId = match[1];
-      const ticket = await ticketService.getTicketById(ticketId);
-      if (ticket) {
-        // 1. If imageBase64 is in MongoDB, stream it with its MIME type
-        if (ticket.imageBase64 && ticket.imageBase64.startsWith('data:image/')) {
-          const matchType = ticket.imageBase64.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
-          if (matchType) {
-            const mimeType = matchType[1];
-            const buffer = Buffer.from(matchType[2], 'base64');
-            res.setHeader('Content-Type', mimeType);
-            return res.send(buffer);
-          }
-        }
+  // Extract potential ticketId: e.g. "ticket-GACH-00004.png", "GACH-00004.png", or "Praveen_GACH-00004.png"
+  const filenameWithoutExt = req.params.filename.replace(/\.(png|svg|html|jpg|jpeg)$/i, '');
+  const possibleTicketIds = [
+    filenameWithoutExt.replace(/^ticket-/, ''),
+    filenameWithoutExt.split('_').pop() || '',
+    filenameWithoutExt,
+  ].filter(Boolean);
 
-        // 2. Otherwise generate crisp SVG on the fly from MongoDB ticket record
-        const qrDataUrl = await qrService.generateQrDataUrl(ticket.verificationToken);
-        const svgContent = ticketImageService.buildSvg({
-          ticketId: ticket.ticketId,
-          guestName: ticket.name,
-          eventName: ticket.event,
-          eventDate: '',
-          ticketType: ticket.ticketType,
-          qrCodeDataUrl: qrDataUrl,
-          organization: ticket.organization,
-          phone: ticket.phone,
-        });
-        res.setHeader('Content-Type', 'image/svg+xml');
-        return res.send(svgContent);
-      }
-    } catch (err) {
-      console.warn(`[OnDemandImageGen] Error rendering image for ${req.params.filename}:`, err);
+  try {
+    let ticket: any = null;
+    for (const idToTry of possibleTicketIds) {
+      ticket = await ticketService.getTicketById(idToTry);
+      if (ticket) break;
     }
+
+    if (ticket) {
+      // 1. If imageBase64 is in MongoDB, stream it with its MIME type
+      if (ticket.imageBase64 && ticket.imageBase64.startsWith('data:image/')) {
+        const matchType = ticket.imageBase64.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
+        if (matchType) {
+          const mimeType = matchType[1];
+          const buffer = Buffer.from(matchType[2], 'base64');
+          res.setHeader('Content-Type', mimeType);
+          return res.send(buffer);
+        }
+      }
+
+      // 2. Otherwise generate crisp SVG on the fly from MongoDB ticket record
+      const qrDataUrl = await qrService.generateQrDataUrl(ticket.verificationToken);
+      const svgContent = ticketImageService.buildSvg({
+        ticketId: ticket.ticketId,
+        guestName: ticket.name,
+        eventName: ticket.event,
+        eventDate: '',
+        ticketType: ticket.ticketType,
+        qrCodeDataUrl: qrDataUrl,
+        organization: ticket.organization,
+        phone: ticket.phone,
+      });
+      res.setHeader('Content-Type', 'image/svg+xml');
+      return res.send(svgContent);
+    }
+  } catch (err) {
+    console.warn(`[OnDemandImageGen] Error rendering image for ${req.params.filename}:`, err);
   }
+
   return res.status(404).send('Ticket image not found');
 });
 

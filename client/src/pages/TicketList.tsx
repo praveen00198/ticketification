@@ -98,11 +98,12 @@ export const TicketList: React.FC = () => {
 
   const filteredTickets = tickets.filter((t) => {
     const s = search.toLowerCase();
+    const guestName = (t.name || (t as any).guestName || '').toLowerCase();
     const matchesSearch =
-      t.name.toLowerCase().includes(s) ||
+      guestName.includes(s) ||
       (t.email && t.email.toLowerCase().includes(s)) ||
       (t.phone && t.phone.toLowerCase().includes(s)) ||
-      t.ticketId.toLowerCase().includes(s);
+      (t.ticketId && t.ticketId.toLowerCase().includes(s));
 
     const matchesStatus = statusFilter === 'ALL' || t.status === statusFilter;
 

@@ -65,7 +65,7 @@ export const TicketPreviewModal: React.FC<TicketPreviewModalProps> = ({ ticket, 
         {/* Modal Header */}
         <div className="px-5 py-3.5 border-b border-zinc-800 flex justify-between items-center text-white">
           <div>
-            <h3 className="font-bold text-sm text-brand-400">{ticket.name}</h3>
+            <h3 className="font-bold text-sm text-brand-400">{ticket.name || (ticket as any).guestName || 'Guest'}</h3>
             <p className="text-[11px] text-zinc-400 font-mono">{ticket.ticketId} • {ticket.event}</p>
           </div>
           <button
@@ -86,7 +86,7 @@ export const TicketPreviewModal: React.FC<TicketPreviewModalProps> = ({ ticket, 
           ) : (
             <img
               src={dataUrl}
-              alt={`Ticket for ${ticket.name}`}
+              alt={`Ticket for ${ticket.name || (ticket as any).guestName || 'Guest'}`}
               className="max-h-[68vh] w-auto object-contain rounded-xl shadow-2xl border border-zinc-800"
             />
           )}

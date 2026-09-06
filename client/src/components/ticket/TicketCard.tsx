@@ -47,7 +47,7 @@ export const TicketCard: React.FC<TicketCardProps> = ({ ticket, onDownload, onPr
       onDownload(ticket);
     } else if (ticket.imageBase64 || ticket.ticketImageUrl) {
       const downloadUrl = ticket.imageBase64 || getTicketPreviewUrl(ticket.ticketImageUrl);
-      const safeName = ticket.name.replace(/[/\\?%*:|"<>]/g, '_').trim();
+      const safeName = (ticket.name || (ticket as any).guestName || 'Guest').replace(/[/\\?%*:|"<>]/g, '_').trim();
       const a = document.createElement('a');
       a.href = downloadUrl;
       a.download = `${safeName || 'Guest'}_${ticket.ticketId}.png`;
@@ -83,7 +83,7 @@ export const TicketCard: React.FC<TicketCardProps> = ({ ticket, onDownload, onPr
         <div className="flex justify-between items-start">
           <div className="flex-1 pr-2">
             <h4 className="font-bold text-base text-surface-charcoal group-hover:text-brand-700 transition-colors">
-              {ticket.name}
+              {ticket.name || (ticket as any).guestName || 'Guest'}
             </h4>
             {ticket.phone ? (
               <p className="text-xs text-emerald-700 font-mono flex items-center gap-1 mt-0.5">
