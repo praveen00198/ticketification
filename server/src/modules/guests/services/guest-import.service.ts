@@ -87,9 +87,9 @@ export function normalizePhoneNumber(raw: string): string | null {
 /**
  * Validate that a phone number looks correct in E.164 format.
  */
-export function isValidE164(phone: string): boolean {
-  return /^\+[1-9]\d{9,14}$/.test(phone);
-}
+// export function isValidE164(phone: string): boolean {
+//   return /^\+[1-9]\d{9,14}$/.test(phone);
+// }
 
 export class GuestImportService {
   parseAndValidateExcel(filePath: string): ImportValidationSummary {
