@@ -1,12 +1,14 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import fs from 'fs';
 import authRoutes from './modules/auth/routes/auth.routes';
 import guestRoutes from './modules/guests/routes/guest.routes';
 import ticketRoutes from './modules/tickets/routes/ticket.routes';
 import verificationRoutes from './modules/verification/routes/verification.routes';
 import dashboardRoutes from './modules/dashboard/routes/dashboard.routes';
 import webhookRoutes from './modules/delivery/routes/webhook.routes';
+import { ticketService } from './modules/tickets/services/ticket.service';
 import { errorHandler } from './middlewares/error.middleware';
 import config from './config/env';
 
@@ -47,8 +49,31 @@ app.use(
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Serve generated ticket images statically
+// Serve generated ticket images statically with on-demand fallback regeneration
 const uploadsPath = path.resolve(process.cwd(), config.env.uploadDir);
+
+app.get('/uploads/tickets/:filename', async (req, res, next) => {
+  const filePath = path.join(uploadsPath, 'tickets', req.params.filename);
+  if (fs.existsSync(filePath)) {
+    return res.sendFile(filePath);
+  }
+
+  // If missing on disk (e.g. after Render cold start / restart), regenerate on the fly
+  const match = req.params.filename.match(/^ticket-(.+)\.png$/i);
+  if (match && match[1]) {
+    try {
+      const ticketId = match[1];
+      const result = await ticketService.getTicketImageFilePath(ticketId);
+      if (fs.existsSync(result.filePath)) {
+        return res.sendFile(result.filePath);
+      }
+    } catch (err) {
+      console.warn(`[OnDemandImageGen] Could not generate on-demand image for ${req.params.filename}:`, err);
+    }
+  }
+  return next();
+});
+
 app.use('/uploads', express.static(uploadsPath));
 
 // REST API Base Router

@@ -55,3 +55,19 @@ apiClient.interceptors.response.use(
   }
 );
 
+/**
+ * Resolves the public URL for a ticket image.
+ * Safely converts legacy localhost URLs (e.g. http://localhost:10000/uploads/...)
+ * to the actual active production backend domain.
+ */
+export function getTicketPreviewUrl(ticketImageUrl?: string): string {
+  if (!ticketImageUrl) return '';
+  const uploadsIndex = ticketImageUrl.indexOf('/uploads/');
+  if (uploadsIndex !== -1) {
+    const relativePath = ticketImageUrl.substring(uploadsIndex);
+    const backendRoot = API_BASE_URL.replace(/\/api\/?$/, '');
+    return `${backendRoot}${relativePath}`;
+  }
+  return ticketImageUrl;
+}
+

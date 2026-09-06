@@ -232,12 +232,33 @@ export class TicketService {
     return this.resendTicket(ticketId, userId);
   }
 
+  private normalizeTicketUrl(url?: string): string | undefined {
+    if (!url) return undefined;
+    const baseUrl =
+      process.env.TICKET_STORAGE_BASE_URL ||
+      process.env.RENDER_EXTERNAL_URL ||
+      (config.env.isProduction ? 'https://ticketification.onrender.com' : `http://localhost:${config.env.port}`);
+    const uploadsIndex = url.indexOf('/uploads/');
+    if (uploadsIndex !== -1) {
+      const relativePath = url.substring(uploadsIndex);
+      return `${baseUrl.replace(/\/+$/, '')}${relativePath}`;
+    }
+    return url;
+  }
+
   async getAllTickets(filter: any = {}, userId?: string) {
     const finalFilter = { ...filter };
     if (userId) {
       finalFilter.createdBy = userId;
     }
-    return this.ticketRepo.findAll(finalFilter);
+    const tickets = await this.ticketRepo.findAll(finalFilter);
+    return tickets.map((t: any) => {
+      const doc = typeof t.toObject === 'function' ? t.toObject() : { ...t };
+      if (doc.ticketImageUrl) {
+        doc.ticketImageUrl = this.normalizeTicketUrl(doc.ticketImageUrl);
+      }
+      return doc;
+    });
   }
 
   async getTicketById(id: string, userId?: string) {
@@ -245,7 +266,11 @@ export class TicketService {
     if (!ticket) {
       throw new AppError('Ticket not found or access denied.', 404);
     }
-    return ticket;
+    const doc: any = typeof (ticket as any).toObject === 'function' ? (ticket as any).toObject() : { ...ticket };
+    if (doc.ticketImageUrl) {
+      doc.ticketImageUrl = this.normalizeTicketUrl(doc.ticketImageUrl);
+    }
+    return doc;
   }
 
   async getTicketImageFilePath(ticketId: string, userId?: string): Promise<{ filePath: string; fileName: string }> {

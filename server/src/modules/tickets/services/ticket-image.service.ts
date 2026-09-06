@@ -181,8 +181,8 @@ export class TicketImageService {
     const baseUrl =
       process.env.TICKET_STORAGE_BASE_URL ||
       process.env.RENDER_EXTERNAL_URL ||
-      `http://localhost:${config.env.port}`;
-    const publicUrl = `${baseUrl}/uploads/tickets/${fileName}`;
+      (config.env.isProduction ? 'https://ticketification.onrender.com' : `http://localhost:${config.env.port}`);
+    const publicUrl = `${baseUrl.replace(/\/+$/, '')}/uploads/tickets/${fileName}`;
 
     return { filePath, publicUrl };
   }
