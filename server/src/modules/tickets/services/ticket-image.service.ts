@@ -154,7 +154,15 @@ export class TicketImageService {
     try {
       const browser = await puppeteer.launch({
         headless: config.env.puppeteerHeadless ? 'shell' : false,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--no-first-run',
+          '--no-zygote',
+          '--single-process',
+        ],
       });
       const page = await browser.newPage();
       await page.setViewport({ width: 1620, height: 2025 });
@@ -169,8 +177,11 @@ export class TicketImageService {
       fs.writeFileSync(htmlFallbackPath, html, 'utf-8');
     }
 
-    // Construct public URL based on storage base URL
-    const baseUrl = process.env.TICKET_STORAGE_BASE_URL || `http://localhost:${config.env.port}`;
+    // Construct public URL based on storage base URL (Render supplies RENDER_EXTERNAL_URL)
+    const baseUrl =
+      process.env.TICKET_STORAGE_BASE_URL ||
+      process.env.RENDER_EXTERNAL_URL ||
+      `http://localhost:${config.env.port}`;
     const publicUrl = `${baseUrl}/uploads/tickets/${fileName}`;
 
     return { filePath, publicUrl };

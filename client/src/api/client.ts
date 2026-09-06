@@ -1,7 +1,33 @@
 import axios from 'axios';
 
-// Default to relative /api so Vite proxy routes to backend server on configured port (e.g. 3000/5000)
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+/**
+ * Resolves the backend API base URL.
+ * Automatically handles all formats of VITE_API_URL:
+ * - Empty / undefined (Local dev): defaults to '/api' (Vite proxy forwards to backend)
+ * - 'https://ticketification.onrender.com'     -> 'https://ticketification.onrender.com/api'
+ * - 'https://ticketification.onrender.com/'    -> 'https://ticketification.onrender.com/api'
+ * - 'https://ticketification.onrender.com/api'  -> 'https://ticketification.onrender.com/api'
+ * - 'https://ticketification.onrender.com/api/' -> 'https://ticketification.onrender.com/api'
+ */
+function resolveApiBaseUrl(): string {
+  const envUrl = (import.meta.env.VITE_API_URL || '').trim();
+  if (!envUrl) {
+    return '/api';
+  }
+
+  // Remove any trailing slashes
+  const cleanUrl = envUrl.replace(/\/+$/, '');
+
+  // If already ends with /api, use as is
+  if (cleanUrl.endsWith('/api')) {
+    return cleanUrl;
+  }
+
+  // Otherwise append /api
+  return `${cleanUrl}/api`;
+}
+
+export const API_BASE_URL = resolveApiBaseUrl();
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -28,3 +54,4 @@ apiClient.interceptors.response.use(
     return Promise.reject(new Error(message));
   }
 );
+

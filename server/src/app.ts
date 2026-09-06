@@ -12,7 +12,38 @@ import config from './config/env';
 
 const app = express();
 
-app.use(cors());
+const allowedOrigins = [
+  config.env.appUrl,
+  'http://localhost:5173',
+  'http://localhost:3000',
+  process.env.CORS_ORIGIN,
+].filter(Boolean) as string[];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
+      if (!origin) return callback(null, true);
+
+      // Allow if explicit match, vercel preview/prod domain, or wildcard
+      if (
+        allowedOrigins.includes(origin) ||
+        origin.endsWith('.vercel.app') ||
+        process.env.CORS_ORIGIN === '*' ||
+        !config.env.isProduction
+      ) {
+        return callback(null, true);
+      }
+
+      // Default fallback in case user hasn't set custom domain yet
+      return callback(null, true);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    optionsSuccessStatus: 200,
+  })
+);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 

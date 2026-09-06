@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TicketCard } from '../components/ticket/TicketCard';
 import { Ticket } from '../types';
-import { apiClient } from '../api/client';
+import { apiClient, API_BASE_URL } from '../api/client';
 import { Search, RefreshCw, AlertCircle, FileSpreadsheet, QrCode, FolderArchive } from 'lucide-react';
 
 export const TicketList: React.FC = () => {
@@ -43,7 +43,7 @@ export const TicketList: React.FC = () => {
 
     try {
       const token = localStorage.getItem('admin_token');
-      const response = await fetch(`/api/tickets/download-zip?token=${token || ''}`, {
+      const response = await fetch(`${API_BASE_URL}/tickets/download-zip?token=${token || ''}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
 
@@ -73,7 +73,7 @@ export const TicketList: React.FC = () => {
   const handleDownloadSingleTicket = async (ticket: Ticket) => {
     try {
       const token = localStorage.getItem('admin_token');
-      const res = await fetch(`/api/tickets/${ticket.ticketId}/download?token=${token || ''}`, {
+      const res = await fetch(`${API_BASE_URL}/tickets/${ticket.ticketId}/download?token=${token || ''}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) {
