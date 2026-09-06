@@ -13,6 +13,7 @@ export const ScannerPage: React.FC = () => {
     ticket?: Ticket;
     message?: string;
   } | null>(null);
+  const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [checkInSuccess, setCheckInSuccess] = useState<string | null>(null);
   const [checkingIn, setCheckingIn] = useState(false);
   const [checkInError, setCheckInError] = useState<string | null>(null);
@@ -28,6 +29,7 @@ export const ScannerPage: React.FC = () => {
 
     setVerifying(true);
     setScanResult(null);
+    setIsCheckedIn(false);
     setCheckInSuccess(null);
     setCheckInError(null);
 
@@ -60,16 +62,15 @@ export const ScannerPage: React.FC = () => {
         verifiedBy: 'Admin Scanner',
       });
       if (res.success) {
-        setCheckInSuccess(`✓ TICKET CHECKED IN SUCCESSFULLY! Guest marked as entered.`);
-        // Update local status representation
+        setIsCheckedIn(true);
+        setCheckInSuccess(res.message || 'Ticket checked in successfully!');
         if (scanResult?.ticket) {
           setScanResult({
             ...scanResult,
-            status: 'USED',
             ticket: {
               ...scanResult.ticket,
               status: 'USED',
-              usedAt: new Date().toISOString(),
+              usedAt: res.data?.ticket?.usedAt || new Date().toISOString(),
             },
           });
         }
@@ -83,6 +84,7 @@ export const ScannerPage: React.FC = () => {
 
   const resetScanner = () => {
     setScanResult(null);
+    setIsCheckedIn(false);
     setCheckInSuccess(null);
     setCheckInError(null);
   };
@@ -106,7 +108,7 @@ export const ScannerPage: React.FC = () => {
             <TicketIcon className="w-3.5 h-3.5" /> Tickets
           </button>
 
-          {scanResult && (
+          {(scanResult || isCheckedIn) && (
             <button
               onClick={resetScanner}
               className="bg-surface-charcoal hover:bg-black text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 shadow-sm"
@@ -124,13 +126,59 @@ export const ScannerPage: React.FC = () => {
       )}
 
       {/* Camera Scanner View when no active result card */}
-      {!scanResult && !verifying && <QrScanner onScanSuccess={handleScanSuccess} />}
+      {!scanResult && !isCheckedIn && !verifying && <QrScanner onScanSuccess={handleScanSuccess} />}
 
-      {/* Verification Result Card */}
+      {/* Verification & Check-In Result Cards */}
       {scanResult && !verifying && (
         <div className="space-y-4">
-          {/* Active / Valid State */}
-          {scanResult.status === 'ACTIVE' && scanResult.ticket && (
+          {/* Checked-In Success State */}
+          {isCheckedIn && scanResult.ticket && (
+            <div className="bg-white rounded-2xl border-2 border-emerald-500 p-6 shadow-xl ticket-perforation-left ticket-perforation-right relative">
+              <div className="flex items-center gap-3 text-emerald-800 bg-emerald-50 p-4 rounded-xl mb-6 border border-emerald-200">
+                <CheckCircle2 className="w-9 h-9 shrink-0 text-emerald-600" />
+                <div>
+                  <h2 className="text-lg font-extrabold leading-none text-emerald-950">✓ CHECKED IN SUCCESSFULLY</h2>
+                  <p className="text-xs text-emerald-700 mt-1">{checkInSuccess || 'Guest entry approved and verified in system.'}</p>
+                </div>
+              </div>
+
+              <div className="space-y-3 text-xs mb-6">
+                <div className="flex justify-between py-1 border-b border-zinc-100">
+                  <span className="text-surface-muted font-medium">Guest Name</span>
+                  <span className="font-extrabold text-sm text-surface-charcoal">{scanResult.ticket.name || (scanResult.ticket as any).guestName || 'Guest'}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-zinc-100">
+                  <span className="text-surface-muted font-medium">Ticket ID</span>
+                  <span className="font-mono font-bold text-brand-600">{scanResult.ticket.ticketId}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-zinc-100">
+                  <span className="text-surface-muted font-medium">Event</span>
+                  <span className="font-semibold text-zinc-800">{scanResult.ticket.event}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-zinc-100">
+                  <span className="text-surface-muted font-medium">Pass Type</span>
+                  <span className="font-bold text-zinc-900 bg-zinc-100 px-2 py-0.5 rounded">{scanResult.ticket.ticketType}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-zinc-100">
+                  <span className="text-surface-muted font-medium">Checked In At</span>
+                  <span className="font-semibold text-emerald-800 flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-emerald-600" />
+                    {scanResult.ticket.usedAt ? new Date(scanResult.ticket.usedAt).toLocaleTimeString() : 'Just now'}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                onClick={resetScanner}
+                className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
+              >
+                <ArrowLeft className="w-4 h-4" /> Scan Next Ticket
+              </button>
+            </div>
+          )}
+
+          {/* Active / Valid State (Ready for Check-In) */}
+          {!isCheckedIn && scanResult.status === 'ACTIVE' && scanResult.ticket && (
             <div className="bg-white rounded-2xl border-2 border-emerald-500 p-6 shadow-lg ticket-perforation-left ticket-perforation-right relative">
               <div className="flex items-center gap-3 text-emerald-700 bg-emerald-50 p-4 rounded-xl mb-6">
                 <CheckCircle2 className="w-8 h-8 shrink-0 text-emerald-600" />
@@ -159,12 +207,6 @@ export const ScannerPage: React.FC = () => {
                 </div>
               </div>
 
-              {checkInSuccess && (
-                <div className="mb-4 p-3 bg-emerald-100 text-emerald-900 font-bold rounded-xl text-xs flex items-center gap-2">
-                  <UserCheck className="w-4 h-4 text-emerald-700" /> {checkInSuccess}
-                </div>
-              )}
-
               {checkInError && (
                 <div className="mb-4 p-3 bg-rose-50 text-rose-800 font-bold rounded-xl text-xs">
                   {checkInError}
@@ -174,7 +216,7 @@ export const ScannerPage: React.FC = () => {
               <div className="flex gap-3">
                 <button
                   onClick={() => handleCheckIn(scanResult.ticket!._id || (scanResult.ticket as any)!.id || scanResult.ticket!.ticketId)}
-                  disabled={checkingIn || !!checkInSuccess}
+                  disabled={checkingIn}
                   className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-base rounded-xl transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   <UserCheck className="w-5 h-5" /> {checkingIn ? 'Checking In...' : 'Mark as Used'}
@@ -189,8 +231,8 @@ export const ScannerPage: React.FC = () => {
             </div>
           )}
 
-          {/* Already Used State */}
-          {scanResult.status === 'USED' && scanResult.ticket && (
+          {/* Already Used State (Scanned after previously checked in) */}
+          {!isCheckedIn && scanResult.status === 'USED' && scanResult.ticket && (
             <div className="bg-white rounded-2xl border-2 border-amber-500 p-6 shadow-lg">
               <div className="flex items-center gap-3 text-amber-800 bg-amber-50 p-4 rounded-xl mb-6 border border-amber-200">
                 <AlertTriangle className="w-8 h-8 shrink-0 text-amber-600" />
@@ -228,7 +270,7 @@ export const ScannerPage: React.FC = () => {
           )}
 
           {/* Invalid / Cancelled / Not Found State */}
-          {(scanResult.status === 'INVALID' || scanResult.status === 'CANCELLED' || scanResult.status === 'EXPIRED') && (
+          {!isCheckedIn && (scanResult.status === 'INVALID' || scanResult.status === 'CANCELLED' || scanResult.status === 'EXPIRED') && (
             <div className="bg-white rounded-2xl border-2 border-rose-500 p-6 shadow-lg text-center">
               <XCircle className="w-12 h-12 text-rose-600 mx-auto mb-3" />
               <h2 className="text-lg font-extrabold text-rose-900 uppercase">
