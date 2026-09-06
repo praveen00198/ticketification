@@ -1,0 +1,149 @@
+name: Build and Deploy Ticketification System
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      deploy_target:
+        description: 'Deployment Target Environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ------------------------------------------------------------
+  # 1. Validation & Build Pipeline
+  # ------------------------------------------------------------
+  build:
+    name: Build & Validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Root Dependencies
+        run: npm ci || npm install
+
+      # Install & Build Backend Server
+      - name: Install Backend Dependencies
+        working-directory: server
+        run: npm ci || npm install
+
+      - name: Compile Backend TypeScript
+        working-directory: server
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      # Install & Build Frontend Client
+      - name: Install Frontend Dependencies
+        working-directory: client
+        run: npm ci || npm install
+
+      - name: Build Frontend Application Bundle
+        working-directory: client
+        run: npm run build
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+
+      # Archive build artifacts
+      - name: Upload Server Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-dist
+          path: server/dist/
+          retention-days: 7
+
+      - name: Upload Client Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-dist
+          path: client/dist/
+          retention-days: 7
+
+  # ------------------------------------------------------------
+  # 2. Deployment Pipeline (Runs on Push to Main or Manual Trigger)
+  # ------------------------------------------------------------
+  deploy:
+    name: Deploy to Production
+    needs: build
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PORT: ${{ secrets.SSH_PORT }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download Server Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: server-dist
+          path: server/dist/
+
+      - name: Download Client Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: client-dist
+          path: client/dist/
+
+      # Method 1: Webhook Trigger (e.g. Render / Railway / CapRover / Coolify)
+      - name: Trigger Webhook Deploy (if configured)
+        if: env.DEPLOY_WEBHOOK_URL != ''
+        run: |
+          echo "Triggering deployment webhook..."
+          curl -X POST -s -o /dev/null -w "%{http_code}" "$DEPLOY_WEBHOOK_URL"
+
+      # Method 2: SSH Deploy to VPS (if configured)
+      - name: Deploy via SSH to Remote Server (if configured)
+        if: env.SSH_HOST != '' && env.SSH_PRIVATE_KEY != ''
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER || 'root' }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            cd /var/www/ticketification || exit 1
+            git pull origin main
+            npm install --production
+            npm --prefix server install --production
+            npm --prefix server run build
+            npm --prefix client install --production
+            npm --prefix client run build
+            pm2 reload ecosystem.config.js || pm2 restart all
+
+      - name: Deployment Status Summary
+        run: |
+          echo "===================================================="
+          echo " Ticketification Deployment Pipeline Completed!     "
+          echo " Environment: ${{ github.event.inputs.deploy_target || 'production' }} "
+          echo " Commit: ${{ github.sha }}                          "
+          echo " Branch: ${{ github.ref_name }}                     "
+          echo "===================================================="
