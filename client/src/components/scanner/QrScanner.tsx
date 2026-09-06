@@ -23,57 +23,70 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
       setScannerError(null);
 
       try {
+        // Ensure DOM element is present
+        const viewportEl = document.getElementById(elementId);
+        if (!viewportEl) return;
+
         const scannerInstance = new Html5Qrcode(elementId);
         html5QrCodeRef.current = scannerInstance;
 
-        let cameraConstraint: any = { facingMode: { ideal: 'environment' } };
+        const scanConfig = {
+          fps: 15,
+          qrbox: { width: 250, height: 250 },
+          aspectRatio: 1.0,
+        };
 
-        // Silently query cameras in the background to pick back camera ID if present
+        const onScan = (decodedText: string) => {
+          if (isCooldownRef.current) return;
+          isCooldownRef.current = true;
+          onScanSuccess(decodedText);
+          setTimeout(() => {
+            isCooldownRef.current = false;
+          }, 1800);
+        };
+
+        // Multi-level robust camera startup with rear/environment priority
+        let started = false;
+
+        // Attempt 1: Standard environment facingMode constraint (works on iOS & Android Chrome)
         try {
-          const devices = await Html5Qrcode.getCameras();
-          if (devices && devices.length > 0) {
-            const backCamera = devices.find((d) =>
-              /back|rear|environment|wide|triple|dual|0, facing back/i.test(d.label)
-            ) || devices[devices.length - 1];
-
-            if (backCamera && backCamera.id) {
-              cameraConstraint = backCamera.id;
-            }
-          }
-        } catch (_deviceListErr) {
-          // Fallback to standard constraint
-          cameraConstraint = { facingMode: { ideal: 'environment' } };
+          await scannerInstance.start({ facingMode: 'environment' }, scanConfig, onScan, () => {});
+          started = true;
+        } catch (attempt1Err) {
+          console.warn('Attempt 1 (facingMode: environment) failed:', attempt1Err);
         }
 
-        if (!isMounted) return;
+        // Attempt 2: Query camera devices and select back camera ID
+        if (!started && isMounted) {
+          try {
+            const devices = await Html5Qrcode.getCameras();
+            if (devices && devices.length > 0) {
+              const backCamera = devices.find((d) =>
+                /back|rear|environment|wide|triple|dual|0, facing back/i.test(d.label)
+              ) || devices[devices.length - 1];
 
-        // Start scanning silently with rear/environment camera priority
-        await scannerInstance.start(
-          cameraConstraint,
-          {
-            fps: 15,
-            qrbox: { width: 250, height: 250 },
-            aspectRatio: 1.0,
-          },
-          (decodedText) => {
-            if (isCooldownRef.current) return;
-            isCooldownRef.current = true;
-            onScanSuccess(decodedText);
-            setTimeout(() => {
-              isCooldownRef.current = false;
-            }, 1800);
-          },
-          () => {
-            // Ignore frame scan errors
+              await scannerInstance.start(backCamera.id, scanConfig, onScan, () => {});
+              started = true;
+            }
+          } catch (attempt2Err) {
+            console.warn('Attempt 2 (Device ID) failed:', attempt2Err);
           }
-        );
+        }
+
+        // Attempt 3: Fallback to any available camera
+        if (!started && isMounted) {
+          await scannerInstance.start({ facingMode: 'user' }, scanConfig, onScan, () => {});
+          started = true;
+        }
       } catch (err: any) {
         console.error('Camera initialization error:', err);
         if (isMounted) {
           const errMsg =
             err?.name === 'NotAllowedError' || err?.message?.includes('Permission')
-              ? 'Camera access permission was denied. Please allow camera permissions in your browser address bar to scan tickets.'
-              : err?.message || 'Unable to start camera scanner. Please use manual token or Ticket ID entry below.';
+              ? 'Camera access permission was denied. Please allow camera permissions in your browser settings.'
+              : err?.name === 'NotReadableError' || err?.message?.includes('busy')
+              ? 'Camera is in use by another app or tab. Please tap Retry.'
+              : err?.message || 'Unable to start camera scanner. Please tap Retry or use manual entry below.';
           setScannerError(errMsg);
         }
       } finally {
@@ -93,11 +106,15 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
           html5QrCodeRef.current
             .stop()
             .then(() => {
-              html5QrCodeRef.current?.clear();
+              try {
+                html5QrCodeRef.current?.clear();
+              } catch {}
             })
-            .catch((err) => console.warn('Error stopping scanner stream:', err));
+            .catch(() => {});
         } else {
-          html5QrCodeRef.current.clear();
+          try {
+            html5QrCodeRef.current.clear();
+          } catch {}
         }
       }
     };
@@ -111,6 +128,21 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
     }
   };
 
+  const handleRetryCamera = () => {
+    setScannerError(null);
+    setIsInitializing(true);
+    if (html5QrCodeRef.current) {
+      if (html5QrCodeRef.current.isScanning) {
+        html5QrCodeRef.current.stop().catch(() => {}).finally(() => {
+          try { html5QrCodeRef.current?.clear(); } catch {}
+          window.location.reload();
+        });
+        return;
+      }
+    }
+    window.location.reload();
+  };
+
   return (
     <div className="w-full max-w-lg mx-auto bg-white rounded-2xl border border-surface-border p-6 shadow-md">
       {/* Header */}
@@ -120,9 +152,17 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
       </div>
 
       {scannerError && (
-        <div className="mb-4 bg-amber-50 border border-amber-200 text-amber-800 text-xs p-3 rounded-lg flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
-          <span>{scannerError}</span>
+        <div className="mb-4 bg-amber-50 border border-amber-200 text-amber-900 text-xs p-3 rounded-lg flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+            <span>{scannerError}</span>
+          </div>
+          <button
+            onClick={handleRetryCamera}
+            className="px-2.5 py-1 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded text-[11px] shrink-0"
+          >
+            Retry
+          </button>
         </div>
       )}
 
