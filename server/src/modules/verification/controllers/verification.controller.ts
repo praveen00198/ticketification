@@ -13,7 +13,10 @@ export class VerificationController {
 
   async checkIn(req: Request, res: Response, next: NextFunction) {
     try {
-      const { id } = req.params;
+      const idFromParams = req.params.id;
+      const id = (idFromParams && idFromParams !== 'undefined' && idFromParams !== 'null')
+        ? idFromParams
+        : (req.body.ticketId || req.body.id || req.body._id);
       const { verifiedBy } = req.body;
       const result = await verificationService.checkInTicket(id, verifiedBy);
       res.json({ success: true, data: result });

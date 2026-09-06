@@ -27,21 +27,25 @@ export class VerificationService {
       };
     }
 
+    const rawDoc: any = typeof (ticket as any).toObject === 'function' ? (ticket as any).toObject() : ticket;
+    const resolvedName = rawDoc.name || rawDoc.guestName || (ticket as any).name || (ticket as any).guestName || 'Guest';
+    const docId = ticket._id ? ticket._id.toString() : (rawDoc.id || rawDoc._id || '');
+
     return {
       status: ticket.status,
       ticket: {
-        id: ticket._id,
-        _id: ticket._id,
+        id: docId,
+        _id: docId,
         ticketId: ticket.ticketId,
-        name: ticket.name,
-        guestName: ticket.name,
-        email: ticket.email,
-        phone: ticket.phone,
-        event: ticket.event,
+        name: resolvedName,
+        guestName: resolvedName,
+        email: ticket.email || '',
+        phone: ticket.phone || '',
+        event: ticket.event || '',
         eventDate: ticket.eventDate,
-        ticketType: ticket.ticketType,
-        organization: ticket.organization,
-        designation: ticket.designation,
+        ticketType: ticket.ticketType || 'VIP Pass',
+        organization: ticket.organization || '',
+        designation: ticket.designation || '',
         status: ticket.status,
         usedAt: ticket.usedAt,
         verifiedBy: ticket.verifiedBy,

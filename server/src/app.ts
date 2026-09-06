@@ -105,8 +105,8 @@ app.use('/uploads', express.static(uploadsPath));
 // REST API Base Router
 app.use('/api/auth', authRoutes);
 app.use('/api/guests', guestRoutes);
-app.use('/api/tickets', ticketRoutes);
 app.use('/api/tickets', verificationRoutes);
+app.use('/api/tickets', ticketRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 // WhatsApp Webhook (no auth — Meta sends verification & status callbacks here)
 app.use('/api/webhook', webhookRoutes);

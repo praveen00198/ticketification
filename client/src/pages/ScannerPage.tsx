@@ -46,11 +46,17 @@ export const ScannerPage: React.FC = () => {
     }
   };
 
-  const handleCheckIn = async (ticketId: string) => {
+  const handleCheckIn = async (targetId?: string) => {
+    const idToUse = targetId || scanResult?.ticket?._id || (scanResult?.ticket as any)?.id || scanResult?.ticket?.ticketId;
+    if (!idToUse) {
+      setCheckInError('Ticket reference ID is missing. Please re-scan ticket.');
+      return;
+    }
     setCheckingIn(true);
     setCheckInError(null);
     try {
-      const res: any = await apiClient.post(`/tickets/check-in/${ticketId}`, {
+      const res: any = await apiClient.post(`/tickets/check-in/${idToUse}`, {
+        ticketId: scanResult?.ticket?.ticketId,
         verifiedBy: 'Admin Scanner',
       });
       if (res.success) {
