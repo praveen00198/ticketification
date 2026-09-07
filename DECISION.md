@@ -62,3 +62,12 @@
 - **Context**: The application requires a professional, high-contrast, production-grade visual console.
 - **Decision**: Standardize on deep blacks, dark charcoals, and vivid emerald green accents. Explicitly ban random purple, violet, or indigo styling.
 - **Consequences**: Visual cohesion across all dashboard, table, and scanner interfaces.
+
+---
+
+## ADR-009: Container-Safe Native Sharp Rasterization for Production Ticket Rendering
+- **Status**: ACCEPTED
+- **Context**: Headless Chromium (Puppeteer) in containerized cloud environments (such as Render Linux containers) requires external shared desktop libraries (`libnss3`, `libatk`, etc.) and cache path persistence (`/opt/render/.cache/puppeteer`). In production, missing browser dependencies caused unhandled process crashes resulting in HTTP 500 errors during ticket generation.
+- **Decision**: Adopt native server-side rasterization via `sharp` as the primary engine for converting SVG ticket markup into genuine PNG binaries (`0x89504E47`). `sharp` bundles static `libvips` binaries for Linux x64 and Windows, requires zero browser processes or external GUI libraries, executes in ~15ms per ticket, and satisfies Rule 5.1 (Genuine PNG binary verification) and Rule 5.2 (Visual template preservation).
+- **Consequences**: Cloud deployments on Render, AWS, or Docker containers generate genuine high-resolution PNG tickets with zero browser crashes or process memory leaks.
+

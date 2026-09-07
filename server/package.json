@@ -4,7 +4,7 @@
   "description": "QR Ticket Generation & Verification Platform - Backend",
   "main": "dist/server.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"const fs=require('fs'),p=require('path');const s=p.resolve('assets'),d=p.resolve('dist/assets');if(fs.existsSync(s)){fs.mkdirSync(d,{recursive:true});fs.cpSync(s,d,{recursive:true});console.log('[Build] Assets copied to dist/assets');}\"",
     "start": "node dist/server.js",
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "test": "jest --detectOpenHandles",
@@ -26,6 +26,7 @@
     "postgres": "^3.4.5",
     "puppeteer": "^22.13.0",
     "qrcode": "^1.5.3",
+    "sharp": "^0.35.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.5.3",
     "xlsx": "^0.18.5"

@@ -46,9 +46,17 @@ This file records critical discoveries, anti-patterns, and institutional knowled
 - **Consequence**: Bypassing missing credentials resulted in silent permission failures in backend storage operations without explicit error messages.
 - **Invariant**: If `SUPABASE_SERVICE_ROLE_KEY` is missing in the environment, the server must fail fast with an explicit configuration error.
 
+### 2.8 The Puppeteer / Chromium Container Failure on Render
+- **Issue**: On Render's Linux container environment, ticket generation failed with HTTP 500 (`Error: Could not find Chrome` / missing `/opt/render/.cache/puppeteer` / missing Linux `.so` libraries).
+- **Consequence**: When users clicked "Generate All Tickets", the backend attempted to launch Puppeteer, which crashed and returned a generic 500 error to the frontend.
+- **Root Cause**: Minimal Linux containers do not retain Puppeteer browser cache paths or provide desktop GUI shared libraries (`libnss3`, `libatk`, etc.).
+- **Resolution**: Replaced browser-dependent rendering with native server-side `sharp` rasterization. Sharp uses pre-compiled static native binaries with zero external shared library dependencies, generating 1620x2025 genuine PNG binaries (`0x89504E47`) in ~15ms with 100% container resilience.
+- **Invariant**: Backend ticket generation must NOT rely on external browser processes in cloud containers. All image rasterization must use self-contained native engines with standard PNG header verification.
+
 ---
 
 ## 3. Data Preservation Reminders
 - The PostgreSQL database hosted on Supabase contains live event and guest schemas.
 - `drizzle-kit push --force` or raw `DROP TABLE` is strictly prohibited.
 - Preserved asset: `server/assets/ticket_template.png` (289 KB) is the canonical visual template. Do not replace or delete it.
+

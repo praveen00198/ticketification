@@ -33,10 +33,12 @@ Testing is a first-class architectural invariant. A feature or bugfix is not com
 - [ ] Missing required fields (`Name`) flagged with row-level validation errors.
 - [ ] Malicious / oversized / corrupted files rejected gracefully with clear error messages.
 
-### 3.4 Ticket Rendering & Storage (`ticketGeneration.test.ts`)
+### 3.4 Ticket Rendering & Storage (`ticketRendering.test.ts`)
 - [ ] VIP and Guest tickets assigned `SINGLE_USE` policy.
 - [ ] Worker tickets assigned `REUSABLE` policy.
 - [ ] Rendered ticket buffer verified with `isPngBuffer()` (8-byte PNG header check: `0x89504E47`).
+- [ ] Container-safe native `sharp` rasterization converts SVG markup to 1620x2025 PNG binaries without requiring external Chromium binaries or Linux shared libraries.
+- [ ] Batch rendering of tickets executes natively without spawning desktop browser processes.
 - [ ] Ticket ID (e.g. `GAN-00001`) NOT visibly printed on the ticket image.
 - [ ] QR code verified to contain opaque token URL without PII.
 - [ ] Filenames formatted as `<Guest-Name>-<Ticket-ID>.png` with all traversal/illegal characters stripped.

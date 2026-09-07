@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import config from '../config/env';
 
 export class AppError extends Error {
   public statusCode: number;
@@ -85,11 +86,10 @@ export function errorHandler(
 
   const statusCode = isAppError ? err.statusCode || 400 : 500;
   let message = err?.message || 'An unexpected internal server error occurred.';
-  const details = err?.details || undefined;
   const errorCode = err?.errorCode || (statusCode === 401 ? 'AUTHENTICATION_ERROR' : statusCode === 404 ? 'NOT_FOUND' : 'INTERNAL_ERROR');
 
   if (statusCode >= 500) {
-    console.error(`[API Error] ${req.method} ${req.path} - ${statusCode}: ${message}`, err?.stack || err);
+    console.error(`[Ticketification Server Error] ${req.method} ${req.path} - ${statusCode} [${errorCode}]: ${message}`, err?.stack || err);
   }
 
   // Filter out low-level technical infrastructure messages from end users
@@ -106,6 +106,12 @@ export function errorHandler(
   } else if (statusCode === 500 && !isAppError) {
     message = 'A server error occurred. Please try again or contact support.';
   }
+
+  const details =
+    err?.details ||
+    (!config.env.isProduction || process.env.EXPOSE_ERROR_DETAILS === 'true'
+      ? { originalMessage: err?.message, code: errorCode }
+      : undefined);
 
   res.status(statusCode).json({
     success: false,

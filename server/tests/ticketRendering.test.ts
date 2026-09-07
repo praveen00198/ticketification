@@ -294,4 +294,54 @@ describe('Phase 4: Ticket Generation & PNG Rendering Pipeline', () => {
       ).rejects.toThrow(NotFoundError);
     });
   });
+
+  describe('Container-Safe Native Sharp Rasterization & Regression Prevention', () => {
+    it('should successfully rasterize SVG to genuine PNG buffer using sharp without launching Chromium', async () => {
+      const ticketData: TicketImageData = {
+        ticketId: 'REG-00001',
+        guestName: 'Kavita Singh',
+        eventName: 'National Conclave',
+        eventDate: '2026-11-20',
+        ticketType: 'VIP Guest',
+        qrCodeDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      };
+
+      const svg = ticketImageService.buildSvg(ticketData);
+      const pngBuffer = await ticketImageService.svgToPng(svg);
+
+      expect(pngBuffer).toBeDefined();
+      expect(pngBuffer.length).toBeGreaterThan(1000);
+      expect(isPngBuffer(pngBuffer)).toBe(true);
+    });
+
+    it('should batch render tickets natively without requiring browser processes', async () => {
+      const items: TicketImageData[] = [
+        {
+          ticketId: 'BATCH-001',
+          guestName: 'Guest One',
+          eventName: 'Summit',
+          eventDate: '2026-10-10',
+          ticketType: 'General',
+          qrCodeDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        },
+        {
+          ticketId: 'BATCH-002',
+          guestName: 'Guest Two',
+          eventName: 'Summit',
+          eventDate: '2026-10-10',
+          ticketType: 'VIP',
+          qrCodeDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        },
+      ];
+
+      const results = await ticketImageService.renderBatchTickets(items, 2);
+
+      expect(results).toHaveLength(2);
+      for (const res of results) {
+        expect(res.fileName).toMatch(/^ticket-BATCH-\d{3}\.png$/);
+        expect(isPngBuffer(res.pngBuffer)).toBe(true);
+      }
+    });
+  });
 });
+

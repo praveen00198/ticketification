@@ -1,7 +1,9 @@
 import puppeteer, { Browser, Page } from 'puppeteer';
+import sharp from 'sharp';
 import path from 'path';
 import fs from 'fs';
 import config from '../../../config/env';
+import { AppError } from '../../../middlewares/error.middleware';
 
 export interface TicketImageData {
   ticketId: string;
@@ -15,7 +17,7 @@ export interface TicketImageData {
 }
 
 /**
- * Generates a high-resolution PNG ticket image using Puppeteer.
+ * Generates a high-resolution PNG ticket image using native sharp rasterization with Puppeteer fallback.
  * Produces a 1620x2025 pixel PNG with embedded QR code on the official visual template.
  * Invariant (FR-TCK-3): Internal Ticket ID MUST NOT be visibly printed on the image card.
  */
@@ -34,6 +36,8 @@ export class TicketImageService {
       path.resolve(__dirname, '../assets/ticket_template.png'),
       path.resolve(process.cwd(), 'assets', 'ticket_template.png'),
       path.resolve(process.cwd(), 'server', 'assets', 'ticket_template.png'),
+      path.resolve(process.cwd(), 'dist', 'assets', 'ticket_template.png'),
+      path.resolve(process.cwd(), 'server', 'dist', 'assets', 'ticket_template.png'),
       path.resolve(process.cwd(), '../client', 'assets', 'ticket_template.png'),
       path.resolve(process.cwd(), 'client', 'assets', 'ticket_template.png'),
     ];
@@ -127,19 +131,39 @@ export class TicketImageService {
         args: launchArgs,
       });
     } catch (err: any) {
-      console.warn('[TicketImageService] Standard headless launch failed, trying fallback mode:', err?.message || err);
-      return await puppeteer.launch({
-        headless: 'shell',
-        args: launchArgs,
-      });
+      try {
+        return await puppeteer.launch({
+          headless: 'shell',
+          args: launchArgs,
+        });
+      } catch (fallbackErr: any) {
+        throw new AppError(
+          `Headless Chromium browser process failed to launch in this container environment: ${fallbackErr?.message || err?.message}. Sharp native engine should be used for PNG generation.`,
+          500,
+          undefined,
+          'BROWSER_LAUNCH_ERROR'
+        );
+      }
     }
   }
 
   /**
-   * Converts SVG markup to a genuine PNG image buffer using Puppeteer.
+   * Converts SVG markup to a genuine PNG image buffer using sharp native rasterization
+   * with automatic fallback to Puppeteer if needed.
    * Validates that output is a valid PNG binary with standard PNG header (0x89504E47).
    */
   async svgToPng(svg: string, sharedBrowser?: Browser): Promise<Buffer> {
+    // 1. Native sharp rendering (blazing fast, container-safe, zero Chromium/Linux .so dependencies)
+    try {
+      const pngBuffer = await sharp(Buffer.from(svg)).png().toBuffer();
+      if (isPngBuffer(pngBuffer)) {
+        return pngBuffer;
+      }
+    } catch (sharpErr: any) {
+      console.warn('[TicketImageService] Sharp SVG conversion note:', sharpErr?.message || sharpErr);
+    }
+
+    // 2. Headless browser fallback if available
     const ownBrowser = !sharedBrowser;
     const browser = sharedBrowser || (await this.launchBrowser());
 
@@ -159,7 +183,9 @@ export class TicketImageService {
       return pngBuffer;
     } finally {
       if (ownBrowser && browser) {
-        await browser.close();
+        try {
+          await browser.close();
+        } catch (_) {}
       }
     }
   }
@@ -168,6 +194,13 @@ export class TicketImageService {
    * Fast rendering of SVG onto a pre-existing Puppeteer Page instance.
    */
   async renderSvgOnPage(svg: string, page: Page): Promise<Buffer> {
+    try {
+      const pngBuffer = await sharp(Buffer.from(svg)).png().toBuffer();
+      if (isPngBuffer(pngBuffer)) {
+        return pngBuffer;
+      }
+    } catch (_) {}
+
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>* { margin: 0; padding: 0; box-sizing: border-box; } body { width: 1620px; height: 2025px; overflow: hidden; background-color: #000; }</style></head><body>${svg}</body></html>`;
     await page.setContent(html, { waitUntil: 'domcontentloaded' });
     const screenshot = await page.screenshot({ type: 'png', fullPage: true });
@@ -194,7 +227,8 @@ export class TicketImageService {
   }
 
   /**
-   * Batch render multiple tickets with a single reusable browser session.
+   * Batch render multiple tickets with high-speed native sharp rendering.
+   * Eliminates browser process crashes and memory exhaustion in cloud containers.
    */
   async renderBatchTickets(
     items: TicketImageData[],
@@ -202,31 +236,26 @@ export class TicketImageService {
   ): Promise<Array<{ ticketId: string; pngBuffer: Buffer; fileName: string }>> {
     if (items.length === 0) return [];
 
-    const browser = await this.launchBrowser();
-    try {
-      const results: Array<{ ticketId: string; pngBuffer: Buffer; fileName: string }> = [];
+    const results: Array<{ ticketId: string; pngBuffer: Buffer; fileName: string }> = [];
 
-      for (let i = 0; i < items.length; i += batchConcurrency) {
-        const slice = items.slice(i, i + batchConcurrency);
-        const batchResults = await Promise.all(
-          slice.map(async (item) => {
-            const fileName = `ticket-${item.ticketId}.png`;
-            const svg = this.buildSvg(item);
-            const pngBuffer = await this.svgToPng(svg, browser);
-            return {
-              ticketId: item.ticketId,
-              pngBuffer,
-              fileName,
-            };
-          })
-        );
-        results.push(...batchResults);
-      }
-
-      return results;
-    } finally {
-      await browser.close();
+    for (let i = 0; i < items.length; i += batchConcurrency) {
+      const slice = items.slice(i, i + batchConcurrency);
+      const batchResults = await Promise.all(
+        slice.map(async (item) => {
+          const fileName = `ticket-${item.ticketId}.png`;
+          const svg = this.buildSvg(item);
+          const pngBuffer = await this.svgToPng(svg);
+          return {
+            ticketId: item.ticketId,
+            pngBuffer,
+            fileName,
+          };
+        })
+      );
+      results.push(...batchResults);
     }
+
+    return results;
   }
 }
 
