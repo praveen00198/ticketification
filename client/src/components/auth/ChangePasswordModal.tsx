@@ -133,7 +133,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
                   placeholder="Enter current password"
-                  className="w-full pl-10 pr-10 py-2.5 bg-surface-bg border border-surface-border rounded-lg text-sm text-surface-charcoal focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="w-full pl-10 pr-10 py-2.5 bg-white border border-zinc-300 rounded-lg text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm"
                 />
                 <button
                   type="button"
@@ -158,7 +158,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="At least 6 characters"
-                  className="w-full pl-10 pr-10 py-2.5 bg-surface-bg border border-surface-border rounded-lg text-sm text-surface-charcoal focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="w-full pl-10 pr-10 py-2.5 bg-white border border-zinc-300 rounded-lg text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm"
                 />
                 <button
                   type="button"
@@ -183,7 +183,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Re-enter new password"
-                  className="w-full pl-10 pr-10 py-2.5 bg-surface-bg border border-surface-border rounded-lg text-sm text-surface-charcoal focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="w-full pl-10 pr-10 py-2.5 bg-white border border-zinc-300 rounded-lg text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm"
                 />
                 <button
                   type="button"

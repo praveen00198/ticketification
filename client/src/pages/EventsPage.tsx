@@ -247,17 +247,17 @@ export const EventsPage: React.FC = () => {
       {/* Create Event Modal */}
       {isCreateOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="bg-surface-card border border-zinc-800 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
+          <div className="bg-white border border-surface-border w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-surface-border flex items-center justify-between bg-zinc-50">
               <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-brand-500/10 text-brand-400 border border-brand-500/20">
+                <div className="p-2 rounded-lg bg-brand-50 text-brand-600 border border-brand-200">
                   <Sparkles className="w-4 h-4" />
                 </div>
-                <h3 className="text-lg font-bold text-white">Create New Event</h3>
+                <h3 className="text-lg font-bold text-surface-charcoal">Create New Event</h3>
               </div>
               <button
                 onClick={() => setIsCreateOpen(false)}
-                className="text-zinc-400 hover:text-white text-xs font-bold"
+                className="text-zinc-400 hover:text-zinc-700 text-sm font-bold"
               >
                 ✕
               </button>
@@ -265,14 +265,14 @@ export const EventsPage: React.FC = () => {
 
             <form onSubmit={handleCreateSubmit} className="p-6 space-y-4">
               {error && (
-                <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-400 flex items-center gap-2">
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   <span>{error}</span>
                 </div>
               )}
 
               <div>
-                <label className="block text-xs font-bold text-zinc-300 mb-1">
+                <label className="block text-xs font-bold text-zinc-700 mb-1">
                   Event Name <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -282,13 +282,13 @@ export const EventsPage: React.FC = () => {
                   placeholder="e.g. Global Tech Expo 2026"
                   value={formData.name}
                   onChange={handleInputChange}
-                  className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-brand-500"
+                  className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 shadow-sm"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-zinc-300 mb-1">
+                  <label className="block text-xs font-bold text-zinc-700 mb-1">
                     Event Date <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -297,12 +297,12 @@ export const EventsPage: React.FC = () => {
                     required
                     value={formData.date}
                     onChange={handleInputChange}
-                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-brand-500"
+                    className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 shadow-sm"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-zinc-300 mb-1">
+                  <label className="block text-xs font-bold text-zinc-700 mb-1">
                     Start Time
                   </label>
                   <input
@@ -310,14 +310,14 @@ export const EventsPage: React.FC = () => {
                     name="time"
                     value={formData.time || ''}
                     onChange={handleInputChange}
-                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-brand-500"
+                    className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 shadow-sm"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-zinc-300 mb-1">
+                  <label className="block text-xs font-bold text-zinc-700 mb-1">
                     Venue / Location
                   </label>
                   <input
@@ -326,12 +326,12 @@ export const EventsPage: React.FC = () => {
                     placeholder="e.g. Convention Hall B"
                     value={formData.venue || ''}
                     onChange={handleInputChange}
-                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-brand-500"
+                    className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 shadow-sm"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-zinc-300 mb-1">
+                  <label className="block text-xs font-bold text-zinc-700 mb-1">
                     Organizer Name
                   </label>
                   <input
@@ -340,13 +340,13 @@ export const EventsPage: React.FC = () => {
                     placeholder="e.g. Tech Events Inc."
                     value={formData.organizerName || ''}
                     onChange={handleInputChange}
-                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-brand-500"
+                    className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 shadow-sm"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-zinc-300 mb-1">
+                <label className="block text-xs font-bold text-zinc-700 mb-1">
                   Description
                 </label>
                 <textarea
@@ -355,7 +355,7 @@ export const EventsPage: React.FC = () => {
                   placeholder="Brief overview of the event..."
                   value={formData.description || ''}
                   onChange={handleInputChange}
-                  className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-brand-500 resize-none"
+                  className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 shadow-sm resize-none"
                 />
               </div>
 
@@ -363,14 +363,14 @@ export const EventsPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsCreateOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold text-zinc-400 hover:text-white"
+                  className="px-4 py-2 text-xs font-semibold text-zinc-600 hover:text-zinc-900"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={creating}
-                  className="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-brand-600/20 disabled:opacity-50"
+                  className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl transition-all shadow-md disabled:opacity-50"
                 >
                   {creating ? 'Creating...' : 'Create Event'}
                 </button>

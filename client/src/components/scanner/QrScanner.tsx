@@ -188,7 +188,7 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
             placeholder="Paste Token or Enter Ticket ID (e.g. EVT26-000001)"
             value={manualToken}
             onChange={(e) => setManualToken(e.target.value)}
-            className="flex-1 px-3.5 py-2.5 bg-surface-bg border border-surface-border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="flex-1 px-3.5 py-2.5 bg-white border border-zinc-300 rounded-lg text-sm text-zinc-900 placeholder:text-zinc-400 font-mono focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm"
           />
           <button
             type="submit"

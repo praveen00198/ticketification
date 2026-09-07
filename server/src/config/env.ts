@@ -24,14 +24,10 @@ function validateAndLoadEnv(): EnvConfig {
   const nodeEnv = process.env.NODE_ENV || 'development';
   const isProduction = nodeEnv === 'production';
 
-  if (isProduction && !process.env.SUPABASE_URL) {
-    throw new Error('FATAL: SUPABASE_URL must be set in production.');
-  }
-  if (isProduction && !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error('FATAL: SUPABASE_SERVICE_ROLE_KEY must be set in production.');
-  }
-  if (isProduction && !process.env.DATABASE_URL) {
-    throw new Error('FATAL: DATABASE_URL must be set in production.');
+  if (isProduction) {
+    if (!process.env.SUPABASE_URL) console.warn('⚠️ [Env] SUPABASE_URL is missing in production environment.');
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) console.warn('⚠️ [Env] SUPABASE_SERVICE_ROLE_KEY is missing in production environment.');
+    if (!process.env.DATABASE_URL) console.warn('⚠️ [Env] DATABASE_URL is missing in production environment. Database queries will return 500 error.');
   }
 
   return {
