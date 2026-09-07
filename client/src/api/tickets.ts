@@ -5,7 +5,7 @@ export interface TicketListItem {
   sequenceNumber: number;
   verificationToken: string;
   status: 'ACTIVE' | 'USED' | 'CANCELLED';
-  usagePolicy: 'SINGLE_USE' | 'REUSABLE_WORKER' | string;
+  usagePolicy: 'SINGLE_USE' | 'REUSABLE' | 'REUSABLE_WORKER' | string;
   assetUrl?: string | null;
   createdAt: string;
   guest?: {

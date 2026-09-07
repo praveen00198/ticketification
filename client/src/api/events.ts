@@ -28,7 +28,7 @@ export interface UpdateEventPayload {
 export interface CreateTicketTypePayload {
   name: string;
   label: string;
-  usagePolicy?: 'SINGLE_USE' | 'REUSABLE_WORKER';
+  usagePolicy?: 'SINGLE_USE' | 'REUSABLE' | 'REUSABLE_WORKER';
 }
 
 export const eventsApi = {

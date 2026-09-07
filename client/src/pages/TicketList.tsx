@@ -366,12 +366,12 @@ export const TicketList: React.FC = () => {
                     <td className="py-3 px-4">
                       <span
                         className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
-                          t.usagePolicy === 'REUSABLE_WORKER'
+                          t.usagePolicy === 'REUSABLE' || t.usagePolicy === 'REUSABLE_WORKER'
                             ? 'bg-amber-50 text-amber-700 border border-amber-200'
                             : 'bg-zinc-100 text-zinc-600 border border-zinc-200'
                         }`}
                       >
-                        {t.usagePolicy === 'REUSABLE_WORKER' ? 'Reusable Worker' : 'Single Use'}
+                        {t.usagePolicy === 'REUSABLE' || t.usagePolicy === 'REUSABLE_WORKER' ? 'Reusable Worker' : 'Single Use'}
                       </span>
                     </td>
                     <td className="py-3 px-4 text-right">

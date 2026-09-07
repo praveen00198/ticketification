@@ -138,7 +138,7 @@ export class VerificationService {
 
     // Check active status
     if (ticket.status === 'ACTIVE') {
-      if (ticket.usagePolicy === 'REUSABLE_WORKER') {
+      if (ticket.usagePolicy === 'REUSABLE' || ticket.usagePolicy === 'REUSABLE_WORKER') {
         if (!ticket.guestId) {
           return {
             status: 'UNASSIGNED_WORKER',
@@ -229,7 +229,7 @@ export class VerificationService {
     }
 
     // Handle Reusable Worker Ticket Check-in
-    if (ticket.usagePolicy === 'REUSABLE_WORKER') {
+    if (ticket.usagePolicy === 'REUSABLE' || ticket.usagePolicy === 'REUSABLE_WORKER') {
       let assignedName = guest?.name || null;
 
       // If unassigned worker, assign name now

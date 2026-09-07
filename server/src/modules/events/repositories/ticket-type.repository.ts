@@ -6,7 +6,7 @@ export interface CreateTicketTypeInput {
   eventId: string;
   name: string;
   label: string;
-  usagePolicy?: string; // 'SINGLE_USE' | 'REUSABLE_WORKER'
+  usagePolicy?: string; // 'SINGLE_USE' | 'REUSABLE'
 }
 
 export class TicketTypeRepository {

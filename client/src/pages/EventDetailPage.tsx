@@ -34,7 +34,7 @@ export const EventDetailPage: React.FC = () => {
   const [isAddTypeOpen, setIsAddTypeOpen] = useState(false);
   const [newTypeName, setNewTypeName] = useState('');
   const [newTypeLabel, setNewTypeLabel] = useState('');
-  const [newTypePolicy, setNewTypePolicy] = useState<'SINGLE_USE' | 'REUSABLE_WORKER'>('SINGLE_USE');
+  const [newTypePolicy, setNewTypePolicy] = useState<'SINGLE_USE' | 'REUSABLE' | 'REUSABLE_WORKER'>('SINGLE_USE');
   const [typeError, setTypeError] = useState<string | null>(null);
 
   const fetchEventData = async () => {
@@ -331,12 +331,12 @@ export const EventDetailPage: React.FC = () => {
                       <span className="text-xs font-bold text-zinc-900">{t.name}</span>
                       <span
                         className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
-                          t.usagePolicy === 'REUSABLE_WORKER'
+                          t.usagePolicy === 'REUSABLE' || t.usagePolicy === 'REUSABLE_WORKER'
                             ? 'bg-amber-50 text-amber-700 border border-amber-200'
                             : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                         }`}
                       >
-                        {t.usagePolicy === 'REUSABLE_WORKER' ? 'Worker Reusable' : 'Single Use'}
+                        {t.usagePolicy === 'REUSABLE' || t.usagePolicy === 'REUSABLE_WORKER' ? 'Worker Reusable' : 'Single Use'}
                       </span>
                     </div>
                     <div className="text-[11px] text-zinc-500 mt-0.5">{t.label}</div>
@@ -397,12 +397,12 @@ export const EventDetailPage: React.FC = () => {
                     <select
                       value={newTypePolicy}
                       onChange={(e) =>
-                        setNewTypePolicy(e.target.value as 'SINGLE_USE' | 'REUSABLE_WORKER')
+                        setNewTypePolicy(e.target.value as 'SINGLE_USE' | 'REUSABLE' | 'REUSABLE_WORKER')
                       }
                       className="w-full bg-white border border-zinc-300 rounded-xl px-3 py-2 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 shadow-sm"
                     >
                       <option value="SINGLE_USE">SINGLE_USE (Standard Guest)</option>
-                      <option value="REUSABLE_WORKER">REUSABLE_WORKER (Multi-entry Staff)</option>
+                      <option value="REUSABLE">REUSABLE (Multi-entry Staff)</option>
                     </select>
                   </div>
 

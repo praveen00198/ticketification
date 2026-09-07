@@ -45,7 +45,7 @@ describe('VerificationService & QrService Engine', () => {
   it('should return UNASSIGNED_WORKER for worker ticket without assigned guest', async () => {
     const mockTicketRepo: any = {
       findByVerificationToken: jest.fn().mockResolvedValue({
-        ticket: { id: 't2', eventId: 'event_A', guestId: null, sequenceNumber: 10, status: 'ACTIVE', usagePolicy: 'REUSABLE_WORKER' },
+        ticket: { id: 't2', eventId: 'event_A', guestId: null, sequenceNumber: 10, status: 'ACTIVE', usagePolicy: 'REUSABLE' },
         guest: null,
         ticketType: { name: 'WORKER', label: 'Event Staff' },
         event: { name: 'Tech Conf 2026', date: '2026-10-10' },

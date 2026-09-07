@@ -40,7 +40,7 @@ Supabase PostgreSQL with Drizzle ORM. Tables: `users`, `events`, `ticket_types`,
 ## Business Rules
 ### Ticket Types & Usage Policy
 - **VIP / GUEST**: `SINGLE_USE` — one successful check-in, then permanently USED
-- **WORKER**: `REUSABLE_WORKER` — can check in multiple times, each recorded in `ticket_checkins`
+- **WORKER**: `REUSABLE` — can check in multiple times, each recorded in `ticket_checkins`
 - Types are extensible (`GENERAL`, `VIP`, `WORKER`, `SPEAKER`, `ORGANIZER`, plus custom event-level types)
 
 ### Ticket Lifecycle

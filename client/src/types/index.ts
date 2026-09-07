@@ -11,7 +11,7 @@ export interface TicketType {
   eventId: string;
   name: string;
   label: string;
-  usagePolicy: 'SINGLE_USE' | 'REUSABLE_WORKER' | string;
+  usagePolicy: 'SINGLE_USE' | 'REUSABLE' | 'REUSABLE_WORKER' | string;
   createdAt: string;
 }
 

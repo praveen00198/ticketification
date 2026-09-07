@@ -57,7 +57,7 @@ export class TicketService {
       const defaultTypes = [
         { name: 'GENERAL', label: 'General Guest', usagePolicy: 'SINGLE_USE' },
         { name: 'VIP', label: 'VIP Guest', usagePolicy: 'SINGLE_USE' },
-        { name: 'WORKER', label: 'Event Staff / Worker', usagePolicy: 'REUSABLE_WORKER' },
+        { name: 'WORKER', label: 'Event Staff / Worker', usagePolicy: 'REUSABLE' },
         { name: 'SPEAKER', label: 'Speaker / Guest of Honor', usagePolicy: 'SINGLE_USE' },
         { name: 'ORGANIZER', label: 'Event Organizer', usagePolicy: 'SINGLE_USE' },
       ].map((t) => ({
@@ -172,7 +172,7 @@ export class TicketService {
         eventId,
         name: 'WORKER',
         label: 'Event Staff / Worker',
-        usagePolicy: 'REUSABLE_WORKER',
+        usagePolicy: 'REUSABLE',
       });
     }
 
@@ -217,7 +217,7 @@ export class TicketService {
         ticketTypeId: workerType.id,
         verificationToken,
         status: 'ACTIVE',
-        usagePolicy: 'REUSABLE_WORKER',
+        usagePolicy: 'REUSABLE',
         assetPath,
         assetUrl,
         sequenceNumber: nextSeq,
