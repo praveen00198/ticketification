@@ -231,16 +231,24 @@ export class GuestImportService {
     }
 
     let cached = this.activeUploads.get(config.importId);
-    if (!cached) {
-      // Re-read from import record if possible
-      const importRecord = await this.importRepo.findById(config.importId);
-      if (!importRecord) {
-        throw new AppError('Import session expired or not found. Please upload the file again.', 404);
+    let rawRows: Record<string, any>[] | null = cached?.rawRows || null;
+
+    if (!rawRows && cached?.filePath && fs.existsSync(cached.filePath)) {
+      try {
+        const workbook = xlsx.readFile(cached.filePath, { cellDates: true });
+        const sheetName = workbook.SheetNames[0];
+        if (sheetName) {
+          rawRows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+          this.activeUploads.set(config.importId, { filePath: cached.filePath, rawRows });
+        }
+      } catch (readErr) {
+        console.warn('[GuestImportService] Failed to re-read cached file:', readErr);
       }
-      throw new AppError('Import session expired. Please re-upload the file.', 400);
     }
 
-    const { rawRows } = cached;
+    if (!rawRows) {
+      throw new AppError('Import session data expired. Please re-upload your spreadsheet to proceed.', 400);
+    }
     const requiredFields = new Set(config.requiredFields || ['name', 'category']);
     const categoryMapping = config.categoryMapping || {};
     const defaultCategory = config.defaultCategory || 'GENERAL';
