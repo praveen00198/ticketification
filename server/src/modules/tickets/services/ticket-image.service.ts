@@ -214,7 +214,7 @@ export class TicketImageService {
   async svgToPng(svg: string, sharedBrowser?: Browser): Promise<Buffer> {
     // 1. Native sharp rendering via composite on pre-loaded template buffer (blazing fast, ~50ms, zero Chromium, lowest RAM)
     try {
-      if (this.templateBuffer && !svg.includes('<image href="data:image/png;base64')) {
+      if (this.templateBuffer) {
         logMemory('sharp_composite_before');
         const pngBuffer = await sharp(this.templateBuffer)
           .composite([{ input: Buffer.from(svg) }])
@@ -280,7 +280,7 @@ export class TicketImageService {
    */
   async renderSvgOnPage(svg: string, page: Page): Promise<Buffer> {
     try {
-      if (this.templateBuffer && !svg.includes('<image href="data:image/png;base64')) {
+      if (this.templateBuffer) {
         const pngBuffer = await sharp(this.templateBuffer)
           .composite([{ input: Buffer.from(svg) }])
           .png({ compressionLevel: 6 })

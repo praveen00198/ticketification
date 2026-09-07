@@ -213,8 +213,8 @@ export class TicketService {
     });
 
     // High-performance batch PNG rendering & upload to Supabase Storage
-    // BATCH_SIZE is bounded to 2 to operate with constant low memory footprint on Render 512MB instances
-    const BATCH_SIZE = 2;
+    // BATCH_SIZE is 1 to prevent concurrent librsvg native memory allocations on 512MB containers
+    const BATCH_SIZE = 1;
     let batchIndex = 0;
     for (let i = 0; i < generationTasks.length; i += BATCH_SIZE) {
       batchIndex++;
@@ -226,7 +226,7 @@ export class TicketService {
       const renderStart = Date.now();
       const renderedBatch = await this.imageServ.renderBatchTickets(
         batch.map((b) => b.ticketData),
-        2
+        1
       );
 
       // ── LIFECYCLE POINT 6: Immediately after rendering ──
@@ -378,13 +378,13 @@ export class TicketService {
     }
 
     // High-performance batch PNG rendering & upload to Supabase Storage
-    // BATCH_SIZE is bounded to 2 to operate with constant low memory footprint on Render 512MB instances
-    const BATCH_SIZE = 2;
+    // BATCH_SIZE is 1 to prevent concurrent librsvg native memory allocations on 512MB containers
+    const BATCH_SIZE = 1;
     for (let i = 0; i < generationTasks.length; i += BATCH_SIZE) {
       const batch = generationTasks.slice(i, i + BATCH_SIZE);
       const renderedBatch = await this.imageServ.renderBatchTickets(
         batch.map((b) => b.ticketData),
-        2
+        1
       );
 
       await Promise.all(
