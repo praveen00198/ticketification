@@ -200,17 +200,29 @@ export class TicketImageService {
    * Launch a shared Puppeteer browser instance with headless flags optimized for high-performance rendering.
    */
   async launchBrowser(): Promise<Browser> {
-    return await puppeteer.launch({
-      headless: config.env.puppeteerHeadless ? 'shell' : false,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--no-first-run',
-        '--no-zygote',
-      ],
-    });
+    const launchArgs = [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--no-first-run',
+      '--no-zygote',
+      '--single-process',
+      '--disable-extensions',
+    ];
+
+    try {
+      return await puppeteer.launch({
+        headless: true,
+        args: launchArgs,
+      });
+    } catch (err: any) {
+      console.warn('[TicketImageService] Standard headless launch failed, trying fallback mode:', err?.message || err);
+      return await puppeteer.launch({
+        headless: 'shell',
+        args: launchArgs,
+      });
+    }
   }
 
   /**

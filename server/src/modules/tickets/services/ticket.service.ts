@@ -89,56 +89,62 @@ export class TicketService {
         let page: any = null;
         let convertedCount = 0;
         try {
-          browser = await this.imageServ.launchBrowser();
-          page = await browser.newPage();
-          await page.setViewport({ width: 1620, height: 2025 });
+          try {
+            browser = await this.imageServ.launchBrowser();
+            page = await browser.newPage();
+            await page.setViewport({ width: 1620, height: 2025 });
+          } catch (bErr) {
+            console.warn('[TicketService] Browser unavailable for migration, skipping SVG-to-PNG background conversion:', bErr);
+          }
 
-          for (const item of svgTickets) {
-            const seqStr = item.ticket.sequenceNumber.toString().padStart(5, '0');
-            const displayId = `${event.name.substring(0, 3).toUpperCase()}-${seqStr}`;
-            const guest = item.guest;
-            const tType = item.ticketType;
+          if (page) {
+            for (const item of svgTickets) {
+              const seqStr = item.ticket.sequenceNumber.toString().padStart(5, '0');
+              const displayId = `${event.name.substring(0, 3).toUpperCase()}-${seqStr}`;
+              const guest = item.guest;
+              const tType = item.ticketType;
 
-            let pngBuffer: Buffer | null = null;
-            if (item.ticket.assetPath) {
-              try {
-                const existingBuf = await this.storageServ.downloadTicketImage(item.ticket.assetPath);
-                if (isPngBuffer(existingBuf)) {
-                  pngBuffer = existingBuf;
-                } else {
-                  pngBuffer = await this.imageServ.renderSvgOnPage(existingBuf.toString('utf-8'), page);
-                }
-              } catch (_) {}
-            }
+              let pngBuffer: Buffer | null = null;
+              if (item.ticket.assetPath) {
+                try {
+                  const existingBuf = await this.storageServ.downloadTicketImage(item.ticket.assetPath);
+                  if (isPngBuffer(existingBuf)) {
+                    pngBuffer = existingBuf;
+                  } else {
+                    pngBuffer = await this.imageServ.renderSvgOnPage(existingBuf.toString('utf-8'), page);
+                  }
+                } catch (_) {}
+              }
 
-            if (!pngBuffer) {
-              const qrDataUrl = await this.qrServ.generateQrDataUrl(item.ticket.verificationToken);
-              const svg = this.imageServ.buildSvg({
-                ticketId: displayId,
-                guestName: guest?.name || (item.ticket.usagePolicy === 'REUSABLE' ? 'Event Staff' : 'Valued Guest'),
-                eventName: event.name,
-                eventDate: event.date,
-                ticketType: tType?.label || tType?.name || 'General Guest',
-                qrCodeDataUrl: qrDataUrl,
-                organization: guest?.organization || undefined,
-                phone: guest?.phone || undefined,
+              if (!pngBuffer) {
+                const qrDataUrl = await this.qrServ.generateQrDataUrl(item.ticket.verificationToken);
+                const svg = this.imageServ.buildSvg({
+                  ticketId: displayId,
+                  guestName: guest?.name || (item.ticket.usagePolicy === 'REUSABLE' ? 'Event Staff' : 'Valued Guest'),
+                  eventName: event.name,
+                  eventDate: event.date,
+                  ticketType: tType?.label || tType?.name || 'General Guest',
+                  qrCodeDataUrl: qrDataUrl,
+                  organization: guest?.organization || undefined,
+                  phone: guest?.phone || undefined,
+                });
+                pngBuffer = await this.imageServ.renderSvgOnPage(svg, page);
+              }
+
+              const pngStoragePath = `events/${eventId}/tickets/ticket-${displayId}.png`;
+              const uploadResult = await this.storageServ.uploadTicketImage(
+                pngStoragePath,
+                pngBuffer,
+                'image/png'
+              );
+
+              await this.ticketRepo.update(item.ticket.id, {
+                assetUrl: uploadResult.publicUrl,
+                assetPath: uploadResult.storagePath,
               });
-              pngBuffer = await this.imageServ.renderSvgOnPage(svg, page);
+
+              convertedCount++;
             }
-
-            const pngStoragePath = `events/${eventId}/tickets/ticket-${displayId}.png`;
-            const uploadResult = await this.storageServ.uploadTicketImage(
-              pngStoragePath,
-              pngBuffer,
-              'image/png'
-            );
-
-            await this.ticketRepo.update(item.ticket.id, {
-              assetUrl: uploadResult.publicUrl,
-              assetPath: uploadResult.storagePath,
-            });
-
-            convertedCount++;
           }
         } finally {
           if (page) {
@@ -190,11 +196,18 @@ export class TicketService {
 
     let nextSeq = await this.ticketRepo.getNextSequenceNumber(eventId);
     const ticketsToInsert: any[] = [];
-    const uploadTasks: Array<{ storagePath: string; pngBuffer: Buffer; ticketRecord: any }> = [];
-
     let browser: any = null;
+    let page: any = null;
+    const uploadTasks: Array<{ storagePath: string; fileData: Buffer | string; contentType: string; ticketRecord: any }> = [];
+
     try {
-      browser = await this.imageServ.launchBrowser();
+      try {
+        browser = await this.imageServ.launchBrowser();
+        page = await browser.newPage();
+        await page.setViewport({ width: 1620, height: 2025 });
+      } catch (browserErr) {
+        console.warn('[TicketService] Browser launch unavailable for PNG conversion, will use verified SVG storage fallback:', browserErr);
+      }
 
       for (const guest of pendingGuests) {
         const guestCategory = (guest.category || 'GENERAL').toUpperCase().trim();
@@ -204,7 +217,7 @@ export class TicketService {
         const verificationToken = this.qrServ.generateVerificationToken();
         const qrDataUrl = await this.qrServ.generateQrDataUrl(verificationToken);
 
-        // Generate PNG Ticket Image Asset (1620x2025)
+        // Generate Ticket Asset (1620x2025)
         const ticketSeqStr = nextSeq.toString().padStart(5, '0');
         const displayId = `${event.name.substring(0, 3).toUpperCase()}-${ticketSeqStr}`;
 
@@ -220,8 +233,26 @@ export class TicketService {
         };
 
         const svg = this.imageServ.buildSvg(svgData);
-        const pngBuffer = await this.imageServ.svgToPng(svg, browser);
-        const storagePath = `events/${eventId}/tickets/ticket-${displayId}.png`;
+        let fileData: Buffer | string;
+        let contentType: string;
+        let storagePath: string;
+
+        if (page) {
+          try {
+            fileData = await this.imageServ.renderSvgOnPage(svg, page);
+            contentType = 'image/png';
+            storagePath = `events/${eventId}/tickets/ticket-${displayId}.png`;
+          } catch (renderErr) {
+            console.warn(`[TicketService] Page render failed for ticket ${displayId}, falling back to SVG:`, renderErr);
+            fileData = svg;
+            contentType = 'image/svg+xml';
+            storagePath = `events/${eventId}/tickets/ticket-${displayId}.svg`;
+          }
+        } else {
+          fileData = svg;
+          contentType = 'image/svg+xml';
+          storagePath = `events/${eventId}/tickets/ticket-${displayId}.svg`;
+        }
 
         const ticketRecord = {
           eventId,
@@ -239,17 +270,19 @@ export class TicketService {
         ticketsToInsert.push(ticketRecord);
         uploadTasks.push({
           storagePath,
-          pngBuffer,
+          fileData,
+          contentType,
           ticketRecord,
         });
 
         nextSeq++;
       }
     } finally {
+      if (page) {
+        try { await page.close(); } catch (_) {}
+      }
       if (browser) {
-        try {
-          await browser.close();
-        } catch (_e) {}
+        try { await browser.close(); } catch (_) {}
       }
     }
 
@@ -262,8 +295,8 @@ export class TicketService {
           batch.map(async (task) => {
             const uploadResult = await this.storageServ.uploadTicketImage(
               task.storagePath,
-              task.pngBuffer,
-              'image/png'
+              task.fileData,
+              task.contentType
             );
             task.ticketRecord.assetUrl = uploadResult.publicUrl;
             task.ticketRecord.assetPath = uploadResult.storagePath;
@@ -323,11 +356,18 @@ export class TicketService {
 
     let nextSeq = await this.ticketRepo.getNextSequenceNumber(eventId);
     const ticketsToInsert: any[] = [];
-    const uploadTasks: Array<{ storagePath: string; pngBuffer: Buffer; ticketRecord: any }> = [];
+    const uploadTasks: Array<{ storagePath: string; fileData: Buffer | string; contentType: string; ticketRecord: any }> = [];
 
     let browser: any = null;
+    let page: any = null;
     try {
-      browser = await this.imageServ.launchBrowser();
+      try {
+        browser = await this.imageServ.launchBrowser();
+        page = await browser.newPage();
+        await page.setViewport({ width: 1620, height: 2025 });
+      } catch (browserErr) {
+        console.warn('[TicketService] Browser launch unavailable for worker ticket PNG conversion, falling back to SVG:', browserErr);
+      }
 
       for (let i = 0; i < count; i++) {
         const verificationToken = this.qrServ.generateVerificationToken();
@@ -346,8 +386,25 @@ export class TicketService {
         };
 
         const svg = this.imageServ.buildSvg(workerData);
-        const pngBuffer = await this.imageServ.svgToPng(svg, browser);
-        const storagePath = `events/${eventId}/tickets/ticket-${displayId}.png`;
+        let fileData: Buffer | string;
+        let contentType: string;
+        let storagePath: string;
+
+        if (page) {
+          try {
+            fileData = await this.imageServ.renderSvgOnPage(svg, page);
+            contentType = 'image/png';
+            storagePath = `events/${eventId}/tickets/ticket-${displayId}.png`;
+          } catch (renderErr) {
+            fileData = svg;
+            contentType = 'image/svg+xml';
+            storagePath = `events/${eventId}/tickets/ticket-${displayId}.svg`;
+          }
+        } else {
+          fileData = svg;
+          contentType = 'image/svg+xml';
+          storagePath = `events/${eventId}/tickets/ticket-${displayId}.svg`;
+        }
 
         const ticketRecord = {
           eventId,
@@ -365,17 +422,19 @@ export class TicketService {
         ticketsToInsert.push(ticketRecord);
         uploadTasks.push({
           storagePath,
-          pngBuffer,
+          fileData,
+          contentType,
           ticketRecord,
         });
 
         nextSeq++;
       }
     } finally {
+      if (page) {
+        try { await page.close(); } catch (_) {}
+      }
       if (browser) {
-        try {
-          await browser.close();
-        } catch (_e) {}
+        try { await browser.close(); } catch (_) {}
       }
     }
 
@@ -387,8 +446,8 @@ export class TicketService {
           batch.map(async (task) => {
             const uploadResult = await this.storageServ.uploadTicketImage(
               task.storagePath,
-              task.pngBuffer,
-              'image/png'
+              task.fileData,
+              task.contentType
             );
             task.ticketRecord.assetUrl = uploadResult.publicUrl;
             task.ticketRecord.assetPath = uploadResult.storagePath;
@@ -497,13 +556,27 @@ export class TicketService {
 
     let browser: any = null;
     let page: any = null;
+    let browserFailed = false;
+
     const ensurePage = async () => {
+      if (browserFailed) return null;
       if (!browser) {
-        browser = await this.imageServ.launchBrowser();
+        try {
+          browser = await this.imageServ.launchBrowser();
+        } catch (bErr) {
+          console.warn('[BulkExport] Browser launch unavailable, streaming storage tickets directly:', bErr);
+          browserFailed = true;
+          return null;
+        }
       }
-      if (!page) {
-        page = await browser.newPage();
-        await page.setViewport({ width: 1620, height: 2025 });
+      if (!page && browser) {
+        try {
+          page = await browser.newPage();
+          await page.setViewport({ width: 1620, height: 2025 });
+        } catch (pErr) {
+          console.warn('[BulkExport] Failed to create browser page:', pErr);
+          return null;
+        }
       }
       return page;
     };
@@ -540,21 +613,26 @@ export class TicketService {
               } else {
                 // It's an SVG from Supabase Storage! Convert to genuine PNG
                 const p = await ensurePage();
-                fileBuffer = await this.imageServ.renderSvgOnPage(buf.toString('utf-8'), p);
-                source = 'CONVERTED_FROM_STORAGE_SVG';
+                if (p) {
+                  fileBuffer = await this.imageServ.renderSvgOnPage(buf.toString('utf-8'), p);
+                  source = 'CONVERTED_FROM_STORAGE_SVG';
 
-                // Persist the PNG back to Supabase Storage
-                try {
-                  const uploadResult = await this.storageServ.uploadTicketImage(
-                    pngStoragePath,
-                    fileBuffer,
-                    'image/png'
-                  );
-                  await this.ticketRepo.update(t.ticket.id, {
-                    assetUrl: uploadResult.publicUrl,
-                    assetPath: uploadResult.storagePath,
-                  });
-                } catch (_cacheErr) {}
+                  // Persist the PNG back to Supabase Storage
+                  try {
+                    const uploadResult = await this.storageServ.uploadTicketImage(
+                      pngStoragePath,
+                      fileBuffer,
+                      'image/png'
+                    );
+                    await this.ticketRepo.update(t.ticket.id, {
+                      assetUrl: uploadResult.publicUrl,
+                      assetPath: uploadResult.storagePath,
+                    });
+                  } catch (_cacheErr) {}
+                } else {
+                  fileBuffer = buf;
+                  source = 'STORAGE_SVG_FALLBACK';
+                }
               }
             } catch (_e) {}
           }
@@ -562,7 +640,6 @@ export class TicketService {
           // 3. Fallback recovery: render fresh PNG from template & QR if storage asset was missing
           if (!fileBuffer) {
             const p = await ensurePage();
-            source = 'RECOVERED_ON_DEMAND_PNG';
             const qrDataUrl = await this.qrServ.generateQrDataUrl(t.ticket.verificationToken);
             const svg = this.imageServ.buildSvg({
               ticketId: displayId,
@@ -574,25 +651,34 @@ export class TicketService {
               organization: t.guest?.organization || undefined,
               phone: t.guest?.phone || undefined,
             });
-            fileBuffer = await this.imageServ.renderSvgOnPage(svg, p);
 
-            try {
-              const uploadResult = await this.storageServ.uploadTicketImage(
-                pngStoragePath,
-                fileBuffer,
-                'image/png'
-              );
-              await this.ticketRepo.update(t.ticket.id, {
-                assetUrl: uploadResult.publicUrl,
-                assetPath: uploadResult.storagePath,
-              });
-            } catch (_saveErr) {}
+            if (p) {
+              source = 'RECOVERED_ON_DEMAND_PNG';
+              fileBuffer = await this.imageServ.renderSvgOnPage(svg, p);
+
+              try {
+                const uploadResult = await this.storageServ.uploadTicketImage(
+                  pngStoragePath,
+                  fileBuffer,
+                  'image/png'
+                );
+                await this.ticketRepo.update(t.ticket.id, {
+                  assetUrl: uploadResult.publicUrl,
+                  assetPath: uploadResult.storagePath,
+                });
+              } catch (_saveErr) {}
+            } else {
+              source = 'RECOVERED_ON_DEMAND_SVG';
+              fileBuffer = Buffer.from(svg, 'utf-8');
+            }
           }
 
-          // Final guarantee: MUST be genuine PNG binary
+          // Final guarantee: MUST be genuine PNG binary if page is available
           if (fileBuffer && !isPngBuffer(fileBuffer)) {
             const p = await ensurePage();
-            fileBuffer = await this.imageServ.renderSvgOnPage(fileBuffer.toString('utf-8'), p);
+            if (p) {
+              fileBuffer = await this.imageServ.renderSvgOnPage(fileBuffer.toString('utf-8'), p);
+            }
           }
 
           if (fileBuffer) {
