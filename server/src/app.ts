@@ -9,6 +9,8 @@ import eventRoutes from './modules/events/routes/event.routes';
 import { ticketService } from './modules/tickets/services/ticket.service';
 import { errorHandler } from './middlewares/error.middleware';
 import config from './config/env';
+import sharp from 'sharp';
+import { logMemory } from './utils/memory-logger';
 
 const app = express();
 
@@ -77,6 +79,37 @@ app.use('/api/dashboard', dashboardRoutes);
 // Health check endpoint
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'OK', system: 'QR Ticket Generation System', timestamp: new Date().toISOString() });
+});
+
+// Memory diagnostics endpoint (production-safe)
+app.get('/api/health/memory', (_req, res) => {
+  const mem = process.memoryUsage();
+  const toMB = (bytes: number) => (bytes / 1024 / 1024).toFixed(1);
+  logMemory('health_check_endpoint');
+  res.json({
+    memory: {
+      rss: `${toMB(mem.rss)}MB`,
+      heapUsed: `${toMB(mem.heapUsed)}MB`,
+      heapTotal: `${toMB(mem.heapTotal)}MB`,
+      external: `${toMB(mem.external)}MB`,
+      arrayBuffers: `${toMB(mem.arrayBuffers)}MB`,
+      rssRaw: mem.rss,
+      heapUsedRaw: mem.heapUsed,
+    },
+    sharp: {
+      cache: sharp.cache(),
+      concurrency: sharp.concurrency(),
+      versions: sharp.versions,
+    },
+    process: {
+      pid: process.pid,
+      uptime: `${(process.uptime() / 60).toFixed(1)} minutes`,
+      nodeVersion: process.version,
+      platform: process.platform,
+      arch: process.arch,
+    },
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // Centralized Error Handler Middleware

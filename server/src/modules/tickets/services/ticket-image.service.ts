@@ -4,11 +4,16 @@ import path from 'path';
 import fs from 'fs';
 import config from '../../../config/env';
 import { AppError } from '../../../middlewares/error.middleware';
+import { logMemory } from '../../../utils/memory-logger';
 
 // Disable libvips operation & buffer caching to prevent RSS retention across tickets in memory-constrained environments (Render 512MB)
 sharp.cache(false);
 // Limit internal thread pool to 1 thread per operation to avoid multi-threaded memory spikes
 sharp.concurrency(1);
+
+// ── DIAGNOSTIC: Verify Sharp config is applied at module load time ──
+console.log(`[DIAG:TicketImageService] sharp.cache()=${JSON.stringify(sharp.cache())} sharp.concurrency()=${sharp.concurrency()}`);
+console.log(`[DIAG:TicketImageService] sharp.versions=${JSON.stringify(sharp.versions)}`);
 
 export interface TicketImageData {
   ticketId: string;
@@ -210,30 +215,42 @@ export class TicketImageService {
     // 1. Native sharp rendering via composite on pre-loaded template buffer (blazing fast, ~50ms, zero Chromium, lowest RAM)
     try {
       if (this.templateBuffer && !svg.includes('<image href="data:image/png;base64')) {
+        logMemory('sharp_composite_before');
         const pngBuffer = await sharp(this.templateBuffer)
           .composite([{ input: Buffer.from(svg) }])
           .png({ compressionLevel: 6 })
           .toBuffer();
+        logMemory('sharp_composite_after', { pngSizeKB: Math.round(pngBuffer.length / 1024) });
         if (isPngBuffer(pngBuffer)) {
+          console.log('[DIAG:RenderPath] Used: sharp.composite (template+overlay)');
           return pngBuffer;
         }
       } else {
+        logMemory('sharp_svg_direct_before');
         const pngBuffer = await sharp(Buffer.from(svg))
           .png({ compressionLevel: 6 })
           .toBuffer();
+        logMemory('sharp_svg_direct_after', { pngSizeKB: Math.round(pngBuffer.length / 1024) });
         if (isPngBuffer(pngBuffer)) {
+          console.log('[DIAG:RenderPath] Used: sharp.svg_direct (no template)');
           return pngBuffer;
         }
       }
     } catch (sharpErr: any) {
-      console.warn('[TicketImageService] Sharp SVG conversion note:', sharpErr?.message || sharpErr);
+      console.error('[CRITICAL:TicketImageService] Sharp SVG conversion FAILED — will fall through to Puppeteer:', sharpErr?.message || sharpErr);
+      logMemory('sharp_failed');
     }
 
     // 2. Headless browser fallback if available
+    // ── CRITICAL: This launches a full Chromium process (~200-300MB RSS). On 512MB container this will OOM. ──
+    console.error('[CRITICAL:PUPPETEER_FALLBACK] Sharp rendering failed. Launching Puppeteer/Chromium fallback — this is likely the OOM cause on 512MB containers!');
+    logMemory('puppeteer_fallback_before');
+
     const ownBrowser = !sharedBrowser;
     const browser = sharedBrowser || (await this.launchBrowser());
 
     try {
+      logMemory('puppeteer_browser_launched');
       const page = await browser.newPage();
       await page.setViewport({ width: 1620, height: 2025 });
       const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>* { margin: 0; padding: 0; box-sizing: border-box; } body { width: 1620px; height: 2025px; overflow: hidden; background-color: #000; }</style></head><body>${svg}</body></html>`;
@@ -241,6 +258,7 @@ export class TicketImageService {
       await page.evaluateHandle('document.fonts.ready');
       const screenshot = await page.screenshot({ type: 'png', fullPage: true });
       await page.close();
+      logMemory('puppeteer_screenshot_taken');
 
       const pngBuffer = Buffer.from(screenshot);
       if (!isPngBuffer(pngBuffer)) {
@@ -251,6 +269,7 @@ export class TicketImageService {
       if (ownBrowser && browser) {
         try {
           await browser.close();
+          logMemory('puppeteer_browser_closed');
         } catch (_) {}
       }
     }

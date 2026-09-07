@@ -21,6 +21,7 @@ import {
   StorageError,
 } from '../../../middlewares/error.middleware';
 import { GenerateTicketsResult } from '../ticket.types';
+import { logMemory, MemoryTracker } from '../../../utils/memory-logger';
 
 export { formatTicketFileName };
 
@@ -74,6 +75,11 @@ export class TicketService {
    * Produces genuine PNG binaries (0x89504E47) and uploads directly to Supabase Storage.
    */
   async generateTicketsForEvent(eventId: string, userId: string): Promise<GenerateTicketsResult> {
+    const tracker = new MemoryTracker();
+
+    // ── LIFECYCLE POINT 3: Immediately before ticket generation starts ──
+    tracker.start('generation_start');
+
     const event = await this.eventRepo.findByIdAndOwner(eventId, userId);
     if (!event) {
       throw new NotFoundError('Event not found or unauthorized');
@@ -81,6 +87,10 @@ export class TicketService {
 
     // 1. Fetch all guests for this event
     const guests = await this.guestRepo.findByEventId(eventId, 50000, 0);
+
+    // ── LIFECYCLE POINT 4: After guest list is loaded ──
+    tracker.checkpoint('guests_loaded', { guestCount: guests.length });
+
     if (guests.length === 0) {
       throw new ValidationError('No guests found for this event. Please import guests first.');
     }
@@ -92,6 +102,11 @@ export class TicketService {
     );
 
     const pendingGuests = guests.filter((g) => !guestsWithTickets.has(g.id));
+
+    tracker.checkpoint('pending_guests_filtered', {
+      existingTickets: existingTickets.length,
+      pendingGuests: pendingGuests.length,
+    });
 
     if (!this.storageServ.isConfigured()) {
       throw new StorageError(
@@ -191,16 +206,34 @@ export class TicketService {
       nextSeq++;
     }
 
+    // ── After QR generation loop ──
+    tracker.checkpoint('qr_generation_complete', {
+      tasksQueued: generationTasks.length,
+      ticketsToInsert: ticketsToInsert.length,
+    });
+
     // High-performance batch PNG rendering & upload to Supabase Storage
     // BATCH_SIZE is bounded to 2 to operate with constant low memory footprint on Render 512MB instances
     const BATCH_SIZE = 2;
+    let batchIndex = 0;
     for (let i = 0; i < generationTasks.length; i += BATCH_SIZE) {
+      batchIndex++;
       const batch = generationTasks.slice(i, i + BATCH_SIZE);
+
+      // ── LIFECYCLE POINT 5: Before rendering each ticket/batch ──
+      tracker.checkpoint('batch_render_before', { batch: batchIndex, batchSize: batch.length });
+
+      const renderStart = Date.now();
       const renderedBatch = await this.imageServ.renderBatchTickets(
         batch.map((b) => b.ticketData),
         2
       );
 
+      // ── LIFECYCLE POINT 6: Immediately after rendering ──
+      const renderDuration = Date.now() - renderStart;
+      tracker.checkpoint('batch_render_after', { batch: batchIndex, renderMs: renderDuration });
+
+      const uploadStart = Date.now();
       await Promise.all(
         batch.map(async (task, idx) => {
           const rendered = renderedBatch[idx];
@@ -224,12 +257,30 @@ export class TicketService {
         })
       );
 
+      // ── LIFECYCLE POINT 7: After Supabase Storage upload ──
+      const uploadDuration = Date.now() - uploadStart;
+      tracker.checkpoint('batch_upload_after', { batch: batchIndex, uploadMs: uploadDuration });
+
       // Release batch references to keep memory usage bounded
       renderedBatch.length = 0;
+
+      // ── LIFECYCLE POINT 9: After every batch ──
+      tracker.checkpoint('batch_complete', {
+        batch: batchIndex,
+        ticketsProcessedSoFar: Math.min(i + BATCH_SIZE, generationTasks.length),
+        totalTickets: generationTasks.length,
+      });
     }
 
+    // ── LIFECYCLE POINT 8: After DB insert/batch insert ──
+    const dbStart = Date.now();
     // Persist to PostgreSQL only after all PNGs are successfully uploaded to Supabase Storage
     const inserted = await this.ticketRepo.createMany(ticketsToInsert);
+    const dbDuration = Date.now() - dbStart;
+    tracker.checkpoint('db_insert_complete', { insertedCount: inserted.length, dbMs: dbDuration });
+
+    // ── LIFECYCLE POINT 10: Ticket generation completion ──
+    tracker.summarize(inserted.length);
 
     return {
       message: `Successfully generated and uploaded ${inserted.length} PNG tickets to Supabase Storage.`,
