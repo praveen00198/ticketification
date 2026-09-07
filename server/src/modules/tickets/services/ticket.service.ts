@@ -12,6 +12,30 @@ import { AppError } from '../../../middlewares/error.middleware';
 
 export { formatTicketFileName };
 
+/**
+ * Safely instantiates a ZipArchive instance across all archiver version module formats (v7 and v8+).
+ */
+function createZipArchive(options: any = { zlib: { level: 6 } }) {
+  try {
+    const archiverModule: any = require('archiver');
+    if (archiverModule && typeof archiverModule.ZipArchive === 'function') {
+      return new archiverModule.ZipArchive(options);
+    }
+    if (typeof archiverModule === 'function') {
+      return archiverModule('zip', options);
+    }
+    if (archiverModule && typeof archiverModule.default === 'function') {
+      return archiverModule.default('zip', options);
+    }
+    if (archiverModule?.default && typeof archiverModule.default.ZipArchive === 'function') {
+      return new archiverModule.default.ZipArchive(options);
+    }
+  } catch (err) {
+    console.error('[Archiver] Error initializing archiver engine:', err);
+  }
+  throw new AppError('Zip compression engine is unavailable.', 500);
+}
+
 export class TicketService {
   constructor(
     private ticketRepo: TicketRepository = ticketRepository,
@@ -456,7 +480,10 @@ export class TicketService {
       throw new AppError('No tickets found to export for this event.', 400);
     }
 
-    const archive = (archiver as any)('zip', { zlib: { level: 6 } });
+    const archive = createZipArchive({ zlib: { level: 6 } });
+    archive.on('error', (err: any) => {
+      console.error('[BulkExport] Archive error:', err);
+    });
     archive.pipe(streamOut);
 
     const csvRows = [
@@ -563,18 +590,20 @@ export class TicketService {
           }
 
           // Final guarantee: MUST be genuine PNG binary
-          if (!isPngBuffer(fileBuffer)) {
+          if (fileBuffer && !isPngBuffer(fileBuffer)) {
             const p = await ensurePage();
             fileBuffer = await this.imageServ.renderSvgOnPage(fileBuffer.toString('utf-8'), p);
           }
 
-          batchResults.push({
-            t,
-            fileName,
-            fileBuffer,
-            source,
-            seqStr,
-          });
+          if (fileBuffer) {
+            batchResults.push({
+              t,
+              fileName,
+              fileBuffer,
+              source,
+              seqStr,
+            });
+          }
         }
 
         for (const item of batchResults) {
@@ -586,7 +615,9 @@ export class TicketService {
             recoveredPngCount++;
           }
 
-          archive.append(item.fileBuffer, { name: item.fileName });
+          if (item.fileBuffer) {
+            archive.append(item.fileBuffer, { name: item.fileName });
+          }
 
           csvRows.push(
             [

@@ -180,7 +180,19 @@ export class TicketImageService {
   </g>
 
   <!-- Guest Name -->
-  <text x="810" y="1485" class="guest-text">${safeGuestName}</text>
+  <text
+    x="810"
+    y="1490"
+    text-anchor="middle"
+    font-family="'Noto Sans Devanagari', 'Mukta', 'Hind', 'Poppins', Arial, sans-serif"
+    font-size="76"
+    font-weight="800"
+    fill="#FFE680"
+    stroke="#000000"
+    stroke-width="1.5"
+    paint-order="stroke fill"
+    style="font-family: 'Noto Sans Devanagari', 'Mukta', 'Hind', 'Poppins', Arial, sans-serif; font-size: 76px; font-weight: 800; fill: #FFE680; text-anchor: middle;"
+  >${safeGuestName}</text>
 </svg>`;
   }
 
