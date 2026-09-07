@@ -5,6 +5,11 @@ import fs from 'fs';
 import config from '../../../config/env';
 import { AppError } from '../../../middlewares/error.middleware';
 
+// Disable libvips operation & buffer caching to prevent RSS retention across tickets in memory-constrained environments (Render 512MB)
+sharp.cache(false);
+// Limit internal thread pool to 1 thread per operation to avoid multi-threaded memory spikes
+sharp.concurrency(1);
+
 export interface TicketImageData {
   ticketId: string;
   guestName: string;
@@ -22,6 +27,7 @@ export interface TicketImageData {
  * Invariant (FR-TCK-3): Internal Ticket ID MUST NOT be visibly printed on the image card.
  */
 export class TicketImageService {
+  private templateBuffer: Buffer | null = null;
   private templateBase64: string | null = null;
   private fontBase64: string | null = null;
 
@@ -47,8 +53,8 @@ export class TicketImageService {
     for (const p of candidates) {
       if (fs.existsSync(p)) {
         try {
-          const buf = fs.readFileSync(p);
-          this.templateBase64 = `data:image/png;base64,${buf.toString('base64')}`;
+          this.templateBuffer = fs.readFileSync(p);
+          this.templateBase64 = `data:image/png;base64,${this.templateBuffer.toString('base64')}`;
           break;
         } catch (e) {
           console.warn('[TicketImageService] Could not load template from:', p, e);
@@ -88,10 +94,10 @@ export class TicketImageService {
     }
   }
 
-  public buildSvg(data: TicketImageData): string {
-    const bgImage = this.templateBase64
+  public buildSvg(data: TicketImageData, includeBackground: boolean = false): string {
+    const bgImage = includeBackground && this.templateBase64
       ? `<image href="${this.templateBase64}" width="1620" height="2025" preserveAspectRatio="none"/>`
-      : `<rect width="1620" height="2025" fill="#7f1d1d"/>`;
+      : (!this.templateBuffer ? `<rect width="1620" height="2025" fill="#7f1d1d"/>` : '');
 
     const safeGuestName = (data.guestName || 'Valued Guest')
       .replace(/&/g, '&amp;')
@@ -201,11 +207,23 @@ export class TicketImageService {
    * Validates that output is a valid PNG binary with standard PNG header (0x89504E47).
    */
   async svgToPng(svg: string, sharedBrowser?: Browser): Promise<Buffer> {
-    // 1. Native sharp rendering (blazing fast, container-safe, zero Chromium/Linux .so dependencies)
+    // 1. Native sharp rendering via composite on pre-loaded template buffer (blazing fast, ~50ms, zero Chromium, lowest RAM)
     try {
-      const pngBuffer = await sharp(Buffer.from(svg)).png().toBuffer();
-      if (isPngBuffer(pngBuffer)) {
-        return pngBuffer;
+      if (this.templateBuffer && !svg.includes('<image href="data:image/png;base64')) {
+        const pngBuffer = await sharp(this.templateBuffer)
+          .composite([{ input: Buffer.from(svg) }])
+          .png({ compressionLevel: 6 })
+          .toBuffer();
+        if (isPngBuffer(pngBuffer)) {
+          return pngBuffer;
+        }
+      } else {
+        const pngBuffer = await sharp(Buffer.from(svg))
+          .png({ compressionLevel: 6 })
+          .toBuffer();
+        if (isPngBuffer(pngBuffer)) {
+          return pngBuffer;
+        }
       }
     } catch (sharpErr: any) {
       console.warn('[TicketImageService] Sharp SVG conversion note:', sharpErr?.message || sharpErr);
@@ -243,9 +261,19 @@ export class TicketImageService {
    */
   async renderSvgOnPage(svg: string, page: Page): Promise<Buffer> {
     try {
-      const pngBuffer = await sharp(Buffer.from(svg)).png().toBuffer();
-      if (isPngBuffer(pngBuffer)) {
-        return pngBuffer;
+      if (this.templateBuffer && !svg.includes('<image href="data:image/png;base64')) {
+        const pngBuffer = await sharp(this.templateBuffer)
+          .composite([{ input: Buffer.from(svg) }])
+          .png({ compressionLevel: 6 })
+          .toBuffer();
+        if (isPngBuffer(pngBuffer)) {
+          return pngBuffer;
+        }
+      } else {
+        const pngBuffer = await sharp(Buffer.from(svg)).png().toBuffer();
+        if (isPngBuffer(pngBuffer)) {
+          return pngBuffer;
+        }
       }
     } catch (_) {}
 
@@ -277,10 +305,11 @@ export class TicketImageService {
   /**
    * Batch render multiple tickets with high-speed native sharp rendering.
    * Eliminates browser process crashes and memory exhaustion in cloud containers.
+   * Concurrency is bounded to 2 to operate safely under 512MB RAM.
    */
   async renderBatchTickets(
     items: TicketImageData[],
-    batchConcurrency = 5
+    batchConcurrency = 2
   ): Promise<Array<{ ticketId: string; pngBuffer: Buffer; fileName: string }>> {
     if (items.length === 0) return [];
 

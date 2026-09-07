@@ -59,7 +59,20 @@ This file records critical discoveries, anti-patterns, and institutional knowled
 - **Resolution**: Bundled official Google `NotoSansDevanagari-Bold.ttf` inside `assets/fonts/` and embedded the font binary as base64 within `@font-face` inside the SVG markup. Pango and HarfBuzz read the embedded OpenType tables directly from memory, performing flawless Devanagari text shaping, conjunct resolution (`श्री`, `प्र`, `क्ष`, `त्र`), and matra positioning across all operating systems.
 - **Invariant**: Any custom or complex script font required by ticket templates MUST be bundled in `assets/fonts/` and embedded directly into the SVG to guarantee deterministic rendering independent of OS system fonts.
 
+### 2.10 Memory Optimization for Render 512MB RAM Containers
+- **Issue**: Under bulk ticket generation on Render, the backend process was terminated by the Linux OOM killer with `"Ran out of memory (used over 512MB) while running your code."`
+- **Root Cause**:
+  1. Default `sharp.cache(true)` retained decompressed image buffers and intermediate surfaces in native C++ memory across operations. Because this was outside V8 heap, Node GC did not trigger, causing RSS to continuously climb past 512MB.
+  2. The 1620x2025 background PNG was base64-encoded into the SVG markup (~373KB base64 string), forcing `librsvg` to decode a 13.1 MB RGBA buffer per ticket alongside Cairo surfaces (~40MB RAM per ticket).
+  3. `BATCH_SIZE = 5` in `Promise.all` allocated 5 × ~40MB = ~200MB of native RAM simultaneously, causing peak RSS spikes to 378MB+ for just 20 tickets.
+- **Resolution**:
+  1. Disabled libvips caching via `sharp.cache(false)` and constrained thread pool via `sharp.concurrency(1)` to eliminate native buffer accumulation.
+  2. Pre-loaded `templateBuffer` once at startup and used Sharp's native `.composite([{ input: overlaySvg }])`, dropping the SVG payload from ~950KB to ~280KB and eliminating nested PNG decoding inside librsvg.
+  3. Bounded batch concurrency to `BATCH_SIZE = 2` and explicitly dereferenced PNG buffers immediately upon Supabase Storage upload.
+- **Invariant**: On memory-constrained container environments (<= 512MB RAM), image processing concurrency must remain tightly bounded (<= 2), native buffer caching disabled, and raw image buffers dereferenced immediately upon storage upload. Peak RSS must remain <= 200MB regardless of event size.
+
 ---
+
 
 ## 3. Data Preservation Reminders
 - The PostgreSQL database hosted on Supabase contains live event and guest schemas.

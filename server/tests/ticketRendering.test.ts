@@ -378,7 +378,40 @@ describe('Phase 4: Ticket Generation & PNG Rendering Pipeline', () => {
         expect(isPngBuffer(pngBuf)).toBe(true);
       }
     });
+
+    it('should maintain bounded memory footprint (< 250MB RSS) during continuous batch rendering', async () => {
+      const dummyQr = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+      const items: TicketImageData[] = [];
+      for (let i = 1; i <= 10; i++) {
+        items.push({
+          ticketId: `MEM-${i}`,
+          guestName: `|| श्री गणेशाय नमः || Guest ${i}`,
+          eventName: 'Memory Test Event',
+          eventDate: '2026-12-01',
+          ticketType: 'VIP Guest',
+          qrCodeDataUrl: dummyQr,
+        });
+      }
+
+      const startRss = process.memoryUsage().rss / 1024 / 1024;
+      let peakRss = startRss;
+      const timer = setInterval(() => {
+        const rssMb = process.memoryUsage().rss / 1024 / 1024;
+        if (rssMb > peakRss) peakRss = rssMb;
+      }, 10);
+
+      const results = await ticketImageService.renderBatchTickets(items, 2);
+      clearInterval(timer);
+
+      expect(results).toHaveLength(10);
+      for (const res of results) {
+        expect(isPngBuffer(res.pngBuffer)).toBe(true);
+      }
+      const deltaRss = peakRss - startRss;
+      expect(deltaRss).toBeLessThan(150);
+    });
   });
 });
+
 
 

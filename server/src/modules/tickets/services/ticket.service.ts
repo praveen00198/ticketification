@@ -192,12 +192,13 @@ export class TicketService {
     }
 
     // High-performance batch PNG rendering & upload to Supabase Storage
-    const BATCH_SIZE = 5;
+    // BATCH_SIZE is bounded to 2 to operate with constant low memory footprint on Render 512MB instances
+    const BATCH_SIZE = 2;
     for (let i = 0; i < generationTasks.length; i += BATCH_SIZE) {
       const batch = generationTasks.slice(i, i + BATCH_SIZE);
       const renderedBatch = await this.imageServ.renderBatchTickets(
         batch.map((b) => b.ticketData),
-        5
+        2
       );
 
       await Promise.all(
@@ -217,8 +218,14 @@ export class TicketService {
 
           task.ticketRecord.assetUrl = uploadResult.publicUrl;
           task.ticketRecord.assetPath = uploadResult.storagePath;
+
+          // Explicitly clear buffer reference to allow immediate V8/libvips garbage collection
+          (rendered as any).pngBuffer = null;
         })
       );
+
+      // Release batch references to keep memory usage bounded
+      renderedBatch.length = 0;
     }
 
     // Persist to PostgreSQL only after all PNGs are successfully uploaded to Supabase Storage
@@ -320,12 +327,13 @@ export class TicketService {
     }
 
     // High-performance batch PNG rendering & upload to Supabase Storage
-    const BATCH_SIZE = 5;
+    // BATCH_SIZE is bounded to 2 to operate with constant low memory footprint on Render 512MB instances
+    const BATCH_SIZE = 2;
     for (let i = 0; i < generationTasks.length; i += BATCH_SIZE) {
       const batch = generationTasks.slice(i, i + BATCH_SIZE);
       const renderedBatch = await this.imageServ.renderBatchTickets(
         batch.map((b) => b.ticketData),
-        5
+        2
       );
 
       await Promise.all(
@@ -345,8 +353,14 @@ export class TicketService {
 
           task.ticketRecord.assetUrl = uploadResult.publicUrl;
           task.ticketRecord.assetPath = uploadResult.storagePath;
+
+          // Explicitly clear buffer reference to allow immediate V8/libvips garbage collection
+          (rendered as any).pngBuffer = null;
         })
       );
+
+      // Release batch references to keep memory usage bounded
+      renderedBatch.length = 0;
     }
 
     const createdTickets = await this.ticketRepo.createMany(ticketsToInsert);
