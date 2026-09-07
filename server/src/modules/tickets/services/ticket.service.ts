@@ -57,7 +57,7 @@ export class TicketService {
     if (pendingGuests.length === 0) {
       // Check if any existing tickets still reference legacy .svg assets that need migration to PNG
       const svgTickets = existingTickets.filter(
-        (t) => !t.assetPath || t.assetPath.endsWith('.svg') || (t.assetUrl && t.assetUrl.endsWith('.svg'))
+        (t) => !t.ticket.assetPath || t.ticket.assetPath.endsWith('.svg') || (t.ticket.assetUrl && t.ticket.assetUrl.endsWith('.svg'))
       );
 
       if (svgTickets.length > 0) {
@@ -69,20 +69,16 @@ export class TicketService {
           page = await browser.newPage();
           await page.setViewport({ width: 1620, height: 2025 });
 
-          const guestMap = new Map(guests.map((g) => [g.id, g]));
-          const ticketTypes = await this.ticketTypeRepo.findByEventId(eventId);
-          const typeMap = new Map(ticketTypes.map((t) => [t.id, t]));
-
           for (const item of svgTickets) {
-            const seqStr = item.sequenceNumber.toString().padStart(5, '0');
+            const seqStr = item.ticket.sequenceNumber.toString().padStart(5, '0');
             const displayId = `${event.name.substring(0, 3).toUpperCase()}-${seqStr}`;
-            const guest = item.guestId ? guestMap.get(item.guestId) : null;
-            const tType = typeMap.get(item.ticketTypeId);
+            const guest = item.guest;
+            const tType = item.ticketType;
 
             let pngBuffer: Buffer | null = null;
-            if (item.assetPath) {
+            if (item.ticket.assetPath) {
               try {
-                const existingBuf = await this.storageServ.downloadTicketImage(item.assetPath);
+                const existingBuf = await this.storageServ.downloadTicketImage(item.ticket.assetPath);
                 if (isPngBuffer(existingBuf)) {
                   pngBuffer = existingBuf;
                 } else {
@@ -92,10 +88,10 @@ export class TicketService {
             }
 
             if (!pngBuffer) {
-              const qrDataUrl = await this.qrServ.generateQrDataUrl(item.verificationToken);
+              const qrDataUrl = await this.qrServ.generateQrDataUrl(item.ticket.verificationToken);
               const svg = this.imageServ.buildSvg({
                 ticketId: displayId,
-                guestName: guest?.name || (item.usagePolicy === 'REUSABLE' ? 'Event Staff' : 'Valued Guest'),
+                guestName: guest?.name || (item.ticket.usagePolicy === 'REUSABLE' ? 'Event Staff' : 'Valued Guest'),
                 eventName: event.name,
                 eventDate: event.date,
                 ticketType: tType?.label || tType?.name || 'General Guest',
@@ -113,7 +109,7 @@ export class TicketService {
               'image/png'
             );
 
-            await this.ticketRepo.update(item.id, {
+            await this.ticketRepo.update(item.ticket.id, {
               assetUrl: uploadResult.publicUrl,
               assetPath: uploadResult.storagePath,
             });
