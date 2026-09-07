@@ -30,6 +30,7 @@ export const TicketList: React.FC = () => {
   const [generating, setGenerating] = useState(false);
   const [generatingWorkers, setGeneratingWorkers] = useState(false);
   const [downloadingZip, setDownloadingZip] = useState(false);
+  const [downloadingTicketId, setDownloadingTicketId] = useState<string | null>(null);
   const [isWorkerModalOpen, setIsWorkerModalOpen] = useState(false);
   const [workerCount, setWorkerCount] = useState(10);
   const [search, setSearch] = useState('');
@@ -39,6 +40,42 @@ export const TicketList: React.FC = () => {
 
   // Preview Modal
   const [selectedTicket, setSelectedTicket] = useState<TicketListItem | null>(null);
+
+  const handleDownloadSingleTicket = async (t: TicketListItem) => {
+    if (!t.assetUrl || !currentEvent) return;
+    try {
+      setDownloadingTicketId(t.id);
+      const seqStr = t.sequenceNumber.toString().padStart(5, '0');
+      const prefix = (currentEvent.name || 'TKT').substring(0, 3).toUpperCase();
+      const displayId = `${prefix}-${seqStr}`;
+      const cleanGuestName =
+        t.guest?.name && t.guest.name !== 'UNASSIGNED'
+          ? t.guest.name
+              .replace(/[/\\?%*:|"<>.]+/g, ' ')
+              .trim()
+              .replace(/[^a-zA-Z0-9\s_-]/g, '')
+              .replace(/[\s_]+/g, '-')
+              .replace(/-+/g, '-')
+              .replace(/^-+|-+$/g, '')
+          : null;
+      const filename = cleanGuestName ? `${cleanGuestName}-${displayId}.png` : `${displayId}.png`;
+
+      const res = await fetch(t.assetUrl);
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(blobUrl);
+      document.body.removeChild(a);
+    } catch (_err) {
+      window.open(t.assetUrl, '_blank');
+    } finally {
+      setDownloadingTicketId(null);
+    }
+  };
 
   const fetchTickets = useCallback(async () => {
     if (!currentEvent) {
@@ -390,20 +427,18 @@ export const TicketList: React.FC = () => {
                           <span>Preview</span>
                         </button>
                         {t.assetUrl && (
-                          <a
-                            href={t.assetUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            download={
-                              t.guest?.name && t.guest.name !== 'UNASSIGNED'
-                                ? `${t.guest.name.trim().replace(/[/\\?%*:|"<>]/g, '').replace(/[\s_]+/g, '-')}-${currentEvent.name.substring(0, 3).toUpperCase()}-${t.sequenceNumber.toString().padStart(5, '0')}.png`
-                                : `${currentEvent.name.substring(0, 3).toUpperCase()}-${t.sequenceNumber.toString().padStart(5, '0')}.png`
-                            }
-                            className="p-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-900 rounded-lg border border-zinc-200 transition-colors shadow-sm"
+                          <button
+                            onClick={() => handleDownloadSingleTicket(t)}
+                            disabled={downloadingTicketId === t.id}
+                            className="p-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-900 rounded-lg border border-zinc-200 transition-colors shadow-sm disabled:opacity-50"
                             title="Download PNG"
                           >
-                            <Download className="w-3.5 h-3.5" />
-                          </a>
+                            {downloadingTicketId === t.id ? (
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin text-brand-600" />
+                            ) : (
+                              <Download className="w-3.5 h-3.5" />
+                            )}
+                          </button>
                         )}
                       </div>
                     </td>
@@ -450,7 +485,7 @@ export const TicketList: React.FC = () => {
               </div>
             )}
 
-            <div className="pt-2 flex justify-between items-center">
+            <div className="pt-2 flex justify-between items-center gap-2">
               <a
                 href={`/verify/${selectedTicket.verificationToken}`}
                 target="_blank"
@@ -461,12 +496,29 @@ export const TicketList: React.FC = () => {
                 <ArrowRight className="w-3 h-3" />
               </a>
 
-              <button
-                onClick={() => setSelectedTicket(null)}
-                className="px-4 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold rounded-xl shadow-sm"
-              >
-                Close
-              </button>
+              <div className="flex items-center gap-2">
+                {selectedTicket.assetUrl && (
+                  <button
+                    onClick={() => handleDownloadSingleTicket(selectedTicket)}
+                    disabled={downloadingTicketId === selectedTicket.id}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all disabled:opacity-50"
+                  >
+                    {downloadingTicketId === selectedTicket.id ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Download className="w-3.5 h-3.5" />
+                    )}
+                    <span>Download PNG</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={() => setSelectedTicket(null)}
+                  className="px-4 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold rounded-xl shadow-sm"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>

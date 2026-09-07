@@ -1,4 +1,4 @@
-import puppeteer, { Browser } from 'puppeteer';
+import puppeteer, { Browser, Page } from 'puppeteer';
 import path from 'path';
 import fs from 'fs';
 import config from '../../../config/env';
@@ -223,6 +223,17 @@ export class TicketImageService {
         await browser.close();
       }
     }
+  }
+
+  /**
+   * Fast rendering of SVG onto a pre-existing Puppeteer Page instance.
+   * Reuses the open page rather than opening/closing browser tabs to achieve ~10-20ms conversion per image.
+   */
+  async renderSvgOnPage(svg: string, page: Page): Promise<Buffer> {
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>* { margin: 0; padding: 0; box-sizing: border-box; } body { width: 1620px; height: 2025px; overflow: hidden; background-color: #000; }</style></head><body>${svg}</body></html>`;
+    await page.setContent(html, { waitUntil: 'domcontentloaded' });
+    const screenshot = await page.screenshot({ type: 'png', fullPage: true });
+    return Buffer.from(screenshot);
   }
 
   /**

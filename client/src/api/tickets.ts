@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { apiClient, API_BASE_URL } from './client';
 
 export interface TicketListItem {
   id: string;
@@ -62,9 +62,24 @@ export const ticketsApi = {
   },
 
   async downloadTicketsZip(eventId: string): Promise<Blob> {
-    const res = await apiClient.get(`/tickets/events/${eventId}/export-zip`, {
-      responseType: 'blob',
+    const token = localStorage.getItem('admin_token');
+    const url = `${API_BASE_URL}/tickets/events/${eventId}/export-zip`;
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
     });
-    return res.data;
+
+    if (!res.ok) {
+      let errMsg = 'Failed to download ZIP archive';
+      try {
+        const errJson = await res.json();
+        errMsg = errJson.error?.message || errJson.message || errMsg;
+      } catch (_) {}
+      throw new Error(errMsg);
+    }
+
+    return await res.blob();
   },
 };

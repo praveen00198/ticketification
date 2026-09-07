@@ -55,6 +55,87 @@ export class TicketService {
     }
 
     if (pendingGuests.length === 0) {
+      // Check if any existing tickets still reference legacy .svg assets that need migration to PNG
+      const svgTickets = existingTickets.filter(
+        (t) => !t.assetPath || t.assetPath.endsWith('.svg') || (t.assetUrl && t.assetUrl.endsWith('.svg'))
+      );
+
+      if (svgTickets.length > 0) {
+        let browser: any = null;
+        let page: any = null;
+        let convertedCount = 0;
+        try {
+          browser = await this.imageServ.launchBrowser();
+          page = await browser.newPage();
+          await page.setViewport({ width: 1620, height: 2025 });
+
+          const guestMap = new Map(guests.map((g) => [g.id, g]));
+          const ticketTypes = await this.ticketTypeRepo.findByEventId(eventId);
+          const typeMap = new Map(ticketTypes.map((t) => [t.id, t]));
+
+          for (const item of svgTickets) {
+            const seqStr = item.sequenceNumber.toString().padStart(5, '0');
+            const displayId = `${event.name.substring(0, 3).toUpperCase()}-${seqStr}`;
+            const guest = item.guestId ? guestMap.get(item.guestId) : null;
+            const tType = typeMap.get(item.ticketTypeId);
+
+            let pngBuffer: Buffer | null = null;
+            if (item.assetPath) {
+              try {
+                const existingBuf = await this.storageServ.downloadTicketImage(item.assetPath);
+                if (isPngBuffer(existingBuf)) {
+                  pngBuffer = existingBuf;
+                } else {
+                  pngBuffer = await this.imageServ.renderSvgOnPage(existingBuf.toString('utf-8'), page);
+                }
+              } catch (_) {}
+            }
+
+            if (!pngBuffer) {
+              const qrDataUrl = await this.qrServ.generateQrDataUrl(item.verificationToken);
+              const svg = this.imageServ.buildSvg({
+                ticketId: displayId,
+                guestName: guest?.name || (item.usagePolicy === 'REUSABLE' ? 'Event Staff' : 'Valued Guest'),
+                eventName: event.name,
+                eventDate: event.date,
+                ticketType: tType?.label || tType?.name || 'General Guest',
+                qrCodeDataUrl: qrDataUrl,
+                organization: guest?.organization || undefined,
+                phone: guest?.phone || undefined,
+              });
+              pngBuffer = await this.imageServ.renderSvgOnPage(svg, page);
+            }
+
+            const pngStoragePath = `events/${eventId}/tickets/ticket-${displayId}.png`;
+            const uploadResult = await this.storageServ.uploadTicketImage(
+              pngStoragePath,
+              pngBuffer,
+              'image/png'
+            );
+
+            await this.ticketRepo.update(item.id, {
+              assetUrl: uploadResult.publicUrl,
+              assetPath: uploadResult.storagePath,
+            });
+
+            convertedCount++;
+          }
+        } finally {
+          if (page) {
+            try { await page.close(); } catch (_) {}
+          }
+          if (browser) {
+            try { await browser.close(); } catch (_) {}
+          }
+        }
+
+        return {
+          message: `Successfully migrated and stored ${convertedCount} ticket(s) as genuine PNG in Supabase Storage.`,
+          convertedCount,
+          totalGuests: guests.length,
+        };
+      }
+
       return {
         message: `All ${existingTickets.length} guests already have valid tickets generated.`,
         generatedCount: 0,
@@ -392,109 +473,113 @@ export class TicketService {
     const BATCH_SIZE = 20;
 
     let browser: any = null;
+    let page: any = null;
+    const ensurePage = async () => {
+      if (!browser) {
+        browser = await this.imageServ.launchBrowser();
+      }
+      if (!page) {
+        page = await browser.newPage();
+        await page.setViewport({ width: 1620, height: 2025 });
+      }
+      return page;
+    };
+
     try {
       for (let i = 0; i < tickets.length; i += BATCH_SIZE) {
         const batch = tickets.slice(i, i + BATCH_SIZE);
 
-        const batchResults = await Promise.all(
-          batch.map(async (t) => {
-            const seqStr = t.ticket.sequenceNumber.toString().padStart(5, '0');
-            const displayId = `${event.name.substring(0, 3).toUpperCase()}-${seqStr}`;
-            const fileName = formatTicketFileName(t.guest?.name, displayId);
+        const batchResults = [];
+        for (const t of batch) {
+          const seqStr = t.ticket.sequenceNumber.toString().padStart(5, '0');
+          const displayId = `${event.name.substring(0, 3).toUpperCase()}-${seqStr}`;
+          const fileName = formatTicketFileName(t.guest?.name, displayId);
 
-            const pngStoragePath = `events/${eventId}/tickets/ticket-${displayId}.png`;
-            const svgStoragePath = t.ticket.assetPath || `events/${eventId}/tickets/ticket-${displayId}.svg`;
+          const pngStoragePath = `events/${eventId}/tickets/ticket-${displayId}.png`;
 
-            let fileBuffer: Buffer | null = null;
-            let source = 'SUPABASE_STORAGE_PNG';
+          let fileBuffer: Buffer | null = null;
+          let source = 'SUPABASE_STORAGE_PNG';
 
-            // 1. Try to download directly from pngStoragePath
+          // 1. Try to download directly from pngStoragePath
+          try {
+            const buf = await this.storageServ.downloadTicketImage(pngStoragePath);
+            if (isPngBuffer(buf)) {
+              fileBuffer = buf;
+            }
+          } catch (_e) {}
+
+          // 2. If not found as PNG, check current assetPath
+          if (!fileBuffer && t.ticket.assetPath && t.ticket.assetPath !== pngStoragePath) {
             try {
-              const buf = await this.storageServ.downloadTicketImage(pngStoragePath);
+              const buf = await this.storageServ.downloadTicketImage(t.ticket.assetPath);
               if (isPngBuffer(buf)) {
                 fileBuffer = buf;
+              } else {
+                // It's an SVG from Supabase Storage! Convert to genuine PNG
+                const p = await ensurePage();
+                fileBuffer = await this.imageServ.renderSvgOnPage(buf.toString('utf-8'), p);
+                source = 'CONVERTED_FROM_STORAGE_SVG';
+
+                // Persist the PNG back to Supabase Storage
+                try {
+                  const uploadResult = await this.storageServ.uploadTicketImage(
+                    pngStoragePath,
+                    fileBuffer,
+                    'image/png'
+                  );
+                  await this.ticketRepo.update(t.ticket.id, {
+                    assetUrl: uploadResult.publicUrl,
+                    assetPath: uploadResult.storagePath,
+                  });
+                } catch (_cacheErr) {}
               }
             } catch (_e) {}
+          }
 
-            // 2. If not found as PNG, check current assetPath
-            if (!fileBuffer && t.ticket.assetPath && t.ticket.assetPath !== pngStoragePath) {
-              try {
-                const buf = await this.storageServ.downloadTicketImage(t.ticket.assetPath);
-                if (isPngBuffer(buf)) {
-                  fileBuffer = buf;
-                } else {
-                  // It's an SVG from Supabase Storage! Convert to genuine PNG
-                  if (!browser) {
-                    browser = await this.imageServ.launchBrowser();
-                  }
-                  fileBuffer = await this.imageServ.svgToPng(buf.toString('utf-8'), browser);
-                  source = 'CONVERTED_FROM_STORAGE_SVG';
+          // 3. Fallback recovery: render fresh PNG from template & QR if storage asset was missing
+          if (!fileBuffer) {
+            const p = await ensurePage();
+            source = 'RECOVERED_ON_DEMAND_PNG';
+            const qrDataUrl = await this.qrServ.generateQrDataUrl(t.ticket.verificationToken);
+            const svg = this.imageServ.buildSvg({
+              ticketId: displayId,
+              guestName: t.guest?.name || (t.ticket.usagePolicy === 'REUSABLE' ? 'Event Staff' : 'Valued Guest'),
+              eventName: event.name,
+              eventDate: event.date,
+              ticketType: t.ticketType.label || t.ticketType.name,
+              qrCodeDataUrl: qrDataUrl,
+              organization: t.guest?.organization || undefined,
+              phone: t.guest?.phone || undefined,
+            });
+            fileBuffer = await this.imageServ.renderSvgOnPage(svg, p);
 
-                  // Persist the PNG back to Supabase Storage
-                  try {
-                    const uploadResult = await this.storageServ.uploadTicketImage(
-                      pngStoragePath,
-                      fileBuffer,
-                      'image/png'
-                    );
-                    await this.ticketRepo.update(t.ticket.id, {
-                      assetUrl: uploadResult.publicUrl,
-                      assetPath: uploadResult.storagePath,
-                    });
-                  } catch (_cacheErr) {}
-                }
-              } catch (_e) {}
-            }
-
-            // 3. Fallback recovery: render fresh PNG from template & QR if storage asset was missing
-            if (!fileBuffer) {
-              if (!browser) {
-                browser = await this.imageServ.launchBrowser();
-              }
-              source = 'RECOVERED_ON_DEMAND_PNG';
-              const qrDataUrl = await this.qrServ.generateQrDataUrl(t.ticket.verificationToken);
-              const svg = this.imageServ.buildSvg({
-                ticketId: displayId,
-                guestName: t.guest?.name || (t.ticket.usagePolicy === 'REUSABLE' ? 'Event Staff' : 'Valued Guest'),
-                eventName: event.name,
-                eventDate: event.date,
-                ticketType: t.ticketType.label || t.ticketType.name,
-                qrCodeDataUrl: qrDataUrl,
-                organization: t.guest?.organization || undefined,
-                phone: t.guest?.phone || undefined,
+            try {
+              const uploadResult = await this.storageServ.uploadTicketImage(
+                pngStoragePath,
+                fileBuffer,
+                'image/png'
+              );
+              await this.ticketRepo.update(t.ticket.id, {
+                assetUrl: uploadResult.publicUrl,
+                assetPath: uploadResult.storagePath,
               });
-              fileBuffer = await this.imageServ.svgToPng(svg, browser);
+            } catch (_saveErr) {}
+          }
 
-              try {
-                const uploadResult = await this.storageServ.uploadTicketImage(
-                  pngStoragePath,
-                  fileBuffer,
-                  'image/png'
-                );
-                await this.ticketRepo.update(t.ticket.id, {
-                  assetUrl: uploadResult.publicUrl,
-                  assetPath: uploadResult.storagePath,
-                });
-              } catch (_saveErr) {}
-            }
+          // Final guarantee: MUST be genuine PNG binary
+          if (!isPngBuffer(fileBuffer)) {
+            const p = await ensurePage();
+            fileBuffer = await this.imageServ.renderSvgOnPage(fileBuffer.toString('utf-8'), p);
+          }
 
-            // Final guarantee: MUST be genuine PNG binary
-            if (!isPngBuffer(fileBuffer)) {
-              if (!browser) {
-                browser = await this.imageServ.launchBrowser();
-              }
-              fileBuffer = await this.imageServ.svgToPng(fileBuffer.toString('utf-8'), browser);
-            }
-
-            return {
-              t,
-              fileName,
-              fileBuffer,
-              source,
-              seqStr,
-            };
-          })
-        );
+          batchResults.push({
+            t,
+            fileName,
+            fileBuffer,
+            source,
+            seqStr,
+          });
+        }
 
         for (const item of batchResults) {
           if (item.source === 'SUPABASE_STORAGE_PNG') {
@@ -544,6 +629,11 @@ export class TicketService {
 
       await archive.finalize();
     } finally {
+      if (page) {
+        try {
+          await page.close();
+        } catch (_e) {}
+      }
       if (browser) {
         try {
           await browser.close();
