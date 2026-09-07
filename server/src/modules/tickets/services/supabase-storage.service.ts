@@ -17,9 +17,12 @@ export class SupabaseStorageService {
   private async ensureBucket(): Promise<void> {
     if (this.bucketEnsured || !supabaseAdmin) return;
     try {
-      await supabaseAdmin.storage.createBucket(this.bucket, {
-        public: true,
-      });
+      const { data: bucket, error } = await supabaseAdmin.storage.getBucket(this.bucket);
+      if (error || !bucket) {
+        await supabaseAdmin.storage.createBucket(this.bucket, {
+          public: true,
+        });
+      }
       this.bucketEnsured = true;
     } catch (_bucketErr) {
       this.bucketEnsured = true;
@@ -36,6 +39,7 @@ export class SupabaseStorageService {
     contentType: string = 'image/svg+xml'
   ): Promise<string | null> {
     if (!supabaseAdmin) {
+      console.warn('[SupabaseStorageService] Cannot upload: supabaseAdmin is not initialized (SUPABASE_URL or key missing).');
       return null;
     }
 
@@ -86,7 +90,7 @@ export class SupabaseStorageService {
       const { data: urlData } = supabaseAdmin.storage.from(this.bucket).getPublicUrl(data?.path || fileName);
       return urlData?.publicUrl || null;
     } catch (err: any) {
-      console.warn(`[SupabaseStorageService] Exception during upload for ${fileName}:`, err.message);
+      console.warn(`[SupabaseStorageService] Exception during upload for ${fileName}:`, err?.message || err);
       return null;
     }
   }

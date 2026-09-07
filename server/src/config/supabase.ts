@@ -6,14 +6,15 @@ import config from './env';
  * Uses the service_role key — NEVER expose this to the frontend.
  * Used for: Auth admin operations, Storage uploads, bypassing RLS when needed.
  */
-export const supabaseAdmin = config.env.supabaseUrl && config.env.supabaseServiceRoleKey
-  ? createClient(config.env.supabaseUrl, config.env.supabaseServiceRoleKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    })
-  : null;
+export const supabaseAdmin =
+  config.env.supabaseUrl && (config.env.supabaseServiceRoleKey || config.env.supabaseAnonKey)
+    ? createClient(config.env.supabaseUrl, config.env.supabaseServiceRoleKey || config.env.supabaseAnonKey, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+        },
+      })
+    : null;
 
 /**
  * Supabase Public Client (anon key).

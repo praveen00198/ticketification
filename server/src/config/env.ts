@@ -39,7 +39,13 @@ function validateAndLoadEnv(): EnvConfig {
     // Supabase
     supabaseUrl: process.env.SUPABASE_URL || '',
     supabaseAnonKey: process.env.SUPABASE_ANON_KEY || '',
-    supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+    supabaseServiceRoleKey:
+      process.env.SUPABASE_SERVICE_ROLE_KEY ||
+      process.env.SUPABASE_SERVICE_KEY ||
+      process.env.SUPABASE_KEY ||
+      process.env.SUPABASE_SECRET_KEY ||
+      process.env.SUPABASE_ANON_KEY ||
+      '',
     supabaseBucket: process.env.SUPABASE_BUCKET || 'ticket-images',
     // Database
     databaseUrl: process.env.DATABASE_URL || '',

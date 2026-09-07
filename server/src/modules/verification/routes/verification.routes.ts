@@ -5,7 +5,13 @@ import { authMiddleware } from '../../../middlewares/auth.middleware';
 const router = Router({ mergeParams: true });
 
 // Public lookup for phone camera scans (no auth needed to view verification page)
+router.get('/:token', (req, res, next) =>
+  verificationController.verifyToken(req, res, next)
+);
 router.get('/verify/:token', (req, res, next) =>
+  verificationController.verifyToken(req, res, next)
+);
+router.post('/lookup', (req, res, next) =>
   verificationController.verifyToken(req, res, next)
 );
 router.post('/verify/lookup', (req, res, next) =>

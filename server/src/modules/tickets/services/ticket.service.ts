@@ -43,9 +43,64 @@ export class TicketService {
     );
 
     const pendingGuests = guests.filter((g) => !guestsWithTickets.has(g.id));
+    const isStorageConfigured = this.storageServ.isConfigured();
+
     if (pendingGuests.length === 0) {
+      // Check if existing tickets need cloud storage sync to Supabase bucket
+      const ticketsNeedingUpload = existingTickets.filter(
+        (t) => !t.ticket.assetUrl?.includes('supabase.co') || t.ticket.assetUrl?.includes('/uploads/tickets/')
+      );
+
+      if (ticketsNeedingUpload.length > 0 && isStorageConfigured) {
+        let syncedCount = 0;
+        const BATCH_SIZE = 25;
+        for (let i = 0; i < ticketsNeedingUpload.length; i += BATCH_SIZE) {
+          const batch = ticketsNeedingUpload.slice(i, i + BATCH_SIZE);
+          await Promise.all(
+            batch.map(async (t) => {
+              try {
+                const qrDataUrl = await this.qrServ.generateQrDataUrl(t.ticket.verificationToken);
+                const ticketSeqStr = t.ticket.sequenceNumber.toString().padStart(5, '0');
+                const displayId = `${event.name.substring(0, 3).toUpperCase()}-${ticketSeqStr}`;
+                const svg = this.imageServ.buildSvg({
+                  ticketId: displayId,
+                  guestName: t.guest?.name || 'Valued Guest',
+                  eventName: event.name,
+                  eventDate: event.date,
+                  ticketType: t.ticketType.label || t.ticketType.name,
+                  qrCodeDataUrl: qrDataUrl,
+                  organization: t.guest?.organization || undefined,
+                  phone: t.guest?.phone || undefined,
+                });
+                const storageFileName = `tickets/${eventId}/${t.ticket.verificationToken}.svg`;
+                const cloudUrl = await this.storageServ.uploadTicketImage(
+                  storageFileName,
+                  svg,
+                  'image/svg+xml'
+                );
+                if (cloudUrl) {
+                  await this.ticketRepo.update(t.ticket.id, {
+                    assetUrl: cloudUrl,
+                    assetPath: storageFileName,
+                  });
+                  syncedCount++;
+                }
+              } catch (syncErr) {
+                console.warn('[TicketService] Error syncing existing ticket to Supabase storage:', syncErr);
+              }
+            })
+          );
+        }
+        return {
+          message: `All ${existingTickets.length} tickets synced and ${syncedCount} images uploaded directly into Supabase Storage.`,
+          generatedCount: 0,
+          syncedCount,
+          totalGuests: guests.length,
+        };
+      }
+
       return {
-        message: 'All guests already have tickets generated.',
+        message: 'All guests already have tickets generated and synced in Supabase Storage.',
         generatedCount: 0,
         totalGuests: guests.length,
       };
@@ -79,7 +134,6 @@ export class TicketService {
     let nextSeq = await this.ticketRepo.getNextSequenceNumber(eventId);
     const ticketsToInsert: any[] = [];
     const uploadTasks: Array<{ storageFileName: string; data: string; ticket: any }> = [];
-    const isStorageConfigured = this.storageServ.isConfigured();
 
     for (const guest of pendingGuests) {
       const guestCategory = (guest.category || 'GENERAL').toUpperCase().trim();
@@ -93,7 +147,7 @@ export class TicketService {
       const ticketSeqStr = nextSeq.toString().padStart(5, '0');
       const displayId = `${event.name.substring(0, 3).toUpperCase()}-${ticketSeqStr}`;
 
-      const { filePath, publicUrl, imageBase64 } = await this.imageServ.generateTicketImage({
+      const svgData = {
         ticketId: displayId,
         guestName: guest.name || 'Valued Guest',
         eventName: event.name,
@@ -102,7 +156,10 @@ export class TicketService {
         qrCodeDataUrl: qrDataUrl,
         organization: guest.organization || undefined,
         phone: guest.phone || undefined,
-      });
+      };
+
+      const svg = this.imageServ.buildSvg(svgData);
+      const { filePath, publicUrl } = await this.imageServ.generateTicketImage(svgData);
 
       const ticketRecord = {
         eventId,
@@ -123,7 +180,7 @@ export class TicketService {
         const storageFileName = `tickets/${eventId}/${verificationToken}.svg`;
         uploadTasks.push({
           storageFileName,
-          data: filePath,
+          data: svg,
           ticket: ticketRecord,
         });
       }
@@ -210,14 +267,17 @@ export class TicketService {
       const ticketSeqStr = nextSeq.toString().padStart(5, '0');
       const displayId = `WRK-${ticketSeqStr}`;
 
-      const { filePath, publicUrl } = await this.imageServ.generateTicketImage({
+      const workerData = {
         ticketId: displayId,
         guestName: 'UNASSIGNED STAFF',
         eventName: event.name,
         eventDate: event.date,
         ticketType: workerType.label || 'Event Staff',
         qrCodeDataUrl: qrDataUrl,
-      });
+      };
+
+      const svg = this.imageServ.buildSvg(workerData);
+      const { filePath, publicUrl } = await this.imageServ.generateTicketImage(workerData);
 
       const ticketRecord = {
         eventId,
@@ -238,7 +298,7 @@ export class TicketService {
         const storageFileName = `tickets/${eventId}/${verificationToken}.svg`;
         uploadTasks.push({
           storageFileName,
-          data: filePath,
+          data: svg,
           ticket: ticketRecord,
         });
       }

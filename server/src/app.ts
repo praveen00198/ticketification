@@ -98,6 +98,15 @@ app.get('/uploads/tickets/:filename', async (req, res) => {
   return res.status(404).send('Ticket image not found');
 });
 
+// Top-level QR verification URL redirect handler for mobile phone camera scans
+app.get('/verify/:token', (req, res) => {
+  const token = req.params.token;
+  const frontendUrl =
+    process.env.FRONTEND_URL ||
+    'https://ticketification.vercel.app';
+  return res.redirect(302, `${frontendUrl.replace(/\/+$/, '')}/verify/${token}`);
+});
+
 app.use('/uploads', express.static(uploadsPath));
 
 // REST API Base Router
