@@ -23,9 +23,11 @@ export interface TicketImageData {
  */
 export class TicketImageService {
   private templateBase64: string | null = null;
+  private fontBase64: string | null = null;
 
   constructor() {
     this.loadTemplate();
+    this.loadFont();
   }
 
   private loadTemplate() {
@@ -55,6 +57,37 @@ export class TicketImageService {
     }
   }
 
+  private loadFont() {
+    const candidates = [
+      path.resolve(__dirname, '../../../../assets/fonts/NotoSansDevanagari-Bold.ttf'),
+      path.resolve(__dirname, '../../../assets/fonts/NotoSansDevanagari-Bold.ttf'),
+      path.resolve(__dirname, '../../assets/fonts/NotoSansDevanagari-Bold.ttf'),
+      path.resolve(__dirname, '../assets/fonts/NotoSansDevanagari-Bold.ttf'),
+      path.resolve(process.cwd(), 'assets', 'fonts', 'NotoSansDevanagari-Bold.ttf'),
+      path.resolve(process.cwd(), 'server', 'assets', 'fonts', 'NotoSansDevanagari-Bold.ttf'),
+      path.resolve(process.cwd(), 'dist', 'assets', 'fonts', 'NotoSansDevanagari-Bold.ttf'),
+      path.resolve(process.cwd(), 'server', 'dist', 'assets', 'fonts', 'NotoSansDevanagari-Bold.ttf'),
+      path.resolve(process.cwd(), '../client', 'assets', 'fonts', 'NotoSansDevanagari-Bold.ttf'),
+      path.resolve(process.cwd(), 'client', 'assets', 'fonts', 'NotoSansDevanagari-Bold.ttf'),
+    ];
+
+    for (const p of candidates) {
+      if (fs.existsSync(p)) {
+        try {
+          const buf = fs.readFileSync(p);
+          this.fontBase64 = buf.toString('base64');
+          break;
+        } catch (e) {
+          console.warn('[TicketImageService] Could not load font from:', p, e);
+        }
+      }
+    }
+
+    if (!this.fontBase64) {
+      console.warn('[TicketImageService] NotoSansDevanagari font could not be located in assets/fonts');
+    }
+  }
+
   public buildSvg(data: TicketImageData): string {
     const bgImage = this.templateBase64
       ? `<image href="${this.templateBase64}" width="1620" height="2025" preserveAspectRatio="none"/>`
@@ -67,10 +100,25 @@ export class TicketImageService {
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&apos;');
 
+    const embeddedFontFace = this.fontBase64
+      ? `@font-face {
+        font-family: 'Noto Sans Devanagari';
+        src: url('data:font/truetype;charset=utf-8;base64,${this.fontBase64}') format('truetype');
+        font-weight: 700;
+        font-style: normal;
+      }
+      @font-face {
+        font-family: 'Noto Sans Devanagari';
+        src: url('data:font/truetype;charset=utf-8;base64,${this.fontBase64}') format('truetype');
+        font-weight: 800;
+        font-style: normal;
+      }`
+      : `@import url('https://fonts.googleapis.com/css2?family=Mukta:wght@700;800&amp;family=Noto+Sans+Devanagari:wght@700;800;900&amp;display=swap');`;
+
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1620 2025" width="1620" height="2025">
   <defs>
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Mukta:wght@700;800&amp;family=Noto+Sans+Devanagari:wght@700;800;900&amp;display=swap');
+      ${embeddedFontFace}
       .guest-text {
         font-family: 'Noto Sans Devanagari', 'Mukta', 'Hind', sans-serif;
         font-size: 76px;

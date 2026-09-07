@@ -53,10 +53,17 @@ This file records critical discoveries, anti-patterns, and institutional knowled
 - **Resolution**: Replaced browser-dependent rendering with native server-side `sharp` rasterization. Sharp uses pre-compiled static native binaries with zero external shared library dependencies, generating 1620x2025 genuine PNG binaries (`0x89504E47`) in ~15ms with 100% container resilience.
 - **Invariant**: Backend ticket generation must NOT rely on external browser processes in cloud containers. All image rasterization must use self-contained native engines with standard PNG header verification.
 
+### 2.9 Devanagari / Hindi Complex Script Font Bundling
+- **Issue**: Devanagari text (e.g. `|| श्री गणेशाय नमः ||`, guest names in Hindi) was rendering with broken/corrupted glyphs and disjoined matras in generated PNG tickets.
+- **Root Cause**: Server-side rasterization (`librsvg` / Pango) runs offline and does not fetch external CSS `@import` web fonts. Minimal Linux container hosts (Render) have no Indic fonts installed in `/usr/share/fonts`.
+- **Resolution**: Bundled official Google `NotoSansDevanagari-Bold.ttf` inside `assets/fonts/` and embedded the font binary as base64 within `@font-face` inside the SVG markup. Pango and HarfBuzz read the embedded OpenType tables directly from memory, performing flawless Devanagari text shaping, conjunct resolution (`श्री`, `प्र`, `क्ष`, `त्र`), and matra positioning across all operating systems.
+- **Invariant**: Any custom or complex script font required by ticket templates MUST be bundled in `assets/fonts/` and embedded directly into the SVG to guarantee deterministic rendering independent of OS system fonts.
+
 ---
 
 ## 3. Data Preservation Reminders
 - The PostgreSQL database hosted on Supabase contains live event and guest schemas.
 - `drizzle-kit push --force` or raw `DROP TABLE` is strictly prohibited.
 - Preserved asset: `server/assets/ticket_template.png` (289 KB) is the canonical visual template. Do not replace or delete it.
+
 

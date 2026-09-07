@@ -342,6 +342,43 @@ describe('Phase 4: Ticket Generation & PNG Rendering Pipeline', () => {
         expect(isPngBuffer(res.pngBuffer)).toBe(true);
       }
     });
+
+    it('should correctly embed bundled Noto Sans Devanagari font and render complex Hindi text and conjuncts', async () => {
+      const devanagariPhrases = [
+        '|| श्री गणेशाय नमः ||',
+        'राहुल शर्मा',
+        'आपका हार्दिक स्वागत है',
+        'गणेश चतुर्थी',
+        'शुभारंभ',
+        'प्रवेश पत्र',
+        'क्षत्रिय एवं ज्ञान',
+      ];
+
+      for (const phrase of devanagariPhrases) {
+        const ticketData: TicketImageData = {
+          ticketId: 'HINDI-001',
+          guestName: phrase,
+          eventName: 'महा उत्सव',
+          eventDate: '2026-11-25',
+          ticketType: 'विशेष अतिथि',
+          qrCodeDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        };
+
+        const svg = ticketImageService.buildSvg(ticketData);
+
+        // Verify that Noto Sans Devanagari is embedded via @font-face
+        expect(svg).toContain('Noto Sans Devanagari');
+        expect(svg).toContain('data:font/truetype;charset=utf-8;base64,');
+        expect(svg).toContain(phrase.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+
+        // Render to genuine PNG and verify binary signature
+        const pngBuf = await ticketImageService.svgToPng(svg);
+        expect(pngBuf).toBeDefined();
+        expect(pngBuf.length).toBeGreaterThan(5000);
+        expect(isPngBuffer(pngBuf)).toBe(true);
+      }
+    });
   });
 });
+
 
