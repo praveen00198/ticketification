@@ -1,152 +1,236 @@
-import { Ticket, ITicketDocument, TicketStatus, EmailStatus, DeliveryStatus } from '../models/ticket.model';
+import { db } from '../../../db';
+import { tickets, guests, ticketTypes, events } from '../../../db/schema';
+import { eq, and, asc, desc, sql, or, ilike } from 'drizzle-orm';
+
+export interface CreateTicketInput {
+  eventId: string;
+  guestId?: string | null;
+  ticketTypeId: string;
+  verificationToken: string;
+  status?: string;
+  usagePolicy?: string;
+  assetPath?: string | null;
+  assetUrl?: string | null;
+  sequenceNumber: number;
+  createdBy: string;
+}
+
+export interface TicketFilterOptions {
+  status?: string;
+  ticketTypeId?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
 
 export class TicketRepository {
-  async findByTicketId(ticketId: string, userId?: string): Promise<ITicketDocument | null> {
-    const filter: any = { ticketId };
-    if (userId) filter.createdBy = userId;
-    return Ticket.findOne(filter).exec();
-  }
+  /**
+   * Get the next sequence number for an event atomically.
+   */
+  async getNextSequenceNumber(eventId: string): Promise<number> {
+    const result = await db
+      .select({ maxSeq: sql<number>`COALESCE(MAX(${tickets.sequenceNumber}), 0)` })
+      .from(tickets)
+      .where(eq(tickets.eventId, eventId));
 
-  async findByVerificationToken(verificationToken: string): Promise<ITicketDocument | null> {
-    return Ticket.findOne({ verificationToken }).exec();
-  }
-
-  async findById(id: string, userId?: string): Promise<ITicketDocument | null> {
-    const filter: any = { _id: id };
-    if (userId) filter.createdBy = userId;
-    return Ticket.findOne(filter).exec();
-  }
-
-  async findByIdOrTicketId(idOrTicketId: string, userId?: string): Promise<ITicketDocument | null> {
-    const filter: any = {
-      $or: [{ ticketId: idOrTicketId }],
-    };
-    // Check if it's a valid MongoDB ObjectId
-    if (idOrTicketId.match(/^[0-9a-fA-F]{24}$/)) {
-      filter.$or.push({ _id: idOrTicketId });
-    }
-    if (userId) filter.createdBy = userId;
-    return Ticket.findOne(filter).exec();
-  }
-
-  async findAll(filter: any = {}): Promise<ITicketDocument[]> {
-    return Ticket.find(filter).sort({ createdAt: -1 }).exec();
-  }
-
-  async create(data: Partial<ITicketDocument>): Promise<ITicketDocument> {
-    const ticket = new Ticket(data);
-    return ticket.save();
-  }
-
-  async updateStatus(
-    idOrTicketId: string,
-    status: TicketStatus,
-    verifiedBy?: string
-  ): Promise<ITicketDocument | null> {
-    const update: any = { status };
-    if (status === 'USED') {
-      update.usedAt = new Date();
-      if (verifiedBy) update.verifiedBy = verifiedBy;
-    }
-    if (idOrTicketId && idOrTicketId.match(/^[0-9a-fA-F]{24}$/)) {
-      const updated = await Ticket.findByIdAndUpdate(idOrTicketId, update, { new: true }).exec();
-      if (updated) return updated;
-    }
-    return Ticket.findOneAndUpdate({ ticketId: idOrTicketId }, update, { new: true }).exec();
-  }
-
-  async updateEmailStatus(id: string, emailStatus: EmailStatus): Promise<ITicketDocument | null> {
-    return Ticket.findByIdAndUpdate(id, { emailStatus }, { new: true }).exec();
+    return (result[0]?.maxSeq || 0) + 1;
   }
 
   /**
-   * Update delivery status and optional provider message ID for a ticket.
+   * Insert a single ticket.
    */
-  async updateDeliveryStatus(
-    id: string,
-    deliveryStatus: DeliveryStatus,
-    providerMessageId?: string
-  ): Promise<ITicketDocument | null> {
-    const update: any = { deliveryStatus };
-    if (providerMessageId) {
-      update.providerMessageId = providerMessageId;
-    }
-    // Sync the legacy emailStatus field for backward compatibility
-    if (deliveryStatus === 'SENT') {
-      update.emailStatus = 'SENT';
-    } else if (deliveryStatus === 'FAILED') {
-      update.emailStatus = 'FAILED';
-    }
-    return Ticket.findByIdAndUpdate(id, update, { new: true }).exec();
+  async create(data: CreateTicketInput) {
+    const result = await db
+      .insert(tickets)
+      .values({
+        eventId: data.eventId,
+        guestId: data.guestId || null,
+        ticketTypeId: data.ticketTypeId,
+        verificationToken: data.verificationToken,
+        status: data.status || 'ACTIVE',
+        usagePolicy: data.usagePolicy || 'SINGLE_USE',
+        assetPath: data.assetPath || null,
+        assetUrl: data.assetUrl || null,
+        sequenceNumber: data.sequenceNumber,
+        createdBy: data.createdBy,
+      })
+      .returning();
+
+    return result[0];
   }
 
   /**
-   * Update delivery status by provider message ID (used by webhook callbacks).
+   * Batch insert tickets.
    */
-  async updateDeliveryStatusByMessageId(
-    providerMessageId: string,
-    deliveryStatus: DeliveryStatus
-  ): Promise<ITicketDocument | null> {
-    const update: any = { deliveryStatus };
-    if (deliveryStatus === 'SENT') {
-      update.emailStatus = 'SENT';
-    } else if (deliveryStatus === 'FAILED') {
-      update.emailStatus = 'FAILED';
-    }
-    return Ticket.findOneAndUpdate({ providerMessageId }, update, { new: true }).exec();
+  async createMany(items: CreateTicketInput[]) {
+    if (items.length === 0) return [];
+    return await db
+      .insert(tickets)
+      .values(
+        items.map((data) => ({
+          eventId: data.eventId,
+          guestId: data.guestId || null,
+          ticketTypeId: data.ticketTypeId,
+          verificationToken: data.verificationToken,
+          status: data.status || 'ACTIVE',
+          usagePolicy: data.usagePolicy || 'SINGLE_USE',
+          assetPath: data.assetPath || null,
+          assetUrl: data.assetUrl || null,
+          sequenceNumber: data.sequenceNumber,
+          createdBy: data.createdBy,
+        }))
+      )
+      .returning();
   }
 
   /**
-   * Update ticket image URL and persistent image Base64 data in MongoDB.
+   * Find ticket by unique verification token.
    */
-  async updateTicketImageUrl(idOrTicketId: string, ticketImageUrl: string, imageBase64?: string): Promise<ITicketDocument | null> {
-    const updateData: any = { ticketImageUrl };
-    if (imageBase64) {
-      updateData.imageBase64 = imageBase64;
-    }
-    if (idOrTicketId && idOrTicketId.match(/^[0-9a-fA-F]{24}$/)) {
-      const updated = await Ticket.findByIdAndUpdate(idOrTicketId, updateData, { new: true }).exec();
-      if (updated) return updated;
-    }
-    return Ticket.findOneAndUpdate({ ticketId: idOrTicketId }, updateData, { new: true }).exec();
+  async findByVerificationToken(verificationToken: string) {
+    const result = await db
+      .select({
+        ticket: tickets,
+        guest: guests,
+        ticketType: ticketTypes,
+        event: events,
+      })
+      .from(tickets)
+      .leftJoin(guests, eq(tickets.guestId, guests.id))
+      .innerJoin(ticketTypes, eq(tickets.ticketTypeId, ticketTypes.id))
+      .innerJoin(events, eq(tickets.eventId, events.id))
+      .where(eq(tickets.verificationToken, verificationToken))
+      .limit(1);
+
+    return result[0] || null;
   }
 
-  async countStats(userId?: string) {
-    const baseFilter: any = {};
-    if (userId) {
-      baseFilter.createdBy = userId;
+  /**
+   * Find ticket by primary key ID.
+   */
+  async findById(id: string) {
+    const result = await db
+      .select({
+        ticket: tickets,
+        guest: guests,
+        ticketType: ticketTypes,
+        event: events,
+      })
+      .from(tickets)
+      .leftJoin(guests, eq(tickets.guestId, guests.id))
+      .innerJoin(ticketTypes, eq(tickets.ticketTypeId, ticketTypes.id))
+      .innerJoin(events, eq(tickets.eventId, events.id))
+      .where(eq(tickets.id, id))
+      .limit(1);
+
+    return result[0] || null;
+  }
+
+  /**
+   * Find all tickets for an event with deterministic sequence order and optional filters.
+   */
+  async findByEventId(eventId: string, options: TicketFilterOptions = {}) {
+    const limit = options.limit || 1000;
+    const offset = options.offset || 0;
+
+    const conditions = [eq(tickets.eventId, eventId)];
+
+    if (options.status) {
+      conditions.push(eq(tickets.status, options.status));
+    }
+    if (options.ticketTypeId) {
+      conditions.push(eq(tickets.ticketTypeId, options.ticketTypeId));
     }
 
-    const total = await Ticket.countDocuments(baseFilter);
-    const active = await Ticket.countDocuments({ ...baseFilter, status: 'ACTIVE' });
-    const used = await Ticket.countDocuments({ ...baseFilter, status: 'USED' });
+    if (options.search && options.search.trim()) {
+      const q = `%${options.search.trim()}%`;
+      conditions.push(
+        or(
+          ilike(guests.name, q),
+          ilike(guests.email, q),
+          ilike(guests.phone, q),
+          ilike(tickets.verificationToken, q)
+        )!
+      );
+    }
 
-    // Delivery status counts
-    const deliverySent = await Ticket.countDocuments({ ...baseFilter, deliveryStatus: 'SENT' });
-    const deliveryFailed = await Ticket.countDocuments({ ...baseFilter, deliveryStatus: 'FAILED' });
-    const deliveryPending = await Ticket.countDocuments({ ...baseFilter, deliveryStatus: 'PENDING' });
-    const deliverySending = await Ticket.countDocuments({ ...baseFilter, deliveryStatus: 'SENDING' });
+    return await db
+      .select({
+        ticket: tickets,
+        guest: guests,
+        ticketType: ticketTypes,
+      })
+      .from(tickets)
+      .leftJoin(guests, eq(tickets.guestId, guests.id))
+      .innerJoin(ticketTypes, eq(tickets.ticketTypeId, ticketTypes.id))
+      .where(and(...conditions))
+      .orderBy(asc(tickets.sequenceNumber))
+      .limit(limit)
+      .offset(offset);
+  }
 
-    // Legacy email status counts (backward compatibility)
-    const emailSent = await Ticket.countDocuments({ ...baseFilter, emailStatus: 'SENT' });
-    const emailFailed = await Ticket.countDocuments({ ...baseFilter, emailStatus: 'FAILED' });
-    const emailPending = await Ticket.countDocuments({ ...baseFilter, emailStatus: 'PENDING' });
+  /**
+   * Count tickets for an event.
+   */
+  async countByEventId(eventId: string, options: TicketFilterOptions = {}): Promise<number> {
+    const conditions = [eq(tickets.eventId, eventId)];
 
-    return {
-      totalGuests: total,
-      ticketsGenerated: total,
-      // New delivery metrics
-      deliverySent,
-      deliveryFailed,
-      deliveryPending,
-      deliverySending,
-      // Legacy email metrics (backward compatibility)
-      emailsSent: emailSent,
-      emailsFailed: emailFailed,
-      emailsPending: emailPending,
-      ticketsUsed: used,
-      ticketsRemaining: active,
-    };
+    if (options.status) {
+      conditions.push(eq(tickets.status, options.status));
+    }
+    if (options.ticketTypeId) {
+      conditions.push(eq(tickets.ticketTypeId, options.ticketTypeId));
+    }
+
+    if (options.search && options.search.trim()) {
+      const q = `%${options.search.trim()}%`;
+      conditions.push(
+        or(
+          ilike(guests.name, q),
+          ilike(guests.email, q),
+          ilike(guests.phone, q),
+          ilike(tickets.verificationToken, q)
+        )!
+      );
+    }
+
+    const result = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(tickets)
+      .leftJoin(guests, eq(tickets.guestId, guests.id))
+      .where(and(...conditions));
+
+    return result[0]?.count || 0;
+  }
+
+  /**
+   * Find unassigned tickets (guestId IS NULL) for an event.
+   */
+  async findUnassignedByEventId(eventId: string) {
+    return await db
+      .select({
+        ticket: tickets,
+        ticketType: ticketTypes,
+      })
+      .from(tickets)
+      .innerJoin(ticketTypes, eq(tickets.ticketTypeId, ticketTypes.id))
+      .where(and(eq(tickets.eventId, eventId), sql`${tickets.guestId} IS NULL`))
+      .orderBy(asc(tickets.sequenceNumber));
+  }
+
+  /**
+   * Update a ticket by ID.
+   */
+  async update(id: string, data: Partial<CreateTicketInput>) {
+    const result = await db
+      .update(tickets)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(eq(tickets.id, id))
+      .returning();
+
+    return result[0] || null;
   }
 }
 

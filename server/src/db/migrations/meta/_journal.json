@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1788729828272,
+      "tag": "0000_perpetual_liz_osborn",
+      "breakpoints": true
+    }
+  ]
+}

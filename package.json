@@ -1,6 +1,6 @@
 {
-  "name": "qr-ticket-system",
-  "version": "1.0.0",
+  "name": "ticketification",
+  "version": "2.0.0",
   "private": true,
   "scripts": {
     "dev:server": "npm --prefix server run dev",
@@ -9,10 +9,8 @@
     "build:client": "npm --prefix client run build",
     "build": "npm run build:server && npm run build:client",
     "test:server": "npm --prefix server test",
-    "test": "npm run test:server"
-  },
-  "dependencies": {
-    "bcrypt": "^6.0.0",
-    "resend": "^6.22.0"
+    "test": "npm run test:server",
+    "db:generate": "npm --prefix server run db:generate",
+    "db:push": "npm --prefix server run db:push"
   }
 }

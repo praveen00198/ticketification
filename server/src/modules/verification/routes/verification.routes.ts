@@ -2,16 +2,27 @@ import { Router } from 'express';
 import { verificationController } from '../controllers/verification.controller';
 import { authMiddleware } from '../../../middlewares/auth.middleware';
 
-const router = Router();
+const router = Router({ mergeParams: true });
 
-// Public verification endpoint (phone camera scans and in-app verification)
+// Public lookup for phone camera scans (no auth needed to view verification page)
 router.get('/verify/:token', (req, res, next) =>
   verificationController.verifyToken(req, res, next)
 );
+router.post('/verify/lookup', (req, res, next) =>
+  verificationController.verifyToken(req, res, next)
+);
 
-// Admin-only check-in endpoint (marks ticket as USED)
-router.post('/check-in/:id', authMiddleware, (req, res, next) =>
+// Check-in endpoints (protected)
+router.post('/checkin', authMiddleware, (req, res, next) =>
   verificationController.checkIn(req, res, next)
+);
+router.post('/verify/checkin', authMiddleware, (req, res, next) =>
+  verificationController.checkIn(req, res, next)
+);
+
+// Recent check-ins live feed
+router.get('/recent/:eventId', authMiddleware, (req, res, next) =>
+  verificationController.getRecentCheckins(req, res, next)
 );
 
 export default router;

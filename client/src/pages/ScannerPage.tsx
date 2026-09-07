@@ -1,25 +1,59 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useEvent } from '../context/EventContext';
 import { QrScanner } from '../components/scanner/QrScanner';
-import { apiClient } from '../api/client';
-import { CheckCircle2, AlertTriangle, XCircle, ArrowLeft, Clock, ShieldCheck, UserCheck, Ticket as TicketIcon } from 'lucide-react';
-import { Ticket } from '../types';
+import { verifyApi, VerificationResponse } from '../api/verify';
+import {
+  CheckCircle2,
+  AlertTriangle,
+  AlertCircle,
+  XCircle,
+  Clock,
+  ShieldCheck,
+  UserCheck,
+  Ticket as TicketIcon,
+  Calendar,
+  RotateCcw,
+  UserPlus,
+  RefreshCw,
+} from 'lucide-react';
 
 export const ScannerPage: React.FC = () => {
   const navigate = useNavigate();
+  const { currentEvent } = useEvent();
+
+  const [scannedToken, setScannedToken] = useState<string>('');
+  const [manualInput, setManualInput] = useState<string>('');
   const [verifying, setVerifying] = useState(false);
-  const [scanResult, setScanResult] = useState<{
-    status: 'ACTIVE' | 'USED' | 'CANCELLED' | 'EXPIRED' | 'INVALID';
-    ticket?: Ticket;
-    message?: string;
-  } | null>(null);
-  const [isCheckedIn, setIsCheckedIn] = useState(false);
-  const [checkInSuccess, setCheckInSuccess] = useState<string | null>(null);
+  const [scanResult, setScanResult] = useState<VerificationResponse | null>(null);
+
+  // Check-in state
   const [checkingIn, setCheckingIn] = useState(false);
+  const [checkInSuccess, setCheckInSuccess] = useState<string | null>(null);
   const [checkInError, setCheckInError] = useState<string | null>(null);
 
+  // Unassigned worker input
+  const [workerNameInput, setWorkerNameInput] = useState<string>('');
+
+  // Live recent check-ins feed
+  const [recentCheckins, setRecentCheckins] = useState<any[]>([]);
+  const [checkinCount, setCheckinCount] = useState<number>(0);
+
+  const fetchRecentCheckins = useCallback(async () => {
+    if (!currentEvent) return;
+    try {
+      const list = await verifyApi.getRecentCheckins(currentEvent.id);
+      setRecentCheckins(list);
+      setCheckinCount(list.length);
+    } catch (_err) {}
+  }, [currentEvent]);
+
+  useEffect(() => {
+    fetchRecentCheckins();
+  }, [fetchRecentCheckins]);
+
   const handleScanSuccess = async (scannedPayload: string) => {
-    // Extract token if scanned payload is a URL (e.g. https://.../verify/<TOKEN> or /api/tickets/verify/<TOKEN>)
+    // Extract token if scanned payload is a URL
     let token = scannedPayload.trim();
     if (token.includes('/verify/')) {
       const parts = token.split('/verify/');
@@ -27,17 +61,16 @@ export const ScannerPage: React.FC = () => {
     }
     token = token.split('?')[0].split('#')[0].replace(/\/+$/, '').trim();
 
+    setScannedToken(token);
     setVerifying(true);
     setScanResult(null);
-    setIsCheckedIn(false);
     setCheckInSuccess(null);
     setCheckInError(null);
+    setWorkerNameInput('');
 
     try {
-      const res: any = await apiClient.get(`/tickets/verify/${token}`);
-      if (res.success && res.data) {
-        setScanResult(res.data);
-      }
+      const res = await verifyApi.lookupToken(token, currentEvent?.id);
+      setScanResult(res);
     } catch (err: any) {
       setScanResult({
         status: 'INVALID',
@@ -48,32 +81,45 @@ export const ScannerPage: React.FC = () => {
     }
   };
 
-  const handleCheckIn = async (targetId?: string) => {
-    const idToUse = targetId || scanResult?.ticket?._id || (scanResult?.ticket as any)?.id || scanResult?.ticket?.ticketId;
-    if (!idToUse) {
-      setCheckInError('Ticket reference ID is missing. Please re-scan ticket.');
+  const handleCheckIn = async () => {
+    if (!scannedToken || !currentEvent) return;
+
+    if (scanResult?.status === 'UNASSIGNED_WORKER' && !workerNameInput.trim()) {
+      setCheckInError('Please enter the worker/staff member name before checking in.');
       return;
     }
+
     setCheckingIn(true);
     setCheckInError(null);
     try {
-      const res: any = await apiClient.post(`/tickets/check-in/${idToUse}`, {
-        ticketId: scanResult?.ticket?.ticketId,
-        verifiedBy: 'Admin Scanner',
-      });
-      if (res.success) {
-        setIsCheckedIn(true);
-        setCheckInSuccess(res.message || 'Ticket checked in successfully!');
-        if (scanResult?.ticket) {
-          setScanResult({
-            ...scanResult,
-            ticket: {
-              ...scanResult.ticket,
-              status: 'USED',
-              usedAt: res.data?.ticket?.usedAt || new Date().toISOString(),
-            },
-          });
-        }
+      const res = await verifyApi.checkIn(
+        scannedToken,
+        currentEvent.id,
+        workerNameInput.trim() || undefined
+      );
+
+      setCheckInSuccess(res.message);
+      await fetchRecentCheckins();
+
+      // Update local state to reflect check-in
+      if (res.status === 'VALID') {
+        setScanResult({
+          status: 'ALREADY_USED',
+          message: 'Single-use ticket has already been checked in.',
+          ticket: {
+            ...scanResult?.ticket!,
+            lastCheckinTime: new Date().toISOString(),
+          },
+        });
+      } else if (res.status === 'VALID_WORKER') {
+        setScanResult({
+          status: 'VALID_WORKER',
+          message: 'Worker entry recorded.',
+          ticket: {
+            ...scanResult?.ticket!,
+            name: res.workerName || scanResult?.ticket?.name || 'Staff',
+          },
+        });
       }
     } catch (err: any) {
       setCheckInError(err.message || 'Check-in failed.');
@@ -83,213 +129,311 @@ export const ScannerPage: React.FC = () => {
   };
 
   const resetScanner = () => {
+    setScannedToken('');
     setScanResult(null);
-    setIsCheckedIn(false);
     setCheckInSuccess(null);
     setCheckInError(null);
+    setWorkerNameInput('');
   };
 
+  if (!currentEvent) {
+    return (
+      <div className="max-w-2xl mx-auto py-16 text-center bg-surface-card border border-zinc-800 rounded-2xl p-8">
+        <div className="w-12 h-12 bg-zinc-800 text-brand-400 rounded-full flex items-center justify-center mx-auto mb-3">
+          <Calendar className="w-6 h-6" />
+        </div>
+        <h2 className="text-lg font-bold text-white mb-2">No Active Event Selected</h2>
+        <p className="text-xs text-zinc-400 max-w-md mx-auto mb-6">
+          Select the active event to start scanning tickets.
+        </p>
+        <button
+          onClick={() => navigate('/events')}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl transition-all"
+        >
+          <Calendar className="w-4 h-4" />
+          <span>Manage Events</span>
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6 max-w-xl mx-auto">
-      {/* Top Controls & Navigation */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="space-y-6 max-w-4xl mx-auto">
+      {/* Header Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-surface-card border border-zinc-800/80 p-5 rounded-2xl">
         <div>
-          <h1 className="text-xl font-extrabold text-surface-charcoal flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-brand-600" /> Event-Day Scanner
-          </h1>
-          <p className="text-xs text-surface-muted">Scan QR tickets or enter verification tokens for instant entry.</p>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Event-Day Scanner</span>
+            </span>
+            <span className="text-xs text-zinc-500">•</span>
+            <span className="text-xs font-semibold text-zinc-300">
+              Active: <span className="text-white font-bold">{currentEvent.name}</span>
+            </span>
+          </div>
+          <h1 className="text-xl font-bold text-white">QR Ticket Verification & Entry</h1>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 self-start sm:self-auto">
           <button
-            onClick={() => navigate('/tickets')}
-            className="text-xs font-semibold text-zinc-600 hover:text-surface-charcoal bg-white border border-surface-border px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
+            onClick={resetScanner}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-xl border border-zinc-700 transition-colors"
           >
-            <TicketIcon className="w-3.5 h-3.5" /> Tickets
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Reset Scanner</span>
           </button>
-
-          {(scanResult || isCheckedIn) && (
-            <button
-              onClick={resetScanner}
-              className="bg-surface-charcoal hover:bg-black text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 shadow-sm"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" /> Next Ticket
-            </button>
-          )}
         </div>
       </div>
 
-      {verifying && (
-        <div className="p-6 bg-white rounded-2xl border border-surface-border text-center text-xs font-semibold text-surface-charcoal animate-pulse shadow-sm">
-          Verifying ticket token with server...
-        </div>
-      )}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+        {/* Left Column: Camera Scanner & Manual Input */}
+        <div className="md:col-span-6 space-y-4">
+          <div className="bg-surface-card border border-zinc-800/80 rounded-2xl p-4 overflow-hidden shadow-sm">
+            <QrScanner onScanSuccess={handleScanSuccess} />
+          </div>
 
-      {/* Camera Scanner View when no active result card */}
-      {!scanResult && !isCheckedIn && !verifying && <QrScanner onScanSuccess={handleScanSuccess} />}
-
-      {/* Verification & Check-In Result Cards */}
-      {scanResult && !verifying && (
-        <div className="space-y-4">
-          {/* Checked-In Success State */}
-          {isCheckedIn && scanResult.ticket && (
-            <div className="bg-white rounded-2xl border-2 border-emerald-500 p-6 shadow-xl ticket-perforation-left ticket-perforation-right relative">
-              <div className="flex items-center gap-3 text-emerald-800 bg-emerald-50 p-4 rounded-xl mb-6 border border-emerald-200">
-                <CheckCircle2 className="w-9 h-9 shrink-0 text-emerald-600" />
-                <div>
-                  <h2 className="text-lg font-extrabold leading-none text-emerald-950">✓ CHECKED IN SUCCESSFULLY</h2>
-                  <p className="text-xs text-emerald-700 mt-1">{checkInSuccess || 'Guest entry approved and verified in system.'}</p>
-                </div>
-              </div>
-
-              <div className="space-y-3 text-xs mb-6">
-                <div className="flex justify-between py-1 border-b border-zinc-100">
-                  <span className="text-surface-muted font-medium">Guest Name</span>
-                  <span className="font-extrabold text-sm text-surface-charcoal">{scanResult.ticket.name || (scanResult.ticket as any).guestName || 'Guest'}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-zinc-100">
-                  <span className="text-surface-muted font-medium">Ticket ID</span>
-                  <span className="font-mono font-bold text-brand-600">{scanResult.ticket.ticketId}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-zinc-100">
-                  <span className="text-surface-muted font-medium">Event</span>
-                  <span className="font-semibold text-zinc-800">{scanResult.ticket.event}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-zinc-100">
-                  <span className="text-surface-muted font-medium">Pass Type</span>
-                  <span className="font-bold text-zinc-900 bg-zinc-100 px-2 py-0.5 rounded">{scanResult.ticket.ticketType}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-zinc-100">
-                  <span className="text-surface-muted font-medium">Checked In At</span>
-                  <span className="font-semibold text-emerald-800 flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5 text-emerald-600" />
-                    {scanResult.ticket.usedAt ? new Date(scanResult.ticket.usedAt).toLocaleTimeString() : 'Just now'}
-                  </span>
-                </div>
-              </div>
-
+          {/* Manual Token Input */}
+          <div className="bg-surface-card border border-zinc-800/80 rounded-2xl p-4 space-y-2">
+            <label className="block text-xs font-bold text-zinc-300">
+              Manual Token Lookup
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Paste 64-char hex token or scan URL..."
+                value={manualInput}
+                onChange={(e) => setManualInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleScanSuccess(manualInput)}
+                className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-brand-500 font-mono"
+              />
               <button
-                onClick={resetScanner}
-                className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
+                onClick={() => handleScanSuccess(manualInput)}
+                disabled={!manualInput.trim() || verifying}
+                className="px-4 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl disabled:opacity-40"
               >
-                <ArrowLeft className="w-4 h-4" /> Scan Next Ticket
+                Verify
               </button>
             </div>
-          )}
+          </div>
+        </div>
 
-          {/* Active / Valid State (Ready for Check-In) */}
-          {!isCheckedIn && scanResult.status === 'ACTIVE' && scanResult.ticket && (
-            <div className="bg-white rounded-2xl border-2 border-emerald-500 p-6 shadow-lg ticket-perforation-left ticket-perforation-right relative">
-              <div className="flex items-center gap-3 text-emerald-700 bg-emerald-50 p-4 rounded-xl mb-6">
-                <CheckCircle2 className="w-8 h-8 shrink-0 text-emerald-600" />
-                <div>
-                  <h2 className="text-lg font-extrabold leading-none">✓ VALID TICKET</h2>
-                  <p className="text-xs text-emerald-800 mt-1">Ticket verified & active. Ready for check-in.</p>
-                </div>
+        {/* Right Column: Scan Result & Actions */}
+        <div className="md:col-span-6 space-y-4">
+          {verifying ? (
+            <div className="bg-surface-card border border-zinc-800/80 rounded-2xl p-12 text-center text-xs text-zinc-400 space-y-2">
+              <RefreshCw className="w-6 h-6 text-brand-500 animate-spin mx-auto" />
+              <div>Verifying token cryptographically...</div>
+            </div>
+          ) : scanResult ? (
+            <div className="bg-surface-card border border-zinc-800/80 rounded-2xl p-5 space-y-5 shadow-sm animate-in fade-in zoom-in-95">
+              {/* Status Header */}
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                <span
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider ${
+                    scanResult.status === 'VALID' || scanResult.status === 'VALID_WORKER'
+                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                      : scanResult.status === 'UNASSIGNED_WORKER'
+                      ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                      : scanResult.status === 'ALREADY_USED'
+                      ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                      : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                  }`}
+                >
+                  {scanResult.status === 'VALID' && <CheckCircle2 className="w-4 h-4" />}
+                  {scanResult.status === 'VALID_WORKER' && <UserCheck className="w-4 h-4" />}
+                  {scanResult.status === 'UNASSIGNED_WORKER' && <UserPlus className="w-4 h-4" />}
+                  {scanResult.status === 'ALREADY_USED' && <Clock className="w-4 h-4" />}
+                  {scanResult.status === 'INVALID' && <XCircle className="w-4 h-4" />}
+                  {scanResult.status === 'WRONG_EVENT' && <AlertTriangle className="w-4 h-4" />}
+                  <span>{scanResult.status.replace('_', ' ')}</span>
+                </span>
+
+                {scanResult.ticket?.sequenceNumber && (
+                  <span className="font-mono font-bold text-xs text-brand-400">
+                    #{scanResult.ticket.sequenceNumber.toString().padStart(5, '0')}
+                  </span>
+                )}
               </div>
 
-              <div className="space-y-3 text-xs mb-6">
-                <div className="flex justify-between py-1 border-b border-zinc-100">
-                  <span className="text-surface-muted font-medium">Guest Name</span>
-                  <span className="font-extrabold text-sm text-surface-charcoal">{scanResult.ticket.name || (scanResult.ticket as any).guestName || 'Guest'}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-zinc-100">
-                  <span className="text-surface-muted font-medium">Ticket ID</span>
-                  <span className="font-mono font-bold text-brand-600">{scanResult.ticket.ticketId}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-zinc-100">
-                  <span className="text-surface-muted font-medium">Event</span>
-                  <span className="font-semibold text-zinc-800">{scanResult.ticket.event}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-zinc-100">
-                  <span className="text-surface-muted font-medium">Pass Type</span>
-                  <span className="font-bold text-zinc-900 bg-zinc-100 px-2 py-0.5 rounded">{scanResult.ticket.ticketType}</span>
-                </div>
+              {/* Message Banner */}
+              <div
+                className={`p-3 rounded-xl text-xs font-semibold ${
+                  scanResult.status === 'VALID' || scanResult.status === 'VALID_WORKER'
+                    ? 'bg-emerald-500/5 text-emerald-300 border border-emerald-500/20'
+                    : scanResult.status === 'UNASSIGNED_WORKER'
+                    ? 'bg-amber-500/5 text-amber-300 border border-amber-500/20'
+                    : 'bg-rose-500/5 text-rose-300 border border-rose-500/20'
+                }`}
+              >
+                {scanResult.message}
               </div>
 
-              {checkInError && (
-                <div className="mb-4 p-3 bg-rose-50 text-rose-800 font-bold rounded-xl text-xs">
-                  {checkInError}
+              {/* Ticket Details */}
+              {scanResult.ticket && (
+                <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-zinc-400">Guest Name:</span>
+                    <span className="text-sm font-bold text-white">
+                      {scanResult.ticket.name}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-zinc-400">Category:</span>
+                    <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-brand-500/10 text-brand-300 border border-brand-500/20">
+                      {scanResult.ticket.category}
+                    </span>
+                  </div>
+
+                  {scanResult.ticket.organization && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-zinc-400">Company:</span>
+                      <span className="text-xs text-zinc-200">
+                        {scanResult.ticket.organization}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-zinc-400">Usage Policy:</span>
+                    <span className="text-xs font-mono text-zinc-300">
+                      {scanResult.ticket.usagePolicy}
+                    </span>
+                  </div>
+
+                  {scanResult.ticket.lastCheckinTime && (
+                    <div className="flex items-center justify-between pt-1 border-t border-zinc-800">
+                      <span className="text-xs text-rose-400 font-semibold">Previous Check-in:</span>
+                      <span className="text-xs font-mono text-rose-300">
+                        {new Date(scanResult.ticket.lastCheckinTime).toLocaleTimeString()}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 
-              <div className="flex gap-3">
+              {/* Unassigned Worker Name Input */}
+              {scanResult.status === 'UNASSIGNED_WORKER' && (
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-amber-400">
+                    Assign Staff Name (First Entry)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Enter staff full name..."
+                    value={workerNameInput}
+                    onChange={(e) => setWorkerNameInput(e.target.value)}
+                    className="w-full bg-zinc-900 border border-amber-500/50 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+              )}
+
+              {checkInSuccess && (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-400 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>{checkInSuccess}</span>
+                </div>
+              )}
+
+              {checkInError && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-400 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{checkInError}</span>
+                </div>
+              )}
+
+              {/* Check-In Action Buttons */}
+              {(scanResult.status === 'VALID' ||
+                scanResult.status === 'VALID_WORKER' ||
+                scanResult.status === 'UNASSIGNED_WORKER') && (
                 <button
-                  onClick={() => handleCheckIn(scanResult.ticket!._id || (scanResult.ticket as any)!.id || scanResult.ticket!.ticketId)}
+                  onClick={handleCheckIn}
                   disabled={checkingIn}
-                  className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-base rounded-xl transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
                 >
-                  <UserCheck className="w-5 h-5" /> {checkingIn ? 'Checking In...' : 'Mark as Used'}
+                  {checkingIn ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Checking In...</span>
+                    </>
+                  ) : scanResult.status === 'UNASSIGNED_WORKER' ? (
+                    <>
+                      <UserPlus className="w-4 h-4" />
+                      <span>Assign Name & Check In</span>
+                    </>
+                  ) : scanResult.status === 'VALID_WORKER' ? (
+                    <>
+                      <UserCheck className="w-4 h-4" />
+                      <span>Record Worker Entry</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Check In Guest</span>
+                    </>
+                  )}
                 </button>
-                <button
-                  onClick={resetScanner}
-                  className="px-4 py-4 bg-zinc-100 hover:bg-zinc-200 text-surface-charcoal font-bold text-sm rounded-xl transition-colors"
-                >
-                  Done
-                </button>
-              </div>
+              )}
             </div>
-          )}
-
-          {/* Already Used State (Scanned after previously checked in) */}
-          {!isCheckedIn && scanResult.status === 'USED' && scanResult.ticket && (
-            <div className="bg-white rounded-2xl border-2 border-amber-500 p-6 shadow-lg">
-              <div className="flex items-center gap-3 text-amber-800 bg-amber-50 p-4 rounded-xl mb-6 border border-amber-200">
-                <AlertTriangle className="w-8 h-8 shrink-0 text-amber-600" />
-                <div>
-                  <h2 className="text-lg font-extrabold leading-none">⚠ ALREADY USED</h2>
-                  <p className="text-xs text-amber-900 mt-1">This ticket has already been checked in.</p>
-                </div>
+          ) : (
+            /* Idle State Instructions */
+            <div className="bg-surface-card border border-zinc-800/80 rounded-2xl p-8 text-center space-y-3">
+              <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center mx-auto text-brand-400">
+                <TicketIcon className="w-6 h-6" />
               </div>
-
-              <div className="space-y-3 text-xs mb-6">
-                <div className="flex justify-between py-1 border-b border-zinc-100">
-                  <span className="text-surface-muted">Guest Name</span>
-                  <span className="font-bold text-surface-charcoal">{scanResult.ticket.name || (scanResult.ticket as any).guestName || 'Guest'}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-zinc-100">
-                  <span className="text-surface-muted">Ticket Reference</span>
-                  <span className="font-mono font-bold text-amber-700">{scanResult.ticket.ticketId}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-zinc-100">
-                  <span className="text-surface-muted">Checked In At</span>
-                  <span className="font-semibold text-zinc-900 flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5 text-amber-600" />
-                    {scanResult.ticket.usedAt ? new Date(scanResult.ticket.usedAt).toLocaleTimeString() : 'Earlier'}
-                  </span>
-                </div>
-              </div>
-
-              <button
-                onClick={resetScanner}
-                className="w-full py-3.5 bg-surface-charcoal hover:bg-black text-white font-bold text-sm rounded-xl transition-colors"
-              >
-                Return to Scanner
-              </button>
-            </div>
-          )}
-
-          {/* Invalid / Cancelled / Not Found State */}
-          {!isCheckedIn && (scanResult.status === 'INVALID' || scanResult.status === 'CANCELLED' || scanResult.status === 'EXPIRED') && (
-            <div className="bg-white rounded-2xl border-2 border-rose-500 p-6 shadow-lg text-center">
-              <XCircle className="w-12 h-12 text-rose-600 mx-auto mb-3" />
-              <h2 className="text-lg font-extrabold text-rose-900 uppercase">
-                ✕ {scanResult.status} TICKET
-              </h2>
-              <p className="text-xs text-surface-muted mt-2 max-w-xs mx-auto">
-                {scanResult.message || 'Ticket record is invalid, cancelled, or not recognized.'}
+              <h3 className="text-sm font-bold text-white">Scanner Active</h3>
+              <p className="text-xs text-zinc-400 max-w-xs mx-auto">
+                Point camera at a guest QR code or paste verification token above.
               </p>
-
-              <button
-                onClick={resetScanner}
-                className="mt-6 w-full py-3.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm rounded-xl transition-colors"
-              >
-                Scan Next Ticket
-              </button>
             </div>
           )}
+
+          {/* Recent Check-in Feed */}
+          <div className="bg-surface-card border border-zinc-800/80 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5">
+              <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-brand-400" />
+                <span>Recent Check-ins ({checkinCount})</span>
+              </span>
+              <button
+                onClick={fetchRecentCheckins}
+                className="text-[11px] text-zinc-400 hover:text-white"
+              >
+                Refresh
+              </button>
+            </div>
+
+            <div className="max-h-48 overflow-y-auto space-y-1.5">
+              {recentCheckins.length === 0 ? (
+                <div className="text-center py-4 text-[11px] text-zinc-500">
+                  No check-ins recorded yet for this session.
+                </div>
+              ) : (
+                recentCheckins.map((item) => (
+                  <div
+                    key={item.checkin.id}
+                    className="p-2 rounded-lg bg-zinc-900/60 border border-zinc-800/80 flex items-center justify-between text-xs"
+                  >
+                    <div>
+                      <div className="font-bold text-white">
+                        {item.guest?.name || item.checkin.workerNameAssigned || 'Staff'}
+                      </div>
+                      <div className="text-[10px] text-zinc-400">
+                        {item.ticketType?.label || item.ticketType?.name}
+                      </div>
+                    </div>
+                    <div className="text-[10px] font-mono text-emerald-400">
+                      {new Date(item.checkin.checkedInAt).toLocaleTimeString()}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };

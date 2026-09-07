@@ -1,21 +1,42 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { QrCode, FileSpreadsheet, Ticket, Users, CheckCircle2, RefreshCw, KeyRound } from 'lucide-react';
+import { useEvent } from '../context/EventContext';
 import { apiClient } from '../api/client';
-import { DashboardStats } from '../types';
+import {
+  QrCode,
+  FileSpreadsheet,
+  Ticket,
+  Users,
+  CheckCircle2,
+  RefreshCw,
+  KeyRound,
+  Calendar,
+  Clock,
+  ArrowRight,
+  ShieldCheck,
+} from 'lucide-react';
 import { ChangePasswordModal } from '../components/auth/ChangePasswordModal';
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const { currentEvent } = useEvent();
+
+  const [stats, setStats] = useState<any>(null);
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
-  const fetchDashboard = async () => {
+  const fetchDashboard = useCallback(async () => {
+    if (!currentEvent) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
-      const res: any = await apiClient.get('/dashboard/stats');
+      const res: any = await apiClient.get('/dashboard/stats', {
+        params: { eventId: currentEvent.id },
+      });
       if (res.success && res.data) {
         setStats(res.data.stats);
         setRecentActivity(res.data.recentActivity || []);
@@ -25,49 +46,78 @@ export const Dashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentEvent]);
 
   useEffect(() => {
     fetchDashboard();
-  }, []);
+  }, [fetchDashboard]);
 
-  const activeCount = stats?.ticketsActive ?? (stats?.ticketsGenerated ? (stats.ticketsGenerated - (stats.ticketsUsed || 0)) : 0);
+  if (!currentEvent) {
+    return (
+      <div className="max-w-2xl mx-auto py-16 text-center bg-surface-card border border-zinc-800 rounded-2xl p-8 space-y-4">
+        <div className="w-14 h-14 bg-zinc-800 text-brand-400 rounded-full flex items-center justify-center mx-auto mb-2">
+          <Calendar className="w-7 h-7" />
+        </div>
+        <h2 className="text-xl font-bold text-white">Welcome to Ticketification</h2>
+        <p className="text-xs text-zinc-400 max-w-md mx-auto">
+          Create or select an event to unlock guest importing, verified ticket generation, and mobile scanning.
+        </p>
+        <button
+          onClick={() => navigate('/events')}
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-brand-600/20"
+        >
+          <Calendar className="w-4 h-4" />
+          <span>Create / Select Event</span>
+        </button>
+      </div>
+    );
+  }
+
+  const total = stats?.totalGuests || 0;
+  const used = stats?.ticketsUsed || 0;
+  const generated = stats?.ticketsGenerated || 0;
+  const active = stats?.ticketsActive || 0;
+  const checkinRate = generated > 0 ? Math.round((used / generated) * 100) : 0;
 
   return (
-    <div className="space-y-8">
-      {/* Header Banner */}
-      <div className="sm:p-8 flex flex-col md:flex-row justify-between items-start md:items-center relative overflow-hidden gap-6">
-        <div className="z-10">
-          <span className="text-xs font-semibold text-brand-500 tracking-widest block mb-2">
-            Event Operations Console, Ticketification.
-          </span>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-wide">
-            Ticketing & Entry Operational Control
+    <div className="space-y-6 max-w-7xl mx-auto">
+      {/* Top Banner */}
+      <div className="bg-surface-card border border-zinc-800/80 p-6 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-6 shadow-sm">
+        <div>
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-brand-500/10 text-brand-400 border border-brand-500/20 flex items-center gap-1">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Operational Console</span>
+            </span>
+            <span className="text-xs text-zinc-500">•</span>
+            <span className="text-xs font-semibold text-zinc-300">
+              Active Event: <span className="text-white font-bold">{currentEvent.name}</span>
+            </span>
+          </div>
+          <h1 className="text-2xl font-black text-white tracking-tight">
+            Event Ticketing & Entry Control
           </h1>
-          <p className="text-sm text-zinc-600 mt-2 max-w-2xl">
-            Import guest lists, generate personalized image tickets with scannable QR credentials, download individual or bulk tickets, and conduct entry scans on event day.
+          <p className="text-xs text-zinc-400 mt-1 max-w-xl">
+            Import Excel guest data, batch generate verified QR credentials, and manage attendee check-ins on event day.
           </p>
         </div>
 
-        {/* Action Buttons: Scan & Verify + Change Password */}
-        <div className="flex flex-wrap items-center gap-3 z-10">
+        {/* Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={() => setIsChangePasswordOpen(true)}
-            className="bg-white hover:bg-zinc-50 text-surface-charcoal border border-surface-border font-bold px-4 py-3.5 rounded-2xl shadow-sm transition-all flex items-center gap-2 text-xs"
+            className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 font-bold px-3.5 py-2.5 rounded-xl transition-all flex items-center gap-2 text-xs"
           >
-            <KeyRound className="w-4 h-4 text-brand-600" />
-            <span>Change Password</span>
+            <KeyRound className="w-4 h-4 text-brand-400" />
+            <span>Password</span>
           </button>
 
           <button
             onClick={() => navigate('/scan')}
-            className="bg-brand-600 hover:bg-brand-700 text-white font-extrabold px-6 py-3.5 rounded-2xl shadow-lg transition-all transform hover:-translate-y-0.5 flex items-center gap-3 shrink-0 border border-brand-500/40"
+            className="bg-brand-600 hover:bg-brand-500 text-white font-bold px-4 py-2.5 rounded-xl shadow-md shadow-brand-600/20 transition-all flex items-center gap-2 text-xs active:scale-95"
           >
-            <QrCode className="w-5 h-5" />
-            <div className="text-left">
-              <div className="text-[10px] text-brand-100 tracking-wider font-semibold">Event Day Action</div>
-              <div className="text-sm font-semibold leading-none mt-0.5">Scan & Verify Ticket</div>
-            </div>
+            <QrCode className="w-4 h-4" />
+            <span>Launch Scanner</span>
           </button>
         </div>
       </div>
@@ -77,140 +127,158 @@ export const Dashboard: React.FC = () => {
         onClose={() => setIsChangePasswordOpen(false)}
       />
 
-      {/* Operational Statistics */}
-      <div>
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="font-bold text-lg text-surface-charcoal">Operational Summary</h2>
-          <button
-            onClick={fetchDashboard}
-            className="text-xs text-surface-muted hover:text-surface-charcoal flex items-center gap-1 transition-colors"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
-          </button>
+      {/* Metrics Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-surface-card border border-zinc-800/80 p-5 rounded-2xl shadow-sm">
+          <div className="flex items-center justify-between text-zinc-400 text-xs font-semibold mb-2">
+            <span>Total Guests</span>
+            <Users className="w-4 h-4 text-brand-400" />
+          </div>
+          <div className="text-2xl font-black text-white">{total}</div>
+          <div className="text-[11px] text-zinc-500 mt-1">Imported in guest list</div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white p-5 rounded-2xl border border-surface-border shadow-sm">
-            <div className="flex items-center justify-between text-zinc-500 mb-2">
-              <span className="text-xs font-semibold uppercase">Total Guests</span>
-              <Users className="w-4 h-4 text-zinc-400" />
-            </div>
-            <div className="text-2xl font-extrabold text-surface-charcoal">
-              {stats?.totalGuests ?? 0}
-            </div>
+        <div className="bg-surface-card border border-zinc-800/80 p-5 rounded-2xl shadow-sm">
+          <div className="flex items-center justify-between text-zinc-400 text-xs font-semibold mb-2">
+            <span>Tickets Generated</span>
+            <Ticket className="w-4 h-4 text-blue-400" />
           </div>
+          <div className="text-2xl font-black text-white">{generated}</div>
+          <div className="text-[11px] text-zinc-500 mt-1">Cryptographic QR issued</div>
+        </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-surface-border shadow-sm">
-            <div className="flex items-center justify-between text-zinc-500 mb-2">
-              <span className="text-xs font-semibold uppercase">Generated Tickets</span>
-              <Ticket className="w-4 h-4 text-brand-600" />
-            </div>
-            <div className="text-2xl font-extrabold text-surface-charcoal">
-              {stats?.ticketsGenerated ?? 0}
-            </div>
+        <div className="bg-surface-card border border-zinc-800/80 p-5 rounded-2xl shadow-sm">
+          <div className="flex items-center justify-between text-emerald-400 text-xs font-semibold mb-2">
+            <span>Checked In</span>
+            <CheckCircle2 className="w-4 h-4" />
           </div>
+          <div className="text-2xl font-black text-emerald-400">{used}</div>
+          <div className="text-[11px] text-zinc-500 mt-1">{checkinRate}% turnout rate</div>
+        </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-surface-border shadow-sm">
-            <div className="flex items-center justify-between text-zinc-500 mb-2">
-              <span className="text-xs font-semibold uppercase">Active / Valid</span>
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            </div>
-            <div className="text-2xl font-extrabold text-emerald-600">
-              {activeCount}
-            </div>
+        <div className="bg-surface-card border border-zinc-800/80 p-5 rounded-2xl shadow-sm">
+          <div className="flex items-center justify-between text-zinc-400 text-xs font-semibold mb-2">
+            <span>Remaining Passes</span>
+            <Clock className="w-4 h-4 text-amber-400" />
           </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-surface-border shadow-sm">
-            <div className="flex items-center justify-between text-zinc-500 mb-2">
-              <span className="text-xs font-semibold uppercase">Checked In</span>
-              <CheckCircle2 className="w-4 h-4 text-amber-500" />
-            </div>
-            <div className="text-2xl font-extrabold text-amber-600">
-              {stats?.ticketsUsed ?? 0}
-            </div>
-          </div>
+          <div className="text-2xl font-black text-zinc-200">{active}</div>
+          <div className="text-[11px] text-zinc-500 mt-1">Active for entry</div>
         </div>
       </div>
 
-      {/* Primary Actions Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Quick Action Shortcuts */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div
           onClick={() => navigate('/import')}
-          className="bg-white p-6 rounded-2xl border border-surface-border shadow-sm cursor-pointer transition-all hover:border-brand-500/50 hover:shadow-md group"
+          className="group bg-surface-card border border-zinc-800/80 hover:border-brand-500/50 p-5 rounded-2xl cursor-pointer transition-all shadow-sm flex items-center justify-between"
         >
-          <div className="w-12 h-12 rounded-xl bg-zinc-100 group-hover:bg-brand-50 text-zinc-700 group-hover:text-brand-600 flex items-center justify-center mb-4 transition-colors">
-            <FileSpreadsheet className="w-6 h-6" />
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-brand-500/10 text-brand-400 flex items-center justify-center border border-brand-500/20 group-hover:scale-105 transition-transform">
+              <FileSpreadsheet className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-white group-hover:text-brand-300">
+                Import Guest Data
+              </div>
+              <div className="text-[11px] text-zinc-400">Excel / CSV Smart Wizard</div>
+            </div>
           </div>
-          <h3 className="font-bold text-base text-surface-charcoal mb-1">Import Excel Guest List</h3>
-          <p className="text-xs text-surface-muted leading-relaxed">
-            Upload .xlsx guest spreadsheet, run contact validation checks, preview clean records, and batch generate image tickets.
-          </p>
+          <ArrowRight className="w-4 h-4 text-zinc-500 group-hover:text-white transition-colors" />
         </div>
 
         <div
           onClick={() => navigate('/tickets')}
-          className="bg-white p-6 rounded-2xl border border-surface-border shadow-sm cursor-pointer transition-all hover:border-brand-500/50 hover:shadow-md group"
+          className="group bg-surface-card border border-zinc-800/80 hover:border-brand-500/50 p-5 rounded-2xl cursor-pointer transition-all shadow-sm flex items-center justify-between"
         >
-          <div className="w-12 h-12 rounded-xl bg-zinc-100 group-hover:bg-brand-50 text-zinc-700 group-hover:text-brand-600 flex items-center justify-center mb-4 transition-colors">
-            <Ticket className="w-6 h-6" />
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center border border-blue-500/20 group-hover:scale-105 transition-transform">
+              <Ticket className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-white group-hover:text-blue-300">
+                View & Generate Tickets
+              </div>
+              <div className="text-[11px] text-zinc-400">Manage credentials & passes</div>
+            </div>
           </div>
-          <h3 className="font-bold text-base text-surface-charcoal mb-1">View & Download Tickets</h3>
-          <p className="text-xs text-surface-muted leading-relaxed">
-            Manage existing ticket database, download all tickets in bulk (ZIP), or download individual tickets on hover.
-          </p>
+          <ArrowRight className="w-4 h-4 text-zinc-500 group-hover:text-white transition-colors" />
         </div>
 
         <div
           onClick={() => navigate('/scan')}
-          className="bg-white p-6 rounded-2xl border border-surface-border shadow-sm cursor-pointer transition-all hover:border-brand-500/50 hover:shadow-md group"
+          className="group bg-surface-card border border-zinc-800/80 hover:border-brand-500/50 p-5 rounded-2xl cursor-pointer transition-all shadow-sm flex items-center justify-between"
         >
-          <div className="w-12 h-12 rounded-xl bg-zinc-100 group-hover:bg-brand-50 text-zinc-700 group-hover:text-brand-600 flex items-center justify-center mb-4 transition-colors">
-            <QrCode className="w-6 h-6" />
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/20 group-hover:scale-105 transition-transform">
+              <QrCode className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-white group-hover:text-emerald-300">
+                Live Scanner Station
+              </div>
+              <div className="text-[11px] text-zinc-400">Scan & verify attendee QR</div>
+            </div>
           </div>
-          <h3 className="font-bold text-base text-surface-charcoal mb-1">Event Entry Scanner</h3>
-          <p className="text-xs text-surface-muted leading-relaxed">
-            Use smartphone camera to scan guest QR tokens or enter reference IDs to execute instantaneous check-ins.
-          </p>
+          <ArrowRight className="w-4 h-4 text-zinc-500 group-hover:text-white transition-colors" />
         </div>
       </div>
 
       {/* Recent Activity Table */}
-      <div className="bg-white rounded-2xl border border-surface-border shadow-sm p-6">
-        <h3 className="font-bold text-base text-surface-charcoal mb-4">Recent Issued Tickets</h3>
+      <div className="bg-surface-card border border-zinc-800/80 rounded-2xl p-6 shadow-sm space-y-4">
+        <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+          <h2 className="text-sm font-bold text-white flex items-center gap-2">
+            <Clock className="w-4 h-4 text-brand-400" />
+            <span>Recent Generated Credentials</span>
+          </h2>
+          <button
+            onClick={fetchDashboard}
+            className="text-xs text-zinc-400 hover:text-white flex items-center gap-1"
+          >
+            <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
+        </div>
+
         {recentActivity.length === 0 ? (
-          <div className="text-center py-8 text-xs text-surface-muted">
-            No tickets issued yet. Start by importing your guest list.
+          <div className="text-center py-8 text-xs text-zinc-500">
+            No credentials generated yet for this event.
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-surface-border text-surface-muted font-semibold uppercase">
-                  <th className="pb-3">Ticket Reference</th>
-                  <th className="pb-3">Guest Name</th>
-                  <th className="pb-3">Contact</th>
-                  <th className="pb-3">Ticket Status</th>
+                <tr className="border-b border-zinc-800 text-zinc-400 uppercase font-mono text-[10px]">
+                  <th className="py-2.5 px-3"># Seq</th>
+                  <th className="py-2.5 px-3">Guest Name</th>
+                  <th className="py-2.5 px-3">Contact</th>
+                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3">Created</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-surface-border">
-                {recentActivity.map((t) => {
-                  return (
-                    <tr key={t.id} className="hover:bg-surface-bg/50">
-                      <td className="py-3 font-mono font-bold text-brand-600">{t.ticketId}</td>
-                      <td className="py-3 font-medium text-surface-charcoal">{t.name}</td>
-                      <td className="py-3 text-surface-muted">{t.phone || t.email || '—'}</td>
-                      <td className="py-3">
-                        <span className={`px-2 py-0.5 rounded font-semibold ${
-                          t.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                          t.status === 'USED' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                          'bg-zinc-100 text-zinc-600'
-                        }`}>
-                          {t.status}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
+              <tbody className="divide-y divide-zinc-800/60">
+                {recentActivity.map((t) => (
+                  <tr key={t.id} className="hover:bg-zinc-900/40">
+                    <td className="py-2.5 px-3 font-mono font-bold text-brand-400">
+                      #{t.sequenceNumber?.toString().padStart(5, '0')}
+                    </td>
+                    <td className="py-2.5 px-3 font-bold text-white">{t.name || 'Staff Member'}</td>
+                    <td className="py-2.5 px-3 text-zinc-300">{t.email || t.phone || '—'}</td>
+                    <td className="py-2.5 px-3">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          t.status === 'ACTIVE'
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                            : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                        }`}
+                      >
+                        {t.status}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 text-zinc-500 font-mono text-[11px]">
+                      {new Date(t.createdAt).toLocaleTimeString()}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

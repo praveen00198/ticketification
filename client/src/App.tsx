@@ -4,10 +4,13 @@ import { Layout } from './components/layout/Layout';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Dashboard } from './pages/Dashboard';
+import { EventsPage } from './pages/EventsPage';
+import { EventDetailPage } from './pages/EventDetailPage';
 import { GuestImport } from './pages/GuestImport';
 import { TicketList } from './pages/TicketList';
 import { ScannerPage } from './pages/ScannerPage';
 import { VerifyTicket } from './pages/VerifyTicket';
+import { EventProvider } from './context/EventContext';
 import { apiClient } from './api/client';
 
 export const App: React.FC = () => {
@@ -44,6 +47,7 @@ export const App: React.FC = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('admin_token');
+    localStorage.removeItem('selected_event_id');
     setToken(null);
     setUser(null);
   };
@@ -75,15 +79,19 @@ export const App: React.FC = () => {
           <Route
             path="/*"
             element={
-              <Layout user={user} onLogout={handleLogout}>
-                <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/import" element={<GuestImport />} />
-                  <Route path="/tickets" element={<TicketList />} />
-                  <Route path="/scan" element={<ScannerPage />} />
-                  <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
-              </Layout>
+              <EventProvider>
+                <Layout user={user} onLogout={handleLogout}>
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/events" element={<EventsPage />} />
+                    <Route path="/events/:eventId" element={<EventDetailPage />} />
+                    <Route path="/import" element={<GuestImport />} />
+                    <Route path="/tickets" element={<TicketList />} />
+                    <Route path="/scan" element={<ScannerPage />} />
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                  </Routes>
+                </Layout>
+              </EventProvider>
             }
           />
         ) : (

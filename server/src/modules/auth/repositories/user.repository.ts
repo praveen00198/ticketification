@@ -1,21 +1,34 @@
-import { User, IUserDocument } from '../models/user.model';
+import { db } from '../../../db';
+import { users } from '../../../db/schema';
+import { eq } from 'drizzle-orm';
 
 export class UserRepository {
-  async findByEmail(email: string): Promise<IUserDocument | null> {
-    return User.findOne({ email: email.toLowerCase() }).exec();
+  async findById(id: string) {
+    const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    return result[0] || null;
   }
 
-  async findById(id: string): Promise<IUserDocument | null> {
-    return User.findById(id).exec();
+  async findByEmail(email: string) {
+    const result = await db.select().from(users).where(eq(users.email, email.toLowerCase())).limit(1);
+    return result[0] || null;
   }
 
-  async create(userData: Partial<IUserDocument>): Promise<IUserDocument> {
-    const user = new User(userData);
-    return user.save();
-  }
-
-  async updatePassword(userId: string, passwordHash: string): Promise<IUserDocument | null> {
-    return User.findByIdAndUpdate(userId, { passwordHash }, { new: true }).exec();
+  async upsert(data: { id: string; name: string; email: string; role?: string }) {
+    const existing = await this.findById(data.id);
+    if (existing) {
+      const result = await db.update(users)
+        .set({ name: data.name, email: data.email.toLowerCase(), updatedAt: new Date() })
+        .where(eq(users.id, data.id))
+        .returning();
+      return result[0];
+    }
+    const result = await db.insert(users).values({
+      id: data.id,
+      name: data.name,
+      email: data.email.toLowerCase(),
+      role: data.role || 'ADMIN',
+    }).returning();
+    return result[0];
   }
 }
 

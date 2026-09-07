@@ -2,14 +2,46 @@ import { Router } from 'express';
 import { ticketController } from '../controllers/ticket.controller';
 import { authMiddleware } from '../../../middlewares/auth.middleware';
 
-const router = Router();
+const router = Router({ mergeParams: true });
 
-router.post('/generate', authMiddleware, (req, res, next) => ticketController.generateTickets(req, res, next));
-router.get('/', authMiddleware, (req, res, next) => ticketController.getAllTickets(req, res, next));
-router.get('/download-zip', authMiddleware, (req, res, next) => ticketController.downloadAllZip(req, res, next));
-router.get('/:id/download', authMiddleware, (req, res, next) => ticketController.downloadSingleTicket(req, res, next));
-router.get('/:id', authMiddleware, (req, res, next) => ticketController.getTicketById(req, res, next));
-router.post('/:id/resend', authMiddleware, (req, res, next) => ticketController.resendTicket(req, res, next));
+router.use(authMiddleware);
+
+// Event-scoped ticket endpoints
+router.post('/events/:eventId/generate', (req, res, next) =>
+  ticketController.generateTickets(req, res, next)
+);
+
+router.post('/events/:eventId/generate-worker', (req, res, next) =>
+  ticketController.generateWorkerTickets(req, res, next)
+);
+
+router.get('/events/:eventId/export-zip', (req, res, next) =>
+  ticketController.exportTicketsZip(req, res, next)
+);
+
+router.get('/events/:eventId', (req, res, next) =>
+  ticketController.getAllTickets(req, res, next)
+);
+
+// Fallback direct routes
+router.get('/export-zip', (req, res, next) =>
+  ticketController.exportTicketsZip(req, res, next)
+);
+
+router.post('/generate', (req, res, next) =>
+  ticketController.generateTickets(req, res, next)
+);
+
+router.post('/generate-worker', (req, res, next) =>
+  ticketController.generateWorkerTickets(req, res, next)
+);
+
+router.get('/', (req, res, next) =>
+  ticketController.getAllTickets(req, res, next)
+);
+
+router.get('/:id', (req, res, next) =>
+  ticketController.getTicketById(req, res, next)
+);
 
 export default router;
-

@@ -1,9 +1,9 @@
 import * as xlsx from 'xlsx';
 import path from 'path';
 import fs from 'fs';
-import { guestImportService, normalizePhoneNumber, isValidE164 } from '../src/modules/guests/services/guest-import.service';
+import { GuestImportService } from '../src/modules/guests/services/guest-import.service';
 
-describe('GuestImportService - Phone Normalization & Validation', () => {
+describe('GuestImportService - Header Detection & Validation Pipeline', () => {
   const tempFilePath = path.resolve(__dirname, 'temp_test_guests.xlsx');
 
   afterEach(() => {
@@ -12,27 +12,10 @@ describe('GuestImportService - Phone Normalization & Validation', () => {
     }
   });
 
-  it('should normalize Indian and international phone numbers into E.164 format', () => {
-    expect(normalizePhoneNumber('9876543210')).toBe('+919876543210');
-    expect(normalizePhoneNumber('09876543210')).toBe('+919876543210');
-    expect(normalizePhoneNumber('+919876543210')).toBe('+919876543210');
-    expect(normalizePhoneNumber('+1-555-123-4567')).toBe('+15551234567');
-    expect(normalizePhoneNumber('12345')).toBeNull();
-  });
-
-  it('should validate E.164 format correctly', () => {
-    expect(isValidE164('+919876543210')).toBe(true);
-    expect(isValidE164('+15551234567')).toBe(true);
-    expect(isValidE164('9876543210')).toBe(false);
-  });
-
-  it('should correctly parse valid rows and detect invalid missing phone / name / duplicate records', () => {
+  it('should analyze file headers and detect column mappings automatically', async () => {
     const data = [
-      { Name: 'Rahul Sharma', Phone: '9876543210', Email: 'rahul@example.com', Event: 'Eventify 2026', 'Ticket Type': 'VIP' },
-      { Name: '', Phone: '9876543211', Email: 'missingname@example.com', Event: 'Eventify 2026' },
-      { Name: 'Priya Verma', Phone: '', Email: 'priya@example.com', Event: 'Eventify 2026' },
-      { Name: 'Invalid Phone Guest', Phone: '12345', Email: 'invalid@example.com', Event: 'Eventify 2026' },
-      { Name: 'Duplicate Phone Guest', Phone: '+919876543210', Email: 'duplicate@example.com', Event: 'Eventify 2026' },
+      { 'Full Name': 'Rahul Sharma', 'Mobile Number': '9876543210', 'Email Address': 'rahul@example.com', 'Ticket Type': 'VIP' },
+      { 'Full Name': 'Priya Verma', 'Mobile Number': '9876543211', 'Email Address': 'priya@example.com', 'Ticket Type': 'GENERAL' },
     ];
 
     const worksheet = xlsx.utils.json_to_sheet(data);
@@ -40,17 +23,86 @@ describe('GuestImportService - Phone Normalization & Validation', () => {
     xlsx.utils.book_append_sheet(workbook, worksheet, 'Guests');
     xlsx.writeFile(workbook, tempFilePath);
 
-    const summary = guestImportService.parseAndValidateExcel(tempFilePath);
+    const mockEventRepo: any = {
+      findByIdAndOwner: jest.fn().mockResolvedValue({ id: 'evt_1', name: 'Demo Event' }),
+    };
+    const mockImportRepo: any = {
+      create: jest.fn().mockResolvedValue({ id: 'import_123', eventId: 'evt_1' }),
+      findById: jest.fn().mockResolvedValue({ id: 'import_123', eventId: 'evt_1' }),
+      update: jest.fn().mockResolvedValue({ id: 'import_123', eventId: 'evt_1' }),
+    };
 
-    expect(summary.totalRecords).toBe(5);
-    expect(summary.validRecordsCount).toBe(4); // All guests with names are valid (phone is optional)
-    expect(summary.invalidRecordsCount).toBe(1); // Only missing name is invalid
-    expect(summary.validRows[0].data.name).toBe('Rahul Sharma');
-    expect(summary.validRows[0].data.phone).toBe('+919876543210');
-    expect(summary.validRows[1].data.name).toBe('Priya Verma');
-    expect(summary.validRows[1].data.phone).toBeUndefined();
+    const service = new GuestImportService(
+      {} as any,
+      mockImportRepo,
+      mockEventRepo,
+      {} as any
+    );
 
-    // Diagnostic error checks
-    expect(summary.errors.some((e) => e.field === 'Name')).toBe(true);
+    const analysis = await service.uploadAndAnalyze('evt_1', 'user_1', tempFilePath, 'guests.xlsx');
+
+    expect(analysis.rowCount).toBe(2);
+    expect(analysis.headers).toContain('Full Name');
+    expect(analysis.headers).toContain('Mobile Number');
+    expect(analysis.headers).toContain('Email Address');
+    expect(analysis.headers).toContain('Ticket Type');
+
+    // Confirmed detections
+    expect(analysis.detectedMappings['Full Name']).toBe('name');
+    expect(analysis.detectedMappings['Mobile Number']).toBe('phone');
+    expect(analysis.detectedMappings['Email Address']).toBe('email');
+    expect(analysis.detectedMappings['Ticket Type']).toBe('category');
+    expect(analysis.detectedCategories).toContain('VIP');
+    expect(analysis.detectedCategories).toContain('GENERAL');
+  });
+
+  it('should validate rows: catch missing required fields and warn on duplicate emails', async () => {
+    const data = [
+      { 'Full Name': 'Rahul Sharma', 'Mobile': '9876543210', 'Email': 'rahul@example.com' },
+      { 'Full Name': '', 'Mobile': '9876543211', 'Email': 'missingname@example.com' }, // Invalid (no name)
+      { 'Full Name': 'Rahul Duplicate', 'Mobile': '9876543212', 'Email': 'rahul@example.com' }, // Duplicate email warning
+    ];
+
+    const worksheet = xlsx.utils.json_to_sheet(data);
+    const workbook = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(workbook, worksheet, 'Guests');
+    xlsx.writeFile(workbook, tempFilePath);
+
+    const mockEventRepo: any = {
+      findByIdAndOwner: jest.fn().mockResolvedValue({ id: 'evt_1', name: 'Demo Event' }),
+    };
+    const mockImportRepo: any = {
+      create: jest.fn().mockResolvedValue({ id: 'import_123', eventId: 'evt_1' }),
+      findById: jest.fn().mockResolvedValue({ id: 'import_123', eventId: 'evt_1' }),
+      update: jest.fn().mockResolvedValue({ id: 'import_123', eventId: 'evt_1' }),
+    };
+
+    const service = new GuestImportService(
+      {} as any,
+      mockImportRepo,
+      mockEventRepo,
+      {} as any
+    );
+
+    const analysis = await service.uploadAndAnalyze('evt_1', 'user_1', tempFilePath, 'guests.xlsx');
+
+    const validation = await service.validateImport('evt_1', 'user_1', {
+      importId: analysis.importId,
+      columnMapping: {
+        'Full Name': 'name',
+        'Mobile': 'phone',
+        'Email': 'email',
+      },
+      requiredFields: ['name'],
+      categoryMapping: {},
+      defaultCategory: 'GENERAL',
+    });
+
+    expect(validation.totalRows).toBe(3);
+    expect(validation.validRowsCount).toBe(2);
+    expect(validation.invalidRowsCount).toBe(1);
+    expect(validation.duplicateRowsCount).toBe(1);
+    expect(validation.errors.some((e: any) => e.field === 'name' && e.severity === 'ERROR')).toBe(true);
+    expect(validation.errors.some((e: any) => e.field === 'email' && e.severity === 'WARNING')).toBe(true);
   });
 });

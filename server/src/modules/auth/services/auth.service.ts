@@ -1,13 +1,11 @@
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import config from '../../../config/env';
+import { supabaseAdmin } from '../../../config/supabase';
 import { userRepository, UserRepository } from '../repositories/user.repository';
 import { AppError } from '../../../middlewares/error.middleware';
 
 export class AuthService {
   constructor(private userRepo: UserRepository = userRepository) {}
 
-  async register(name: string, email: string, password: string, eventName?: string) {
+  async register(name: string, email: string, password: string) {
     if (!name || !name.trim()) {
       throw new AppError('Full name is required.', 400);
     }
@@ -18,70 +16,74 @@ export class AuthService {
       throw new AppError('Password must be at least 6 characters long.', 400);
     }
 
+    if (!supabaseAdmin) {
+      throw new AppError('Authentication service not configured.', 503);
+    }
+
     const normalizedEmail = email.trim().toLowerCase();
-    const cleanEventName = eventName ? eventName.trim() : undefined;
 
-    try {
-      const existingUser = await this.userRepo.findByEmail(normalizedEmail);
+    // Create user in Supabase Auth
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email: normalizedEmail,
+      password,
+      email_confirm: true,
+      user_metadata: { name: name.trim(), role: 'ADMIN' },
+    });
 
-      if (existingUser) {
-        throw new AppError('An account with this email address already exists. Please sign in.', 400, { code: 'USER_EXISTS' });
+    if (authError) {
+      if (authError.message.includes('already been registered') || authError.message.includes('already exists')) {
+        throw new AppError('An account with this email address already exists. Please sign in.', 400);
       }
+      throw new AppError(`Registration failed: ${authError.message}`, 400);
+    }
 
-      const passwordHash = await bcrypt.hash(password, 10);
-      const newUser = await this.userRepo.create({
-        name: name.trim(),
-        email: normalizedEmail,
-        passwordHash,
-        eventName: cleanEventName,
-        role: 'ADMIN',
-      });
+    if (!authData.user) {
+      throw new AppError('Registration failed: No user returned from auth service.', 500);
+    }
 
-      const token = jwt.sign(
-        { id: newUser._id, email: newUser.email, role: newUser.role },
-        config.env.jwtSecret,
-        { expiresIn: config.env.jwtExpiresIn as any }
-      );
+    // Sync user profile to our users table
+    const profile = await this.userRepo.upsert({
+      id: authData.user.id,
+      name: name.trim(),
+      email: normalizedEmail,
+      role: 'ADMIN',
+    });
 
+    // Sign in to get a session token
+    const { data: signInData, error: signInError } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'magiclink',
+      email: normalizedEmail,
+    });
+
+    // For immediate login after registration, use signInWithPassword
+    const { data: sessionData, error: sessionError } = await supabaseAdmin.auth.signInWithPassword({
+      email: normalizedEmail,
+      password,
+    });
+
+    if (sessionError || !sessionData.session) {
+      // User created but auto-login failed — they can login manually
       return {
-        token,
         user: {
-          id: newUser._id,
-          name: newUser.name,
-          email: newUser.email,
-          eventName: newUser.eventName,
-          role: newUser.role,
-        },
-      };
-    } catch (err: any) {
-      if (err instanceof AppError) {
-        throw err;
-      }
-      if (err.code === 11000 || (err.message && err.message.includes('E11000'))) {
-        throw new AppError('An account with this email address already exists. Please sign in.', 400, { code: 'USER_EXISTS' });
-      }
-      console.warn('[Registration DB Warning] Database write failed. Using dev fallback registration:', err.message || err);
-
-      // Dev fallback registration if database is offline or encountering connectivity issues
-      const passwordHash = await bcrypt.hash(password, 10);
-      const devId = `dev-user-${Date.now()}`;
-      const token = jwt.sign(
-        { id: devId, email: normalizedEmail, role: 'ADMIN' },
-        config.env.jwtSecret,
-        { expiresIn: config.env.jwtExpiresIn as any }
-      );
-
-      return {
-        token,
-        user: {
-          id: devId,
+          id: authData.user.id,
           name: name.trim(),
           email: normalizedEmail,
-          eventName: cleanEventName,
           role: 'ADMIN',
         },
+        token: null,
+        message: 'Account created successfully. Please sign in.',
       };
     }
+
+    return {
+      user: {
+        id: authData.user.id,
+        name: name.trim(),
+        email: normalizedEmail,
+        role: 'ADMIN',
+      },
+      token: sessionData.session.access_token,
+    };
   }
 
   async login(email: string, password: string) {
@@ -89,128 +91,56 @@ export class AuthService {
       throw new AppError('Email and password are required.', 400);
     }
 
+    if (!supabaseAdmin) {
+      throw new AppError('Authentication service not configured.', 503);
+    }
+
     const normalizedEmail = email.trim().toLowerCase();
-    let user = null;
 
-    try {
-      user = await this.userRepo.findByEmail(normalizedEmail);
+    const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+      email: normalizedEmail,
+      password,
+    });
 
-      // Auto-bootstrap default admin user in DB if system is fresh
-      if (!user && normalizedEmail === 'admin@ticketification.com') {
-        const passwordHash = await bcrypt.hash('Admin@123', 10);
-        user = await this.userRepo.create({
-          name: 'Administrator',
-          email: 'admin@ticketification.com',
-          passwordHash,
-          eventName: 'Ticketification 2026',
-          role: 'ADMIN',
-        });
+    if (error) {
+      if (error.message.includes('Invalid login credentials')) {
+        throw new AppError('Invalid email or password. Please check your credentials.', 401);
       }
-    } catch (dbErr) {
-      console.warn('[Auth DB Warning] MongoDB query failed. Applying local dev fallback login check:', dbErr);
+      throw new AppError(`Login failed: ${error.message}`, 401);
     }
 
-    // Dev fallback check for default admin credentials
-    if (!user && (normalizedEmail === 'admin@ticketification.com' || normalizedEmail === 'admin@eventify.com') && password === 'Admin@123') {
-      const token = jwt.sign(
-        { id: 'dev-admin-id-001', email: normalizedEmail, role: 'ADMIN' },
-        config.env.jwtSecret,
-        { expiresIn: config.env.jwtExpiresIn as any }
-      );
-      return {
-        token,
-        user: {
-          id: 'dev-admin-id-001',
-          name: 'Administrator',
-          email: normalizedEmail,
-          eventName: 'Ticketification 2026',
-          role: 'ADMIN',
-        },
-      };
+    if (!data.user || !data.session) {
+      throw new AppError('Login failed: No session returned.', 500);
     }
 
-    if (!user) {
-      throw new AppError('Account not found with this email address. Please register.', 404, {
-        code: 'USER_NOT_FOUND',
-      });
-    }
-
-    const isMatch = await bcrypt.compare(password, user.passwordHash);
-    if (!isMatch) {
-      throw new AppError('Invalid password. Please check your credentials.', 401, {
-        code: 'INVALID_PASSWORD',
-      });
-    }
-
-    const token = jwt.sign(
-      { id: user._id, email: user.email, role: user.role },
-      config.env.jwtSecret,
-      { expiresIn: config.env.jwtExpiresIn as any }
-    );
+    // Ensure user profile exists in our table
+    const profile = await this.userRepo.upsert({
+      id: data.user.id,
+      name: data.user.user_metadata?.name || 'User',
+      email: normalizedEmail,
+      role: data.user.user_metadata?.role || 'ADMIN',
+    });
 
     return {
-      token,
       user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        eventName: user.eventName,
-        role: user.role,
+        id: data.user.id,
+        name: profile?.name || data.user.user_metadata?.name || 'User',
+        email: normalizedEmail,
+        role: profile?.role || 'ADMIN',
       },
+      token: data.session.access_token,
     };
   }
 
-  async changePassword(userId: string, currentPassword: string, newPassword: string) {
-    if (!currentPassword) {
-      throw new AppError('Current password is required.', 400);
-    }
-    if (!newPassword || newPassword.length < 6) {
-      throw new AppError('New password must be at least 6 characters long.', 400);
-    }
-
-    // Handle dev fallback mock admin user
-    if (userId === 'dev-admin-id-001' || userId.startsWith('dev-user-')) {
-      return { message: 'Password updated successfully.' };
-    }
-
-    const user = await this.userRepo.findById(userId);
-    if (!user) {
-      throw new AppError('User not found.', 404);
-    }
-
-    const isMatch = await bcrypt.compare(currentPassword, user.passwordHash);
-    if (!isMatch) {
-      throw new AppError('Current password does not match.', 400, {
-        code: 'INVALID_CURRENT_PASSWORD',
-      });
-    }
-
-    const newPasswordHash = await bcrypt.hash(newPassword, 10);
-    await this.userRepo.updatePassword(userId, newPasswordHash);
-
-    return { message: 'Password updated successfully.' };
-  }
-
   async getMe(userId: string) {
-    if (userId === 'dev-admin-id-001' || userId.startsWith('dev-user-')) {
-      return {
-        id: userId,
-        name: 'Administrator',
-        email: 'admin@ticketification.com',
-        eventName: 'Ticketification 2026',
-        role: 'ADMIN',
-      };
-    }
-
     const user = await this.userRepo.findById(userId);
     if (!user) {
-      throw new AppError('User not found.', 404);
+      throw new AppError('User profile not found.', 404);
     }
     return {
-      id: user._id,
+      id: user.id,
       name: user.name,
       email: user.email,
-      eventName: user.eventName,
       role: user.role,
     };
   }

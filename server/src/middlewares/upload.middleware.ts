@@ -25,10 +25,10 @@ export const uploadExcel = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: (_req, file, cb) => {
-    const allowedExts = ['.xlsx', '.xls'];
+    const allowedExts = ['.xlsx', '.xls', '.csv'];
     const ext = path.extname(file.originalname).toLowerCase();
     if (!allowedExts.includes(ext)) {
-      return cb(new AppError('Invalid file type. Only Excel (.xlsx, .xls) files are supported.', 400));
+      return cb(new AppError('Invalid file type. Only Excel (.xlsx, .xls) and CSV (.csv) files are supported.', 400));
     }
     cb(null, true);
   },

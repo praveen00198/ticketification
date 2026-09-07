@@ -1,7 +1,20 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Ticket, QrCode, LayoutDashboard, FileSpreadsheet, LogOut, Menu, X, KeyRound } from 'lucide-react';
+import {
+  Ticket,
+  QrCode,
+  LayoutDashboard,
+  FileSpreadsheet,
+  LogOut,
+  Menu,
+  X,
+  KeyRound,
+  Calendar,
+  ChevronDown,
+  Plus,
+} from 'lucide-react';
 import { ChangePasswordModal } from '../auth/ChangePasswordModal';
+import { useEvent } from '../../context/EventContext';
 
 interface HeaderProps {
   user: { name: string; email: string } | null;
@@ -11,11 +24,15 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { events, currentEvent, setCurrentEvent } = useEvent();
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [eventMenuOpen, setEventMenuOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   const navItems = [
     { label: 'Dashboard', path: '/', icon: LayoutDashboard },
+    { label: 'Events', path: '/events', icon: Calendar },
     { label: 'Import Guests', path: '/import', icon: FileSpreadsheet },
     { label: 'View Tickets', path: '/tickets', icon: Ticket },
   ];
@@ -24,15 +41,82 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
     <>
       <header className="bg-surface-charcoal text-white border-b border-zinc-800 sticky top-0 z-50 shadow-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          {/* Brand */}
-          <Link to="/" className="flex items-center gap-2">
-            <div className="bg-brand-600 p-2 rounded-full flex items-center justify-center text-white">
-              <Ticket className="w-5 h-5" />
+          {/* Left: Brand & Event Switcher */}
+          <div className="flex items-center gap-4">
+            <Link to="/" className="flex items-center gap-2 shrink-0">
+              <div className="bg-brand-600 p-2 rounded-full flex items-center justify-center text-white">
+                <Ticket className="w-5 h-5" />
+              </div>
+              <span className="font-extrabold text-xl tracking-wide hidden sm:inline">
+                Ticketification<span className="text-brand-500">.</span>
+              </span>
+            </Link>
+
+            {/* Event Dropdown Switcher */}
+            <div className="relative">
+              <button
+                onClick={() => setEventMenuOpen(!eventMenuOpen)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-700/80 text-xs font-semibold text-zinc-200 hover:border-brand-500 hover:text-white transition-all max-w-[200px] sm:max-w-[260px]"
+              >
+                <Calendar className="w-3.5 h-3.5 text-brand-400 shrink-0" />
+                <span className="truncate">
+                  {currentEvent ? currentEvent.name : 'Select Event'}
+                </span>
+                <ChevronDown className="w-3.5 h-3.5 text-zinc-400 shrink-0 ml-auto" />
+              </button>
+
+              {eventMenuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setEventMenuOpen(false)}
+                  />
+                  <div className="absolute left-0 mt-2 w-64 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95">
+                    <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-zinc-400 border-b border-zinc-800">
+                      Select Active Event
+                    </div>
+                    <div className="max-h-56 overflow-y-auto py-1 space-y-1">
+                      {events.length === 0 ? (
+                        <div className="px-2 py-3 text-center text-xs text-zinc-500">
+                          No events found
+                        </div>
+                      ) : (
+                        events.map((e) => (
+                          <button
+                            key={e.id}
+                            onClick={() => {
+                              setCurrentEvent(e);
+                              setEventMenuOpen(false);
+                            }}
+                            className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center justify-between transition-colors ${
+                              currentEvent?.id === e.id
+                                ? 'bg-brand-500/20 text-brand-300 font-bold border border-brand-500/30'
+                                : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                            }`}
+                          >
+                            <span className="truncate">{e.name}</span>
+                            <span className="text-[10px] text-zinc-500 ml-2 shrink-0">{e.date}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                    <div className="pt-1 border-t border-zinc-800">
+                      <button
+                        onClick={() => {
+                          setEventMenuOpen(false);
+                          navigate('/events');
+                        }}
+                        className="w-full text-left px-2 py-1.5 rounded-lg text-xs font-bold text-brand-400 hover:bg-zinc-800 flex items-center gap-1.5"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Manage & Create Events</span>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
-            <span className="font-extrabold text-xl tracking-wide">
-              Ticketification<span className="text-brand-500">.</span>
-            </span>
-          </Link>
+          </div>
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-1">
@@ -43,13 +127,13 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
                     isActive
                       ? 'bg-zinc-800 text-white font-bold border border-zinc-700 shadow-inner'
                       : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
                   }`}
                 >
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-brand-500' : ''}`} />
+                  <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-brand-500' : ''}`} />
                   {item.label}
                 </Link>
               );
@@ -60,9 +144,9 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate('/scan')}
-              className="bg-brand-600 hover:bg-brand-700 text-white text-xs sm:text-sm font-bold px-3.5 py-2 rounded-lg transition-all shadow-sm flex items-center gap-2 border border-brand-500/30"
+              className="bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-all shadow-sm flex items-center gap-1.5 border border-brand-500/30 active:scale-95"
             >
-              <QrCode className="w-4 h-4" />
+              <QrCode className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Scan & Verify</span>
               <span className="sm:hidden">Scan</span>
             </button>
@@ -76,14 +160,14 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
                 <button
                   onClick={() => setIsChangePasswordOpen(true)}
                   title="Change Password"
-                  className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-md transition-colors"
+                  className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-md transition-colors"
                 >
                   <KeyRound className="w-4 h-4" />
                 </button>
                 <button
                   onClick={onLogout}
                   title="Logout"
-                  className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-md transition-colors"
+                  className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-md transition-colors"
                 >
                   <LogOut className="w-4 h-4" />
                 </button>
@@ -112,7 +196,7 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
                   key={item.path}
                   to={item.path}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`w-full px-3 py-2.5 rounded-md text-sm font-medium flex items-center gap-2.5 ${
+                  className={`w-full px-3 py-2 rounded-md text-xs font-semibold flex items-center gap-2 ${
                     isActive
                       ? 'bg-zinc-800 text-white font-bold'
                       : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
@@ -160,4 +244,3 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
     </>
   );
 };
-

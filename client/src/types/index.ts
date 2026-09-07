@@ -6,6 +6,32 @@ export interface User {
   role: 'ADMIN';
 }
 
+export interface TicketType {
+  id: string;
+  eventId: string;
+  name: string;
+  label: string;
+  usagePolicy: 'SINGLE_USE' | 'REUSABLE_WORKER' | string;
+  createdAt: string;
+}
+
+export interface EventItem {
+  id: string;
+  name: string;
+  date: string;
+  time?: string | null;
+  venue?: string | null;
+  description?: string | null;
+  organizerName?: string | null;
+  logoUrl?: string | null;
+  ticketTemplateUrl?: string | null;
+  status: 'UPCOMING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED' | string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  ticketTypes?: TicketType[];
+}
+
 export type DeliveryProvider = 'WHATSAPP' | 'EMAIL';
 export type DeliveryStatus = 'PENDING' | 'SENDING' | 'SENT' | 'FAILED';
 

@@ -1,29 +1,16 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import fs from 'fs';
 import config from '../../../config/env';
+import { supabaseAdmin } from '../../../config/supabase';
 
 export class SupabaseStorageService {
-  private client: SupabaseClient | null = null;
   private bucket: string;
 
   constructor() {
     this.bucket = config.env.supabaseBucket || 'ticket-images';
-    if (config.env.supabaseUrl && config.env.supabaseKey) {
-      try {
-        this.client = createClient(config.env.supabaseUrl, config.env.supabaseKey, {
-          auth: {
-            persistSession: false,
-            autoRefreshToken: false,
-          },
-        });
-      } catch (err) {
-        console.warn('[SupabaseStorageService] Failed to initialize Supabase client:', err);
-      }
-    }
   }
 
   public isConfigured(): boolean {
-    return !!(this.client && config.env.supabaseUrl && config.env.supabaseKey);
+    return !!(supabaseAdmin && config.env.supabaseUrl);
   }
 
   /**
@@ -35,7 +22,7 @@ export class SupabaseStorageService {
     fileData: Buffer | string,
     contentType: string = 'image/png'
   ): Promise<string | null> {
-    if (!this.client) {
+    if (!supabaseAdmin) {
       return null;
     }
 
@@ -64,15 +51,15 @@ export class SupabaseStorageService {
 
       // Ensure bucket exists (ignoring duplicate error if already exists)
       try {
-        await this.client.storage.createBucket(this.bucket, {
+        await supabaseAdmin.storage.createBucket(this.bucket, {
           public: true,
         });
       } catch (_bucketErr) {
-        // Bucket already exists or insufficient permission to create
+        // Bucket already exists or handled
       }
 
       // Upload file to Supabase Storage with upsert
-      const { data, error } = await this.client.storage
+      const { data, error } = await supabaseAdmin.storage
         .from(this.bucket)
         .upload(fileName, buffer, {
           contentType: mimeType,
@@ -85,7 +72,7 @@ export class SupabaseStorageService {
       }
 
       // Retrieve public URL
-      const { data: urlData } = this.client.storage.from(this.bucket).getPublicUrl(data.path);
+      const { data: urlData } = supabaseAdmin.storage.from(this.bucket).getPublicUrl(data.path);
       return urlData.publicUrl || null;
     } catch (err: any) {
       console.warn(`[SupabaseStorageService] Exception during upload for ${fileName}:`, err.message);

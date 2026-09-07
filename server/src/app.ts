@@ -7,7 +7,7 @@ import guestRoutes from './modules/guests/routes/guest.routes';
 import ticketRoutes from './modules/tickets/routes/ticket.routes';
 import verificationRoutes from './modules/verification/routes/verification.routes';
 import dashboardRoutes from './modules/dashboard/routes/dashboard.routes';
-import webhookRoutes from './modules/delivery/routes/webhook.routes';
+import eventRoutes from './modules/events/routes/event.routes';
 import { ticketService } from './modules/tickets/services/ticket.service';
 import { qrService } from './modules/tickets/services/qr.service';
 import { ticketImageService } from './modules/tickets/services/ticket-image.service';
@@ -26,10 +26,7 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
       if (!origin) return callback(null, true);
-
-      // Allow if explicit match, vercel preview/prod domain, or wildcard
       if (
         allowedOrigins.includes(origin) ||
         origin.endsWith('.vercel.app') ||
@@ -38,8 +35,6 @@ app.use(
       ) {
         return callback(null, true);
       }
-
-      // Default fallback in case user hasn't set custom domain yet
       return callback(null, true);
     },
     credentials: true,
@@ -60,52 +55,6 @@ app.get('/uploads/tickets/:filename', async (req, res) => {
     return res.sendFile(filePath);
   }
 
-  // Extract potential ticketId: e.g. "ticket-GACH-00004.png", "GACH-00004.png", or "Praveen_GACH-00004.png"
-  const filenameWithoutExt = req.params.filename.replace(/\.(png|svg|html|jpg|jpeg)$/i, '');
-  const possibleTicketIds = [
-    filenameWithoutExt.replace(/^ticket-/, ''),
-    filenameWithoutExt.split('_').pop() || '',
-    filenameWithoutExt,
-  ].filter(Boolean);
-
-  try {
-    let ticket: any = null;
-    for (const idToTry of possibleTicketIds) {
-      ticket = await ticketService.getTicketById(idToTry);
-      if (ticket) break;
-    }
-
-    if (ticket) {
-      // 1. If imageBase64 is in MongoDB, stream it with its MIME type
-      if (ticket.imageBase64 && ticket.imageBase64.startsWith('data:image/')) {
-        const matchType = ticket.imageBase64.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
-        if (matchType) {
-          const mimeType = matchType[1];
-          const buffer = Buffer.from(matchType[2], 'base64');
-          res.setHeader('Content-Type', mimeType);
-          return res.send(buffer);
-        }
-      }
-
-      // 2. Otherwise generate crisp SVG on the fly from MongoDB ticket record
-      const qrDataUrl = await qrService.generateQrDataUrl(ticket.verificationToken);
-      const svgContent = ticketImageService.buildSvg({
-        ticketId: ticket.ticketId,
-        guestName: ticket.name,
-        eventName: ticket.event,
-        eventDate: '',
-        ticketType: ticket.ticketType,
-        qrCodeDataUrl: qrDataUrl,
-        organization: ticket.organization,
-        phone: ticket.phone,
-      });
-      res.setHeader('Content-Type', 'image/svg+xml');
-      return res.send(svgContent);
-    }
-  } catch (err) {
-    console.warn(`[OnDemandImageGen] Error rendering image for ${req.params.filename}:`, err);
-  }
-
   return res.status(404).send('Ticket image not found');
 });
 
@@ -113,12 +62,12 @@ app.use('/uploads', express.static(uploadsPath));
 
 // REST API Base Router
 app.use('/api/auth', authRoutes);
+app.use('/api/events', eventRoutes);
 app.use('/api/guests', guestRoutes);
+app.use('/api/verify', verificationRoutes);
 app.use('/api/tickets', verificationRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/dashboard', dashboardRoutes);
-// WhatsApp Webhook (no auth — Meta sends verification & status callbacks here)
-app.use('/api/webhook', webhookRoutes);
 
 // Health check endpoint
 app.get('/api/health', (_req, res) => {
