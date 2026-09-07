@@ -1,164 +1,180 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Html5Qrcode } from 'html5-qrcode';
-import { Camera, KeyRound, AlertCircle, RefreshCw } from 'lucide-react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { Html5Qrcode, CameraDevice } from 'html5-qrcode';
+import { Camera, AlertCircle, RefreshCw, CameraOff } from 'lucide-react';
 
 interface QrScannerProps {
   onScanSuccess: (scannedText: string) => void;
 }
 
 export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
-  const [manualToken, setManualToken] = useState('');
+  const [cameras, setCameras] = useState<CameraDevice[]>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState<string>('');
+  const [isScanning, setIsScanning] = useState(false);
   const [scannerError, setScannerError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
 
-  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
   const isCooldownRef = useRef(false);
+  const containerId = useRef(`qr-viewport-${Math.random().toString(36).substring(2, 9)}`).current;
+
+  const onScanSuccessRef = useRef(onScanSuccess);
+  onScanSuccessRef.current = onScanSuccess;
+
+  const stopScanner = useCallback(async () => {
+    if (scannerRef.current) {
+      try {
+        if (scannerRef.current.isScanning) {
+          await scannerRef.current.stop();
+        }
+        scannerRef.current.clear();
+      } catch (_e) {}
+      scannerRef.current = null;
+    }
+    setIsScanning(false);
+  }, []);
+
+  const startCamera = useCallback(async (cameraId?: string) => {
+    setIsInitializing(true);
+    setScannerError(null);
+
+    // Clean up any existing scanner instance first
+    await stopScanner();
+
+    try {
+      const containerEl = document.getElementById(containerId);
+      if (!containerEl) return;
+
+      const html5QrCode = new Html5Qrcode(containerId);
+      scannerRef.current = html5QrCode;
+
+      // Query available cameras
+      let devices: CameraDevice[] = [];
+      try {
+        devices = await Html5Qrcode.getCameras();
+        if (devices && devices.length > 0) {
+          setCameras(devices);
+        }
+      } catch (_e) {}
+
+      const scanConfig = {
+        fps: 15,
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0,
+      };
+
+      const handleDecoded = (decodedText: string) => {
+        if (isCooldownRef.current) return;
+        isCooldownRef.current = true;
+        onScanSuccessRef.current(decodedText);
+        setTimeout(() => {
+          isCooldownRef.current = false;
+        }, 1800);
+      };
+
+      if (cameraId) {
+        await html5QrCode.start(cameraId, scanConfig, handleDecoded, () => {});
+        setSelectedCameraId(cameraId);
+      } else if (devices && devices.length > 0) {
+        const backCamera = devices.find((d) =>
+          /back|rear|environment|wide|0, facing back/i.test(d.label)
+        ) || devices[0];
+
+        setSelectedCameraId(backCamera.id);
+        await html5QrCode.start(backCamera.id, scanConfig, handleDecoded, () => {});
+      } else {
+        await html5QrCode.start({ facingMode: 'environment' }, scanConfig, handleDecoded, () => {});
+      }
+
+      setIsScanning(true);
+    } catch (err: any) {
+      console.warn('[QrScanner] Camera start error:', err);
+      const errMsg =
+        err?.name === 'NotAllowedError' || err?.message?.includes('Permission')
+          ? 'Camera access permission denied. Please allow camera permissions in your browser.'
+          : err?.name === 'NotReadableError' || err?.message?.includes('busy')
+          ? 'Camera is in use by another tab or app. Please close other camera tabs and tap Retry.'
+          : err?.message || 'Unable to access camera.';
+      setScannerError(errMsg);
+      setIsScanning(false);
+    } finally {
+      setIsInitializing(false);
+    }
+  }, [containerId, stopScanner]);
 
   useEffect(() => {
-    let isMounted = true;
-    const elementId = 'qr-reader-viewport';
-
-    const initScanner = async () => {
-      setIsInitializing(true);
-      setScannerError(null);
-
-      try {
-        // Ensure DOM element is present
-        const viewportEl = document.getElementById(elementId);
-        if (!viewportEl) return;
-
-        const scannerInstance = new Html5Qrcode(elementId);
-        html5QrCodeRef.current = scannerInstance;
-
-        const scanConfig = {
-          fps: 15,
-          qrbox: { width: 250, height: 250 },
-          aspectRatio: 1.0,
-        };
-
-        const onScan = (decodedText: string) => {
-          if (isCooldownRef.current) return;
-          isCooldownRef.current = true;
-          onScanSuccess(decodedText);
-          setTimeout(() => {
-            isCooldownRef.current = false;
-          }, 1800);
-        };
-
-        // Multi-level robust camera startup with rear/environment priority
-        let started = false;
-
-        // Attempt 1: Standard environment facingMode constraint (works on iOS & Android Chrome)
-        try {
-          await scannerInstance.start({ facingMode: 'environment' }, scanConfig, onScan, () => {});
-          started = true;
-        } catch (attempt1Err) {
-          console.warn('Attempt 1 (facingMode: environment) failed:', attempt1Err);
-        }
-
-        // Attempt 2: Query camera devices and select back camera ID
-        if (!started && isMounted) {
-          try {
-            const devices = await Html5Qrcode.getCameras();
-            if (devices && devices.length > 0) {
-              const backCamera = devices.find((d) =>
-                /back|rear|environment|wide|triple|dual|0, facing back/i.test(d.label)
-              ) || devices[devices.length - 1];
-
-              await scannerInstance.start(backCamera.id, scanConfig, onScan, () => {});
-              started = true;
-            }
-          } catch (attempt2Err) {
-            console.warn('Attempt 2 (Device ID) failed:', attempt2Err);
-          }
-        }
-
-        // Attempt 3: Fallback to any available camera
-        if (!started && isMounted) {
-          await scannerInstance.start({ facingMode: 'user' }, scanConfig, onScan, () => {});
-          started = true;
-        }
-      } catch (err: any) {
-        console.error('Camera initialization error:', err);
-        if (isMounted) {
-          const errMsg =
-            err?.name === 'NotAllowedError' || err?.message?.includes('Permission')
-              ? 'Camera access permission was denied. Please allow camera permissions in your browser settings.'
-              : err?.name === 'NotReadableError' || err?.message?.includes('busy')
-              ? 'Camera is in use by another app or tab. Please tap Retry.'
-              : err?.message || 'Unable to start camera scanner. Please tap Retry or use manual entry below.';
-          setScannerError(errMsg);
-        }
-      } finally {
-        if (isMounted) {
-          setIsInitializing(false);
-        }
+    let mounted = true;
+    const timer = setTimeout(() => {
+      if (mounted) {
+        startCamera();
       }
-    };
+    }, 150);
 
-    initScanner();
-
-    // Clean up camera stream completely when scanner unmounts
     return () => {
-      isMounted = false;
-      if (html5QrCodeRef.current) {
-        if (html5QrCodeRef.current.isScanning) {
-          html5QrCodeRef.current
-            .stop()
-            .then(() => {
-              try {
-                html5QrCodeRef.current?.clear();
-              } catch {}
-            })
-            .catch(() => {});
-        } else {
-          try {
-            html5QrCodeRef.current.clear();
-          } catch {}
-        }
-      }
+      mounted = false;
+      clearTimeout(timer);
+      stopScanner();
     };
-  }, [onScanSuccess]);
+  }, []);
 
-  const handleManualSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (manualToken.trim()) {
-      onScanSuccess(manualToken.trim());
-      setManualToken('');
-    }
-  };
-
-  const handleRetryCamera = () => {
-    setScannerError(null);
-    setIsInitializing(true);
-    if (html5QrCodeRef.current) {
-      if (html5QrCodeRef.current.isScanning) {
-        html5QrCodeRef.current.stop().catch(() => {}).finally(() => {
-          try { html5QrCodeRef.current?.clear(); } catch {}
-          window.location.reload();
-        });
-        return;
-      }
-    }
-    window.location.reload();
+  const handleSwitchCamera = (newId: string) => {
+    startCamera(newId);
   };
 
   return (
-    <div className="w-full max-w-lg mx-auto bg-white rounded-2xl border border-surface-border p-6 shadow-md">
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-4 text-surface-charcoal">
-        <Camera className="w-5 h-5 text-brand-600" />
-        <h3 className="font-extrabold text-lg">Event Camera Scanner</h3>
+    <div className="w-full space-y-3">
+      {/* Scanner Header & Controls */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Camera className="w-4 h-4 text-brand-600" />
+          <span className="text-xs font-bold text-zinc-900">Live Camera Feed</span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {cameras.length > 1 && (
+            <select
+              value={selectedCameraId}
+              onChange={(e) => handleSwitchCamera(e.target.value)}
+              className="text-[11px] font-semibold bg-zinc-100 border border-zinc-200 rounded-lg px-2 py-1 text-zinc-800 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            >
+              {cameras.map((c, idx) => (
+                <option key={c.id} value={c.id}>
+                  {c.label || `Camera ${idx + 1}`}
+                </option>
+              ))}
+            </select>
+          )}
+
+          <button
+            onClick={() => (isScanning ? stopScanner() : startCamera(selectedCameraId))}
+            className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-lg border transition-colors ${
+              isScanning
+                ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+                : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+            }`}
+          >
+            {isScanning ? (
+              <>
+                <CameraOff className="w-3.5 h-3.5" />
+                <span>Pause</span>
+              </>
+            ) : (
+              <>
+                <Camera className="w-3.5 h-3.5" />
+                <span>Start</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {scannerError && (
-        <div className="mb-4 bg-amber-50 border border-amber-200 text-amber-900 text-xs p-3 rounded-lg flex items-center justify-between gap-2">
+        <div className="bg-amber-50 border border-amber-200 text-amber-900 text-xs p-3 rounded-xl flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
             <span>{scannerError}</span>
           </div>
           <button
-            onClick={handleRetryCamera}
+            onClick={() => startCamera(selectedCameraId)}
             className="px-2.5 py-1 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded text-[11px] shrink-0"
           >
             Retry
@@ -166,38 +182,15 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
         </div>
       )}
 
-      {/* Camera Viewport Container */}
-      <div className="relative rounded-xl overflow-hidden border-2 border-zinc-900 bg-zinc-950 min-h-[300px] flex items-center justify-center">
+      {/* Camera Viewport */}
+      <div className="relative rounded-2xl overflow-hidden border border-zinc-300 bg-black min-h-[300px] flex items-center justify-center shadow-inner">
         {isInitializing && (
-          <div className="absolute inset-0 z-10 bg-zinc-950 flex flex-col items-center justify-center gap-2 text-zinc-400 text-xs">
+          <div className="absolute inset-0 z-10 bg-black/80 backdrop-blur-xs flex flex-col items-center justify-center gap-2 text-zinc-300 text-xs">
             <RefreshCw className="w-6 h-6 animate-spin text-brand-500" />
-            <span>Connecting to rear device camera...</span>
+            <span>Connecting to camera stream...</span>
           </div>
         )}
-        <div id="qr-reader-viewport" className="w-full h-full" />
-      </div>
-
-      {/* Manual Entry Fallback */}
-      <div className="mt-6 pt-6 border-t border-surface-border">
-        <div className="text-xs font-semibold text-surface-muted uppercase mb-3 flex items-center gap-1.5">
-          <KeyRound className="w-4 h-4 text-zinc-400" /> Manual Token or Ticket ID Entry
-        </div>
-        <form onSubmit={handleManualSubmit} className="flex gap-2">
-          <input
-            type="text"
-            placeholder="Paste Token or Enter Ticket ID (e.g. EVT26-000001)"
-            value={manualToken}
-            onChange={(e) => setManualToken(e.target.value)}
-            className="flex-1 px-3.5 py-2.5 bg-white border border-zinc-300 rounded-lg text-sm text-zinc-900 placeholder:text-zinc-400 font-mono focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm"
-          />
-          <button
-            type="submit"
-            disabled={!manualToken.trim()}
-            className="bg-surface-charcoal hover:bg-black text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors disabled:opacity-50"
-          >
-            Verify
-          </button>
-        </form>
+        <div id={containerId} className="w-full h-full [&_video]:w-full [&_video]:h-full [&_video]:object-cover" />
       </div>
     </div>
   );
