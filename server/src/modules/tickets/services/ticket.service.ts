@@ -51,13 +51,29 @@ export class TicketService {
       };
     }
 
-    // 3. Fetch ticket types
-    const ticketTypes = await this.ticketTypeRepo.findByEventId(eventId);
+    // 3. Fetch ticket types (auto-seed default types if none exist)
+    let ticketTypes = await this.ticketTypeRepo.findByEventId(eventId);
+    if (ticketTypes.length === 0) {
+      const defaultTypes = [
+        { name: 'GENERAL', label: 'General Guest', usagePolicy: 'SINGLE_USE' },
+        { name: 'VIP', label: 'VIP Guest', usagePolicy: 'SINGLE_USE' },
+        { name: 'WORKER', label: 'Event Staff / Worker', usagePolicy: 'REUSABLE_WORKER' },
+        { name: 'SPEAKER', label: 'Speaker / Guest of Honor', usagePolicy: 'SINGLE_USE' },
+        { name: 'ORGANIZER', label: 'Event Organizer', usagePolicy: 'SINGLE_USE' },
+      ].map((t) => ({
+        eventId,
+        name: t.name,
+        label: t.label,
+        usagePolicy: t.usagePolicy,
+      }));
+      ticketTypes = await this.ticketTypeRepo.createMany(defaultTypes);
+    }
+
     const typeMap = new Map(ticketTypes.map((t) => [t.name.toUpperCase(), t]));
     const defaultType = ticketTypes.find((t) => t.name === 'GENERAL') || ticketTypes[0];
 
     if (!defaultType) {
-      throw new AppError('No ticket types configured for this event.', 400);
+      throw new AppError('Unable to resolve ticket type for this event.', 500);
     }
 
     let nextSeq = await this.ticketRepo.getNextSequenceNumber(eventId);

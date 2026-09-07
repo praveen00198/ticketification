@@ -172,7 +172,18 @@ export class EventService {
       throw new AppError('Access denied: You do not own this event', 403);
     }
 
-    return await this.ticketTypeRepo.findByEventId(eventId);
+    let types = await this.ticketTypeRepo.findByEventId(eventId);
+    if (types.length === 0) {
+      const defaultTypes = DEFAULT_TICKET_TYPES.map((t) => ({
+        eventId,
+        name: t.name,
+        label: t.label,
+        usagePolicy: t.usagePolicy,
+      }));
+      types = await this.ticketTypeRepo.createMany(defaultTypes);
+    }
+
+    return types;
   }
 }
 
