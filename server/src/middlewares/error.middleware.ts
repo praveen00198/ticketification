@@ -19,10 +19,25 @@ export function errorHandler(
   _next: NextFunction
 ): void {
   const statusCode = err instanceof AppError ? err.statusCode : 500;
-  const message = err.message || 'An unexpected internal server error occurred.';
+  let message = err.message || 'An unexpected internal server error occurred.';
   const details = err instanceof AppError ? err.details : undefined;
 
   console.error(`[API Error] ${req.method} ${req.path} - ${statusCode}: ${message}`, err.stack);
+
+  // Map low-level technical errors (e.g., socket, IPv6, network, raw DB) to user-friendly messages
+  if (
+    message.includes('ENETUNREACH') ||
+    message.includes('ECONNREFUSED') ||
+    message.includes('ETIMEDOUT') ||
+    message.includes('ECONNRESET') ||
+    message.includes('getaddrinfo')
+  ) {
+    message = 'Database or network service is currently unreachable. Please check your connection or try again in a moment.';
+  } else if (message.includes('relation') && message.includes('does not exist')) {
+    message = 'Database service initialization error. Please contact the administrator.';
+  } else if (statusCode === 500 && !(err instanceof AppError)) {
+    message = 'A server error occurred. Please try again or contact support.';
+  }
 
   res.status(statusCode).json({
     success: false,
@@ -32,3 +47,4 @@ export function errorHandler(
     },
   });
 }
+

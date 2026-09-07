@@ -47,10 +47,27 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (response) => response.data,
   (error) => {
-    const message =
-      error.response?.data?.error?.message ||
-      error.message ||
-      'An unexpected network or server error occurred.';
+    let message = error.response?.data?.error?.message;
+    if (!message) {
+      if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
+        message = 'Unable to connect to the server. Please check your internet connection and try again.';
+      } else if (error.message?.includes('timeout') || error.code === 'ECONNABORTED') {
+        message = 'The server took too long to respond. Please try again.';
+      } else {
+        message = error.message || 'An unexpected network error occurred.';
+      }
+    }
+
+    // Clean up any residual low-level networking strings
+    if (
+      message.includes('ENETUNREACH') ||
+      message.includes('ECONNREFUSED') ||
+      message.includes('ETIMEDOUT') ||
+      message.includes('ECONNRESET')
+    ) {
+      message = 'The service is temporarily unreachable. Please try again in a few moments.';
+    }
+
     return Promise.reject(new Error(message));
   }
 );
