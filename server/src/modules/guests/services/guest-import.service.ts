@@ -408,7 +408,7 @@ export class GuestImportService {
       categoryMapping: config.categoryMapping,
       validRows: validCount,
       invalidRows: invalidCount,
-      status: 'VALIDATED',
+      status: 'READY',
       errorReport: errors.slice(0, 100), // persist sample of errors
     });
 
