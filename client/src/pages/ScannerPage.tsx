@@ -69,8 +69,14 @@ export const ScannerPage: React.FC = () => {
     setWorkerNameInput('');
 
     try {
-      const res = await verifyApi.lookupToken(token, currentEvent?.id);
+      // Authoritative combined scan & auto check-in on the server
+      const res = await verifyApi.scanTicket(token, currentEvent?.id);
       setScanResult(res);
+
+      if (res.status === 'VALID' || res.status === 'VALID_WORKER') {
+        setCheckInSuccess(res.message);
+        await fetchRecentCheckins();
+      }
     } catch (err: any) {
       setScanResult({
         status: 'INVALID',
@@ -81,10 +87,11 @@ export const ScannerPage: React.FC = () => {
     }
   };
 
-  const handleCheckIn = async () => {
+  const handleAssignWorkerAndCheckIn = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!scannedToken || !currentEvent) return;
 
-    if (scanResult?.status === 'UNASSIGNED_WORKER' && !workerNameInput.trim()) {
+    if (!workerNameInput.trim()) {
       setCheckInError('Please enter the worker/staff member name before checking in.');
       return;
     }
@@ -92,35 +99,15 @@ export const ScannerPage: React.FC = () => {
     setCheckingIn(true);
     setCheckInError(null);
     try {
-      const res = await verifyApi.checkIn(
+      const res = await verifyApi.scanTicket(
         scannedToken,
         currentEvent.id,
-        workerNameInput.trim() || undefined
+        workerNameInput.trim()
       );
 
+      setScanResult(res);
       setCheckInSuccess(res.message);
       await fetchRecentCheckins();
-
-      // Update local state to reflect check-in
-      if (res.status === 'VALID') {
-        setScanResult({
-          status: 'ALREADY_USED',
-          message: 'Single-use ticket has already been checked in.',
-          ticket: {
-            ...scanResult?.ticket!,
-            lastCheckinTime: new Date().toISOString(),
-          },
-        });
-      } else if (res.status === 'VALID_WORKER') {
-        setScanResult({
-          status: 'VALID_WORKER',
-          message: 'Worker entry recorded.',
-          ticket: {
-            ...scanResult?.ticket!,
-            name: res.workerName || scanResult?.ticket?.name || 'Staff',
-          },
-        });
-      }
     } catch (err: any) {
       setCheckInError(err.message || 'Check-in failed.');
     } finally {
@@ -192,6 +179,49 @@ export const ScannerPage: React.FC = () => {
           <div className="bg-white border border-surface-border rounded-2xl p-4 overflow-hidden shadow-sm">
             <QrScanner onScanSuccess={handleScanSuccess} />
           </div>
+
+          {/* Real-Time Scan Status Feed (Always visible without scrolling) */}
+          {verifying && (
+            <div className="p-3 bg-brand-50 border border-brand-200 text-brand-800 text-xs font-bold rounded-2xl flex items-center justify-center gap-2 shadow-xs animate-pulse">
+              <RefreshCw className="w-4 h-4 animate-spin text-brand-600" />
+              <span>Scanning & validating token...</span>
+            </div>
+          )}
+
+          {!verifying && scanResult && (
+            <div
+              className={`p-3.5 rounded-2xl text-xs font-bold flex items-center justify-between gap-2 shadow-xs border ${
+                scanResult.status === 'VALID' || scanResult.status === 'VALID_WORKER'
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : scanResult.status === 'ALREADY_USED'
+                  ? 'bg-rose-50 text-rose-800 border-rose-200'
+                  : scanResult.status === 'UNASSIGNED_WORKER'
+                  ? 'bg-amber-50 text-amber-800 border-amber-200'
+                  : 'bg-zinc-100 text-zinc-800 border-zinc-200'
+              }`}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                {(scanResult.status === 'VALID' || scanResult.status === 'VALID_WORKER') && (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                )}
+                {scanResult.status === 'ALREADY_USED' && (
+                  <Clock className="w-4 h-4 text-rose-600 shrink-0" />
+                )}
+                {scanResult.status === 'UNASSIGNED_WORKER' && (
+                  <UserPlus className="w-4 h-4 text-amber-600 shrink-0" />
+                )}
+                {(scanResult.status === 'INVALID' || scanResult.status === 'CANCELLED' || scanResult.status === 'WRONG_EVENT') && (
+                  <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                )}
+                <span className="truncate">{scanResult.message}</span>
+              </div>
+              {scanResult.ticket?.name && (
+                <span className="font-semibold text-[11px] opacity-80 shrink-0">
+                  {scanResult.ticket.name}
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Manual Token Input */}
           <div className="bg-white border border-surface-border rounded-2xl p-4 space-y-2 shadow-sm">
@@ -304,7 +334,7 @@ export const ScannerPage: React.FC = () => {
 
                   {scanResult.ticket.lastCheckinTime && (
                     <div className="flex items-center justify-between pt-1 border-t border-zinc-200">
-                      <span className="text-xs text-rose-600 font-semibold">Previous Check-in:</span>
+                      <span className="text-xs text-rose-600 font-semibold">Checked-in Time:</span>
                       <span className="text-xs font-mono text-rose-700">
                         {new Date(scanResult.ticket.lastCheckinTime).toLocaleTimeString()}
                       </span>
@@ -313,21 +343,41 @@ export const ScannerPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Unassigned Worker Name Input */}
+              {/* Unassigned Worker Name Input Form */}
               {scanResult.status === 'UNASSIGNED_WORKER' && (
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-amber-800">
-                    Assign Staff Name (First Entry)
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Enter staff full name..."
-                    value={workerNameInput}
-                    onChange={(e) => setWorkerNameInput(e.target.value)}
-                    className="w-full bg-white border border-amber-300 rounded-xl px-3.5 py-2 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-sm"
-                  />
-                </div>
+                <form onSubmit={handleAssignWorkerAndCheckIn} className="space-y-3">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-amber-800">
+                      Assign Staff Name (First Entry)
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      autoFocus
+                      placeholder="Enter staff full name..."
+                      value={workerNameInput}
+                      onChange={(e) => setWorkerNameInput(e.target.value)}
+                      className="w-full bg-white border border-amber-300 rounded-xl px-3.5 py-2 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-sm"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={checkingIn || !workerNameInput.trim()}
+                    className="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-amber-600/20 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
+                  >
+                    {checkingIn ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Assigning & Checking In...</span>
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus className="w-4 h-4" />
+                        <span>Assign Name & Complete Entry</span>
+                      </>
+                    )}
+                  </button>
+                </form>
               )}
 
               {checkInSuccess && (
@@ -342,39 +392,6 @@ export const ScannerPage: React.FC = () => {
                   <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
                   <span>{checkInError}</span>
                 </div>
-              )}
-
-              {/* Check-In Action Buttons */}
-              {(scanResult.status === 'VALID' ||
-                scanResult.status === 'VALID_WORKER' ||
-                scanResult.status === 'UNASSIGNED_WORKER') && (
-                <button
-                  onClick={handleCheckIn}
-                  disabled={checkingIn}
-                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
-                >
-                  {checkingIn ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Checking In...</span>
-                    </>
-                  ) : scanResult.status === 'UNASSIGNED_WORKER' ? (
-                    <>
-                      <UserPlus className="w-4 h-4" />
-                      <span>Assign Name & Check In</span>
-                    </>
-                  ) : scanResult.status === 'VALID_WORKER' ? (
-                    <>
-                      <UserCheck className="w-4 h-4" />
-                      <span>Record Worker Entry</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Check In Guest</span>
-                    </>
-                  )}
-                </button>
               )}
             </div>
           ) : (

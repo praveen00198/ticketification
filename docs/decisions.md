@@ -61,3 +61,24 @@
 - **Decision**: Use Remix Icon for the icon system.
 - **Reason**: Explicit requirement. Consistent visual language. Single icon library prevents mixed styles.
 - **Consequence**: Remove lucide-react dependency, add remixicon CSS.
+
+## Decision 012: Enforce Canonical Supabase Storage Pipeline & Remove Ephemeral Render Storage
+- **Decision**: Eliminate local disk writes and ephemeral Render filesystem URLs (`/uploads/...`) for ticket assets. All generated ticket SVGs must be uploaded directly to Supabase Storage before database records are inserted.
+- **Reason**: Render containers have ephemeral storage; tickets saved to disk were erased on spin-down/restart, causing 404s. The Supabase upload errors were previously swallowed, creating tickets with broken Render URLs while leaving the Supabase bucket empty.
+- **Consequence**:
+  1. `TicketImageService` generates vector SVGs purely in-memory with zero local disk writes.
+  2. `SupabaseStorageService` uploads assets with upsert to `events/<eventId>/tickets/ticket-<displayId>.svg` and throws explicit `AppError` on any failure.
+  3. `TicketService` mandates verified Supabase Storage uploads before database insertion, guaranteeing 100% asset availability.
+  4. Removed `/uploads/tickets/` on-demand local regeneration and static serving middleware from Express `app.ts`.
+
+## Decision 013: Bulk Ticket ZIP Streaming directly from Supabase Storage
+- **Decision**: Stream ticket files directly from the Supabase Storage bucket (`ticket-images`) into a client-downloadable ZIP archive (`<Event-Name>-Tickets.zip`) using batch streaming (chunks of 20), safe filename deduplication, and an embedded CSV manifest.
+- **Reason**: Previous implementation attempted to read local files from `/uploads` which do not exist on ephemeral cloud hosting. Additionally, loading thousands of image buffers in memory simultaneously risked out-of-memory crashes on Node.js.
+- **Consequence**: `TicketService.streamTicketsZip()` streams tickets in chunks, queries Supabase Storage via `downloadTicketImage()`, sanitizes guest filenames (`<Name>.svg`, `<Name>-2.svg`), and includes `tickets-manifest.csv`.
+
+## Decision 014: Authoritative Single-Step Atomic QR Scan & Check-In
+- **Decision**: Provide a unified `POST /api/verify/scan` endpoint that performs verification and atomic check-in in a single transaction on the server, eliminating the manual "Checked In" button and scrolling overhead in the mobile scanner UI.
+- **Reason**: The two-step flow (`/verify/lookup` -> user scrolls and taps "Checked In" button -> `/verify/checkin`) slowed down event entrance operations and created race conditions with delayed check-ins.
+- **Consequence**: Scanning a QR code immediately checks in the guest on the server (using atomic conditional SQL for single-use tickets), returns the result instantly, and updates the mobile scanner UI in-place above the fold.
+
+

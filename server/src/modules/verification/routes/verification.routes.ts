@@ -26,6 +26,14 @@ router.post('/verify/checkin', authMiddleware, (req, res, next) =>
   verificationController.checkIn(req, res, next)
 );
 
+// One-action Scan & Auto Check-in endpoint (protected)
+router.post('/scan', authMiddleware, (req, res, next) =>
+  verificationController.scanAndCheckIn(req, res, next)
+);
+router.post('/verify/scan', authMiddleware, (req, res, next) =>
+  verificationController.scanAndCheckIn(req, res, next)
+);
+
 // Recent check-ins live feed
 router.get('/recent/:eventId', authMiddleware, (req, res, next) =>
   verificationController.getRecentCheckins(req, res, next)

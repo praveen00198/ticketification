@@ -48,6 +48,33 @@ export class VerificationController {
     }
   }
 
+  async scanAndCheckIn(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const token = (req.body.token || req.params.token || req.query.token) as string;
+      const eventId = (req.body.eventId || req.query.eventId) as string | undefined;
+      const workerName = req.body.workerName as string | undefined;
+      const verifiedBy = req.user ? req.user.email : 'Admin Scanner';
+
+      if (!token) {
+        throw new AppError('Verification token is required', 400);
+      }
+
+      const result = await verificationService.scanAndCheckIn({
+        token,
+        eventId,
+        workerName,
+        verifiedBy,
+      });
+
+      res.status(200).json({
+        success: true,
+        data: result,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async getRecentCheckins(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const eventId = req.params.eventId as string;

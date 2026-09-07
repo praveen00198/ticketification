@@ -64,15 +64,31 @@ Supabase PostgreSQL with Drizzle ORM. Tables: `users`, `events`, `ticket_types`,
 - Reusable: INSERT into `ticket_checkins` without mutating ticket status
 
 ## Storage Strategy
-Supabase Storage with event-scoped paths: `tickets/<event-id>/<ticket-token>.png`, with local file storage fallback.
+Supabase Storage bucket (`ticket-images`) with event-scoped paths: `events/<event-id>/tickets/ticket-<displayId>.svg`.
+- Vector SVG tickets generated purely in memory.
+- Ephemeral local disk writes and `/uploads/` URLs on Render are eliminated.
+- Supabase upload is verified before PostgreSQL insertion.
+- Existing tickets with legacy `/uploads/` paths are automatically synced/backfilled to Supabase Storage.
 
 ## Completed Work
 - [x] Phase 0: Repository inspection, risk analysis, documentation suite in `docs/`
 - [x] Phase 1: Foundation, Drizzle ORM schema & migrations, Supabase Auth integration, `.env.example` templates
 - [x] Phase 2: Event CRUD, strict user ownership enforcement (403 Forbidden), default ticket types provisioning
 - [x] Phase 3: Smart Guest Import with 5-step wizard, dynamic header detection, column & category mapping, validation engine
-- [x] Phase 4: Deterministic ticket generation, 64-char crypto tokens, sequence numbering (`#00001`), unassigned worker passes, 1620×2025 template rendering
+- [x] Phase 4: Deterministic ticket generation, 64-char crypto tokens, sequence numbering (`#00001`), unassigned worker passes, in-memory 1620×2025 vector SVG generation
 - [x] Phase 5: Verification engine supporting all 7 states, atomic check-in, worker staff assignment, recent check-ins stream
 - [x] Phase 6: Mobile-friendly camera scanner (`html5-qrcode`), audio/haptic feedback, manual token fallback, public verification portal
 - [x] Phase 7: Bulk ZIP export (`GET /api/tickets/events/:eventId/export-zip`) with embedded CSV manifest
 - [x] Phase 8: Testing suite (`tests/verification.test.ts` & `tests/excelValidation.test.ts` passing 100%), strict TypeScript build verification (client & server)
+- [x] Phase 9: Forensic Audit & Fix of Storage Architecture:
+  - Eliminated ephemeral disk writes in `TicketImageService`.
+  - Enforced Supabase Storage upload with error bubbling in `SupabaseStorageService`.
+  - Pre-upload verification before database commit in `TicketService`.
+  - Backfill migration logic for existing tickets.
+  - Hardened camera lifecycle & device selection in `QrScanner`.
+- [x] Phase 10: Targeted Fixes for Bulk Ticket Download & Automatic Check-In:
+  - Stream all event ticket files directly from Supabase Storage in memory-conscious streaming batches without local disk dependencies.
+  - Safe filename sanitization with deduplication (`<Name>.svg`, `<Name>-2.svg`) and archive naming `<Event-Name>-Tickets.zip`.
+  - Single atomic `POST /api/verify/scan` endpoint: camera scan atomically checks in guest, guards against race-condition double check-in, and renders immediate status banner without manual button clicks or scrolling.
+  - Full unit & integration test coverage (11/11 tests passing in Jest, client and server builds clean).
+

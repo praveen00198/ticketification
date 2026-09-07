@@ -68,4 +68,17 @@ export const verifyApi = {
     const res: any = await apiClient.get(`/verify/recent/${eventId}`);
     return res.data || [];
   },
+
+  async scanTicket(
+    token: string,
+    eventId?: string,
+    workerName?: string
+  ): Promise<VerificationResponse & { checkinId?: string; checkedInAt?: string; workerName?: string; guestName?: string }> {
+    const res: any = await apiClient.post('/verify/scan', {
+      token,
+      eventId,
+      workerName,
+    });
+    return res.data;
+  },
 };

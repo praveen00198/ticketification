@@ -311,6 +311,235 @@ export class VerificationService {
   }
 
   /**
+   * Authoritative combined Scan & Check-in.
+   * Performs validation and atomic check-in on the server side in a single request:
+   * - Scans token and checks event scoping
+   * - Single-use active tickets are atomically marked USED and checked in
+   * - Reusable worker tickets are checked in (creating audit row)
+   * - Unassigned worker passes prompt for name assignment without double check-in
+   * - Already-used tickets return ALREADY_USED with the previous check-in time
+   * - Invalid / Cancelled / Wrong Event tickets are rejected without check-in
+   */
+  async scanAndCheckIn(input: CheckinInput) {
+    if (!input.token || !input.token.trim()) {
+      return {
+        status: 'INVALID' as VerificationStatus,
+        message: 'Verification token is required.',
+      };
+    }
+
+    const cleanToken = input.token.trim();
+    let record = await this.ticketRepo.findByVerificationToken(cleanToken);
+
+    if (!record) {
+      record = await this.ticketRepo.findById(cleanToken);
+    }
+
+    if (!record) {
+      return {
+        status: 'INVALID' as VerificationStatus,
+        message: 'Invalid ticket. Record not found in platform database.',
+      };
+    }
+
+    const { ticket, guest, ticketType, event } = record;
+
+    // Scoping check
+    if (input.eventId && ticket.eventId !== input.eventId) {
+      return {
+        status: 'WRONG_EVENT' as VerificationStatus,
+        message: `Ticket belongs to "${event.name}", not the currently active scanner event.`,
+        ticket: {
+          id: ticket.id,
+          sequenceNumber: ticket.sequenceNumber,
+          name: guest?.name || 'Guest',
+          category: ticketType.label || ticketType.name,
+          usagePolicy: ticket.usagePolicy,
+          eventName: event.name,
+          eventDate: event.date,
+        },
+      };
+    }
+
+    // Cancelled check
+    if (ticket.status === 'CANCELLED') {
+      return {
+        status: 'CANCELLED' as VerificationStatus,
+        message: 'This ticket has been cancelled and is no longer valid for entry.',
+        ticket: {
+          id: ticket.id,
+          sequenceNumber: ticket.sequenceNumber,
+          name: guest?.name || 'Guest',
+          category: ticketType.label || ticketType.name,
+          usagePolicy: ticket.usagePolicy,
+          eventName: event.name,
+          eventDate: event.date,
+        },
+      };
+    }
+
+    // Single-use already used check
+    if (ticket.status === 'USED') {
+      const lastCheckin = await this.checkinRepo.getLastCheckinForTicket(ticket.id);
+      const timeStr = lastCheckin?.checkedInAt
+        ? new Date(lastCheckin.checkedInAt).toLocaleTimeString()
+        : 'earlier today';
+
+      return {
+        status: 'ALREADY_USED' as VerificationStatus,
+        message: `Single-use ticket has already been checked in at ${timeStr}.`,
+        ticket: {
+          id: ticket.id,
+          sequenceNumber: ticket.sequenceNumber,
+          name: guest?.name || 'Guest',
+          category: ticketType.label || ticketType.name,
+          usagePolicy: ticket.usagePolicy,
+          organization: guest?.organization,
+          designation: guest?.designation,
+          eventName: event.name,
+          eventDate: event.date,
+          assetUrl: ticket.assetUrl,
+          lastCheckinTime: lastCheckin?.checkedInAt
+            ? new Date(lastCheckin.checkedInAt).toISOString()
+            : null,
+        },
+      };
+    }
+
+    // Handle Reusable Worker Pass
+    if (ticket.usagePolicy === 'REUSABLE' || ticket.usagePolicy === 'REUSABLE_WORKER') {
+      let assignedName = guest?.name || null;
+
+      // If unassigned worker and no name provided yet, request worker name from admin
+      if (!ticket.guestId && (!input.workerName || !input.workerName.trim())) {
+        return {
+          status: 'UNASSIGNED_WORKER' as VerificationStatus,
+          message: 'Unassigned worker pass. Please assign staff member name.',
+          ticket: {
+            id: ticket.id,
+            sequenceNumber: ticket.sequenceNumber,
+            name: 'UNASSIGNED STAFF',
+            category: ticketType.label || ticketType.name,
+            usagePolicy: ticket.usagePolicy,
+            eventName: event.name,
+            eventDate: event.date,
+            assetUrl: ticket.assetUrl,
+          },
+        };
+      }
+
+      // If unassigned worker and name was provided, assign name
+      if (!ticket.guestId && input.workerName && input.workerName.trim()) {
+        const trimmedName = input.workerName.trim();
+        const newGuest = await this.guestRepo.insertMany([
+          {
+            eventId: ticket.eventId,
+            name: trimmedName,
+            category: ticketType.name,
+          },
+        ]);
+
+        if (newGuest.length > 0) {
+          await this.ticketRepo.update(ticket.id, {
+            guestId: newGuest[0].id,
+          });
+          assignedName = trimmedName;
+        }
+      }
+
+      // Record check-in audit log
+      const checkin = await this.checkinRepo.create({
+        ticketId: ticket.id,
+        eventId: ticket.eventId,
+        verifiedBy: input.verifiedBy || 'Admin Scanner',
+        workerNameAssigned: assignedName,
+      });
+
+      return {
+        status: 'VALID_WORKER' as VerificationStatus,
+        message: `Worker check-in recorded for ${assignedName || 'Staff'}.`,
+        ticket: {
+          id: ticket.id,
+          sequenceNumber: ticket.sequenceNumber,
+          name: assignedName || 'Staff Member',
+          category: ticketType.label || ticketType.name,
+          usagePolicy: ticket.usagePolicy,
+          organization: guest?.organization,
+          designation: guest?.designation,
+          eventName: event.name,
+          eventDate: event.date,
+          assetUrl: ticket.assetUrl,
+          lastCheckinTime: new Date().toISOString(),
+        },
+        checkinId: checkin.id,
+        checkedInAt: checkin.checkedInAt ? new Date(checkin.checkedInAt).toISOString() : new Date().toISOString(),
+        workerName: assignedName,
+        guestName: assignedName || 'Staff',
+      };
+    }
+
+    // Handle Active Single-Use Ticket: ATOMIC Check-in (Race Condition Proof)
+    const updated = await db
+      .update(tickets)
+      .set({
+        status: 'USED',
+        updatedAt: new Date(),
+      })
+      .where(and(eq(tickets.id, ticket.id), eq(tickets.status, 'ACTIVE')))
+      .returning();
+
+    if (updated.length === 0) {
+      const lastCheckin = await this.checkinRepo.getLastCheckinForTicket(ticket.id);
+      const timeStr = lastCheckin?.checkedInAt
+        ? new Date(lastCheckin.checkedInAt).toLocaleTimeString()
+        : 'earlier';
+      return {
+        status: 'ALREADY_USED' as VerificationStatus,
+        message: `Single-use ticket has already been checked in at ${timeStr}.`,
+        ticket: {
+          id: ticket.id,
+          sequenceNumber: ticket.sequenceNumber,
+          name: guest?.name || 'Guest',
+          category: ticketType.label || ticketType.name,
+          usagePolicy: ticket.usagePolicy,
+          eventName: event.name,
+          eventDate: event.date,
+          lastCheckinTime: lastCheckin?.checkedInAt ? new Date(lastCheckin.checkedInAt).toISOString() : null,
+        },
+      };
+    }
+
+    // Insert Checkin record
+    const checkin = await this.checkinRepo.create({
+      ticketId: ticket.id,
+      eventId: ticket.eventId,
+      verifiedBy: input.verifiedBy || 'Admin Scanner',
+    });
+
+    return {
+      status: 'VALID' as VerificationStatus,
+      message: `Checked in successfully: ${guest?.name || 'Guest'} (${ticketType.label || ticketType.name}).`,
+      ticket: {
+        id: ticket.id,
+        sequenceNumber: ticket.sequenceNumber,
+        name: guest?.name || 'Guest',
+        category: ticketType.label || ticketType.name,
+        usagePolicy: ticket.usagePolicy,
+        organization: guest?.organization,
+        designation: guest?.designation,
+        eventName: event.name,
+        eventDate: event.date,
+        assetUrl: ticket.assetUrl,
+        lastCheckinTime: new Date().toISOString(),
+      },
+      checkinId: checkin.id,
+      checkedInAt: checkin.checkedInAt ? new Date(checkin.checkedInAt).toISOString() : new Date().toISOString(),
+      guestName: guest?.name || 'Guest',
+      category: ticketType.label || ticketType.name,
+    };
+  }
+
+  /**
    * Get recent check-ins for the scanner live feed.
    */
   async getRecentCheckins(eventId: string, limit = 20) {

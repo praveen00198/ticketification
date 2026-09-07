@@ -43,15 +43,22 @@ export class TicketService {
     );
 
     const pendingGuests = guests.filter((g) => !guestsWithTickets.has(g.id));
-    const isStorageConfigured = this.storageServ.isConfigured();
+
+    // Ensure Supabase Storage is configured
+    if (!this.storageServ.isConfigured()) {
+      throw new AppError(
+        'Supabase Storage is not configured. Please ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are configured in the environment.',
+        500
+      );
+    }
 
     if (pendingGuests.length === 0) {
-      // Check if existing tickets need cloud storage sync to Supabase bucket
+      // Check if existing tickets need cloud storage sync/migration to Supabase bucket
       const ticketsNeedingUpload = existingTickets.filter(
         (t) => !t.ticket.assetUrl?.includes('supabase.co') || t.ticket.assetUrl?.includes('/uploads/tickets/')
       );
 
-      if (ticketsNeedingUpload.length > 0 && isStorageConfigured) {
+      if (ticketsNeedingUpload.length > 0) {
         let syncedCount = 0;
         const BATCH_SIZE = 25;
         for (let i = 0; i < ticketsNeedingUpload.length; i += BATCH_SIZE) {
@@ -72,27 +79,27 @@ export class TicketService {
                   organization: t.guest?.organization || undefined,
                   phone: t.guest?.phone || undefined,
                 });
-                const storageFileName = `tickets/${eventId}/${t.ticket.verificationToken}.svg`;
-                const cloudUrl = await this.storageServ.uploadTicketImage(
-                  storageFileName,
+                const storagePath = `events/${eventId}/tickets/ticket-${displayId}.svg`;
+                const uploadResult = await this.storageServ.uploadTicketImage(
+                  storagePath,
                   svg,
                   'image/svg+xml'
                 );
-                if (cloudUrl) {
+                if (uploadResult?.publicUrl) {
                   await this.ticketRepo.update(t.ticket.id, {
-                    assetUrl: cloudUrl,
-                    assetPath: storageFileName,
+                    assetUrl: uploadResult.publicUrl,
+                    assetPath: uploadResult.storagePath,
                   });
                   syncedCount++;
                 }
-              } catch (syncErr) {
-                console.warn('[TicketService] Error syncing existing ticket to Supabase storage:', syncErr);
+              } catch (syncErr: any) {
+                console.error(`[TicketService] Error syncing ticket #${t.ticket.sequenceNumber} to Supabase storage:`, syncErr?.message || syncErr);
               }
             })
           );
         }
         return {
-          message: `All ${existingTickets.length} tickets synced and ${syncedCount} images uploaded directly into Supabase Storage.`,
+          message: `Synced ${syncedCount} of ${ticketsNeedingUpload.length} tickets directly into Supabase Storage.`,
           generatedCount: 0,
           syncedCount,
           totalGuests: guests.length,
@@ -100,7 +107,7 @@ export class TicketService {
       }
 
       return {
-        message: 'All guests already have tickets generated and synced in Supabase Storage.',
+        message: `All ${existingTickets.length} guests already have valid tickets stored in Supabase Storage.`,
         generatedCount: 0,
         totalGuests: guests.length,
       };
@@ -133,7 +140,7 @@ export class TicketService {
 
     let nextSeq = await this.ticketRepo.getNextSequenceNumber(eventId);
     const ticketsToInsert: any[] = [];
-    const uploadTasks: Array<{ storageFileName: string; data: string; ticket: any }> = [];
+    const uploadTasks: Array<{ storagePath: string; svg: string; ticketRecord: any }> = [];
 
     for (const guest of pendingGuests) {
       const guestCategory = (guest.category || 'GENERAL').toUpperCase().trim();
@@ -159,7 +166,7 @@ export class TicketService {
       };
 
       const svg = this.imageServ.buildSvg(svgData);
-      const { filePath, publicUrl } = await this.imageServ.generateTicketImage(svgData);
+      const storagePath = `events/${eventId}/tickets/ticket-${displayId}.svg`;
 
       const ticketRecord = {
         eventId,
@@ -168,22 +175,18 @@ export class TicketService {
         verificationToken,
         status: 'ACTIVE',
         usagePolicy: matchedType.usagePolicy || 'SINGLE_USE',
-        assetPath: filePath,
-        assetUrl: publicUrl,
+        assetPath: storagePath,
+        assetUrl: '', // Populated upon successful Supabase Storage upload
         sequenceNumber: nextSeq,
         createdBy: userId,
       };
 
       ticketsToInsert.push(ticketRecord);
-
-      if (isStorageConfigured) {
-        const storageFileName = `tickets/${eventId}/${verificationToken}.svg`;
-        uploadTasks.push({
-          storageFileName,
-          data: svg,
-          ticket: ticketRecord,
-        });
-      }
+      uploadTasks.push({
+        storagePath,
+        svg,
+        ticketRecord,
+      });
 
       nextSeq++;
     }
@@ -195,29 +198,23 @@ export class TicketService {
         const batch = uploadTasks.slice(i, i + BATCH_SIZE);
         await Promise.all(
           batch.map(async (task) => {
-            try {
-              const cloudUrl = await this.storageServ.uploadTicketImage(
-                task.storageFileName,
-                task.data,
-                'image/svg+xml'
-              );
-              if (cloudUrl) {
-                task.ticket.assetUrl = cloudUrl;
-                task.ticket.assetPath = task.storageFileName;
-              }
-            } catch (err) {
-              console.warn('[TicketService] Storage upload fallback to local URL:', err);
-            }
+            const uploadResult = await this.storageServ.uploadTicketImage(
+              task.storagePath,
+              task.svg,
+              'image/svg+xml'
+            );
+            task.ticketRecord.assetUrl = uploadResult.publicUrl;
+            task.ticketRecord.assetPath = uploadResult.storagePath;
           })
         );
       }
     }
 
-    // High-speed chunked batch insert into PostgreSQL
+    // Insert records into PostgreSQL only after all images are verified in Supabase Storage
     const inserted = await this.ticketRepo.createMany(ticketsToInsert);
 
     return {
-      message: `Successfully generated ${inserted.length} tickets.`,
+      message: `Successfully generated and uploaded ${inserted.length} tickets to Supabase Storage.`,
       generatedCount: inserted.length,
       totalGuests: guests.length,
     };
@@ -241,6 +238,13 @@ export class TicketService {
       throw new AppError('Event not found or unauthorized', 404);
     }
 
+    if (!this.storageServ.isConfigured()) {
+      throw new AppError(
+        'Supabase Storage is not configured. Please ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are configured in the environment.',
+        500
+      );
+    }
+
     const ticketTypes = await this.ticketTypeRepo.findByEventId(eventId);
     let workerType = ticketTypes.find(
       (t) => t.name.toUpperCase() === ticketTypeName.toUpperCase()
@@ -257,8 +261,7 @@ export class TicketService {
 
     let nextSeq = await this.ticketRepo.getNextSequenceNumber(eventId);
     const ticketsToInsert: any[] = [];
-    const uploadTasks: Array<{ storageFileName: string; data: string; ticket: any }> = [];
-    const isStorageConfigured = this.storageServ.isConfigured();
+    const uploadTasks: Array<{ storagePath: string; svg: string; ticketRecord: any }> = [];
 
     for (let i = 0; i < count; i++) {
       const verificationToken = this.qrServ.generateVerificationToken();
@@ -277,7 +280,7 @@ export class TicketService {
       };
 
       const svg = this.imageServ.buildSvg(workerData);
-      const { filePath, publicUrl } = await this.imageServ.generateTicketImage(workerData);
+      const storagePath = `events/${eventId}/tickets/ticket-${displayId}.svg`;
 
       const ticketRecord = {
         eventId,
@@ -286,22 +289,18 @@ export class TicketService {
         verificationToken,
         status: 'ACTIVE',
         usagePolicy: 'REUSABLE',
-        assetPath: filePath,
-        assetUrl: publicUrl,
+        assetPath: storagePath,
+        assetUrl: '', // Populated upon Supabase Storage upload
         sequenceNumber: nextSeq,
         createdBy: userId,
       };
 
       ticketsToInsert.push(ticketRecord);
-
-      if (isStorageConfigured) {
-        const storageFileName = `tickets/${eventId}/${verificationToken}.svg`;
-        uploadTasks.push({
-          storageFileName,
-          data: svg,
-          ticket: ticketRecord,
-        });
-      }
+      uploadTasks.push({
+        storagePath,
+        svg,
+        ticketRecord,
+      });
 
       nextSeq++;
     }
@@ -312,19 +311,13 @@ export class TicketService {
         const batch = uploadTasks.slice(i, i + BATCH_SIZE);
         await Promise.all(
           batch.map(async (task) => {
-            try {
-              const cloudUrl = await this.storageServ.uploadTicketImage(
-                task.storageFileName,
-                task.data,
-                'image/svg+xml'
-              );
-              if (cloudUrl) {
-                task.ticket.assetUrl = cloudUrl;
-                task.ticket.assetPath = task.storageFileName;
-              }
-            } catch (err) {
-              console.warn('[TicketService] Storage upload fallback to local URL:', err);
-            }
+            const uploadResult = await this.storageServ.uploadTicketImage(
+              task.storagePath,
+              task.svg,
+              'image/svg+xml'
+            );
+            task.ticketRecord.assetUrl = uploadResult.publicUrl;
+            task.ticketRecord.assetPath = uploadResult.storagePath;
           })
         );
       }
@@ -333,7 +326,7 @@ export class TicketService {
     const createdTickets = await this.ticketRepo.createMany(ticketsToInsert);
 
     return {
-      message: `Successfully generated ${createdTickets.length} unassigned worker tickets.`,
+      message: `Successfully generated and uploaded ${createdTickets.length} unassigned worker tickets to Supabase Storage.`,
       tickets: createdTickets,
     };
   }
@@ -398,7 +391,8 @@ export class TicketService {
   }
 
   /**
-   * Stream a ZIP archive containing all ticket images and a CSV manifest for an event.
+   * Stream a ZIP archive containing all ticket images retrieved from Supabase Storage and a CSV manifest.
+   * Processes in memory-conscious batches so large events (1,000+ tickets) stream smoothly.
    */
   async streamTicketsZip(eventId: string, userId: string, streamOut: NodeJS.WritableStream) {
     const event = await this.eventRepo.findByIdAndOwner(eventId, userId);
@@ -406,7 +400,7 @@ export class TicketService {
       throw new AppError('Event not found or unauthorized', 404);
     }
 
-    const tickets = await this.ticketRepo.findByEventId(eventId, { limit: 10000 });
+    const tickets = await this.ticketRepo.findByEventId(eventId, { limit: 50000 });
     if (tickets.length === 0) {
       throw new AppError('No tickets found to export for this event.', 400);
     }
@@ -414,55 +408,116 @@ export class TicketService {
     const archive = (archiver as any)('zip', { zlib: { level: 6 } });
     archive.pipe(streamOut);
 
-    // Build Manifest CSV
+    // Track duplicate filenames for safe unique names (e.g. Rahul-Sharma.svg, Rahul-Sharma-2.svg)
+    const usedNames = new Map<string, number>();
+    const getUniqueFileName = (rawName: string): string => {
+      const clean = rawName
+        .trim()
+        .replace(/[^a-zA-Z0-9_-]/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_+|_+$/g, '') || 'Ticket';
+
+      const count = usedNames.get(clean) || 0;
+      usedNames.set(clean, count + 1);
+      return count === 0 ? `${clean}.svg` : `${clean}-${count + 1}.svg`;
+    };
+
     const csvRows = [
-      ['Sequence', 'Guest Name', 'Category', 'Status', 'Usage Policy', 'Verification Token', 'Asset URL'].join(','),
+      ['Sequence', 'Guest Name', 'Category', 'Status', 'Usage Policy', 'File Name', 'Asset Source', 'Verification Token', 'Asset URL'].join(','),
     ];
 
-    for (const t of tickets) {
-      const seqStr = t.ticket.sequenceNumber.toString().padStart(5, '0');
-      const guestName = t.guest?.name || 'UNASSIGNED STAFF';
-      const category = t.ticketType.name;
-      const status = t.ticket.status;
-      const policy = t.ticket.usagePolicy;
-      const token = t.ticket.verificationToken;
-      const assetUrl = t.ticket.assetUrl || '';
+    let retrievedFromStorageCount = 0;
+    let fallbackCount = 0;
+    const BATCH_SIZE = 20;
 
-      csvRows.push(
-        [
-          `#${seqStr}`,
-          `"${guestName.replace(/"/g, '""')}"`,
-          `"${category.replace(/"/g, '""')}"`,
-          status,
-          policy,
-          token,
-          `"${assetUrl}"`,
-        ].join(',')
+    for (let i = 0; i < tickets.length; i += BATCH_SIZE) {
+      const batch = tickets.slice(i, i + BATCH_SIZE);
+
+      const batchResults = await Promise.all(
+        batch.map(async (t) => {
+          const seqStr = t.ticket.sequenceNumber.toString().padStart(5, '0');
+          const displayId = `${event.name.substring(0, 3).toUpperCase()}-${seqStr}`;
+          const rawName = t.guest?.name || (t.ticket.usagePolicy === 'REUSABLE' ? `Staff_${seqStr}` : `Guest_${seqStr}`);
+          const fileName = getUniqueFileName(rawName);
+
+          const storagePath =
+            t.ticket.assetPath ||
+            `events/${eventId}/tickets/ticket-${displayId}.svg`;
+
+          let fileBuffer: Buffer | null = null;
+          let source = 'SUPABASE_STORAGE';
+
+          try {
+            fileBuffer = await this.storageServ.downloadTicketImage(storagePath);
+          } catch (_err) {
+            // Fallback generation so partial storage issues don't fail the entire bulk export
+            source = 'RECOVERED_ON_DEMAND';
+            const qrDataUrl = await this.qrServ.generateQrDataUrl(t.ticket.verificationToken);
+            const svg = this.imageServ.buildSvg({
+              ticketId: displayId,
+              guestName: t.guest?.name || 'Valued Guest',
+              eventName: event.name,
+              eventDate: event.date,
+              ticketType: t.ticketType.label || t.ticketType.name,
+              qrCodeDataUrl: qrDataUrl,
+              organization: t.guest?.organization || undefined,
+              phone: t.guest?.phone || undefined,
+            });
+            fileBuffer = Buffer.from(svg, 'utf-8');
+          }
+
+          return {
+            t,
+            fileName,
+            fileBuffer,
+            source,
+            seqStr,
+          };
+        })
       );
 
-      // Add image file to archive (from local disk or generate SVG on-the-fly)
-      if (t.ticket.assetPath && fs.existsSync(t.ticket.assetPath)) {
-        const fileExt = path.extname(t.ticket.assetPath) || '.svg';
-        const zipFileName = `tickets/ticket-${seqStr}-${guestName.replace(/[^a-zA-Z0-9]/g, '_')}${fileExt}`;
-        archive.file(t.ticket.assetPath, { name: zipFileName });
-      } else {
-        const qrDataUrl = await this.qrServ.generateQrDataUrl(token);
-        const displayId = `${event.name.substring(0, 3).toUpperCase()}-${seqStr}`;
-        const svg = this.imageServ.buildSvg({
-          ticketId: displayId,
-          guestName: t.guest?.name || 'Valued Guest',
-          eventName: event.name,
-          eventDate: event.date,
-          ticketType: t.ticketType.label || t.ticketType.name,
-          qrCodeDataUrl: qrDataUrl,
-          organization: t.guest?.organization || undefined,
-          phone: t.guest?.phone || undefined,
-        });
-        archive.append(svg, { name: `tickets/ticket-${seqStr}-${guestName.replace(/[^a-zA-Z0-9]/g, '_')}.svg` });
+      for (const item of batchResults) {
+        if (item.source === 'SUPABASE_STORAGE') {
+          retrievedFromStorageCount++;
+        } else {
+          fallbackCount++;
+        }
+
+        archive.append(item.fileBuffer, { name: item.fileName });
+
+        csvRows.push(
+          [
+            `#${item.seqStr}`,
+            `"${(item.t.guest?.name || 'Staff').replace(/"/g, '""')}"`,
+            `"${item.t.ticketType.name.replace(/"/g, '""')}"`,
+            item.t.ticket.status,
+            item.t.ticket.usagePolicy,
+            item.fileName,
+            item.source,
+            item.t.ticket.verificationToken,
+            `"${item.t.ticket.assetUrl || ''}"`,
+          ].join(',')
+        );
       }
     }
 
+    // Include manifest and summary
     archive.append(csvRows.join('\n'), { name: 'tickets-manifest.csv' });
+    archive.append(
+      [
+        '================================================',
+        'EVENT TICKET BULK EXPORT SUMMARY',
+        '================================================',
+        `Event: ${event.name}`,
+        `Date: ${event.date}`,
+        `Total Tickets Exported: ${tickets.length}`,
+        `Retrieved from Supabase Storage: ${retrievedFromStorageCount}`,
+        `Recovered On-Demand: ${fallbackCount}`,
+        `Export Generated At: ${new Date().toISOString()}`,
+        '================================================',
+      ].join('\n'),
+      { name: 'export-summary.txt' }
+    );
 
     await archive.finalize();
   }

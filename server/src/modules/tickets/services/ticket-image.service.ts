@@ -20,14 +20,9 @@ export interface TicketImageData {
  * Produces an 800x1200 pixel PNG with embedded QR code.
  */
 export class TicketImageService {
-  private outputDir: string;
   private templateBase64: string | null = null;
 
   constructor() {
-    this.outputDir = path.resolve(process.cwd(), config.env.uploadDir, 'tickets');
-    if (!fs.existsSync(this.outputDir)) {
-      fs.mkdirSync(this.outputDir, { recursive: true });
-    }
     this.loadTemplate();
   }
 
@@ -190,35 +185,15 @@ export class TicketImageService {
   }
 
   /**
-   * Generate a high-resolution vector SVG ticket asset, save to disk, and return Base64 + public URL.
-   * Runs in microseconds without spawning external browser processes.
+   * Generate an in-memory high-resolution vector SVG ticket asset.
+   * Runs in microseconds without disk I/O or external browser processes.
    */
-  async generateTicketImage(data: TicketImageData): Promise<{ filePath: string; publicUrl: string; imageBase64: string }> {
-    if (!fs.existsSync(this.outputDir)) {
-      try {
-        fs.mkdirSync(this.outputDir, { recursive: true });
-      } catch (_e) {}
-    }
-
+  async generateTicketImage(data: TicketImageData): Promise<{ svg: string; imageBase64: string; fileName: string }> {
     const fileName = `ticket-${data.ticketId}.svg`;
-    const filePath = path.join(this.outputDir, fileName);
     const svg = this.buildSvg(data);
     const imageBase64 = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
 
-    try {
-      fs.writeFileSync(filePath, svg, 'utf-8');
-    } catch (writeErr) {
-      console.warn('[TicketImageService] Could not write ticket file to disk:', writeErr);
-    }
-
-    // Construct public URL based on storage base URL (Render supplies RENDER_EXTERNAL_URL)
-    const baseUrl =
-      process.env.TICKET_STORAGE_BASE_URL ||
-      process.env.RENDER_EXTERNAL_URL ||
-      (config.env.isProduction ? 'https://ticketification.onrender.com' : `http://localhost:${config.env.port}`);
-    const publicUrl = `${baseUrl.replace(/\/+$/, '')}/uploads/tickets/${fileName}`;
-
-    return { filePath, publicUrl, imageBase64 };
+    return { svg, imageBase64, fileName };
   }
 }
 

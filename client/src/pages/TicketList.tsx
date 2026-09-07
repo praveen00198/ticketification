@@ -68,15 +68,20 @@ export const TicketList: React.FC = () => {
   }, [fetchTickets]);
 
   const handleDownloadZip = async () => {
-    if (!currentEvent) return;
+    if (!currentEvent || downloadingZip) return;
     try {
       setDownloadingZip(true);
       setError(null);
       const blob = await ticketsApi.downloadTicketsZip(currentEvent.id);
+      const safeEventName = (currentEvent.name || 'Event')
+        .trim()
+        .replace(/[^a-zA-Z0-9_-]/g, '_')
+        .replace(/_+/g, '_');
+      const filename = `${safeEventName}-Tickets.zip`;
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `tickets-${(currentEvent.name || 'event').toLowerCase().replace(/[^a-z0-9]/g, '_')}.zip`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);

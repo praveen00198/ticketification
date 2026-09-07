@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Html5Qrcode, CameraDevice } from 'html5-qrcode';
-import { Camera, AlertCircle, RefreshCw, CameraOff } from 'lucide-react';
+import { Camera, AlertCircle, RefreshCw, CameraOff, SwitchCamera } from 'lucide-react';
 
 interface QrScannerProps {
   onScanSuccess: (scannedText: string) => void;
@@ -9,114 +9,168 @@ interface QrScannerProps {
 export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
   const [cameras, setCameras] = useState<CameraDevice[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string>('');
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [isScanning, setIsScanning] = useState(false);
   const [scannerError, setScannerError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
 
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const isCooldownRef = useRef(false);
-  const containerId = useRef(`qr-viewport-${Math.random().toString(36).substring(2, 9)}`).current;
+  const isTransitioningRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const containerId = useRef('qr-viewport-feed').current;
 
   const onScanSuccessRef = useRef(onScanSuccess);
   onScanSuccessRef.current = onScanSuccess;
 
   const stopScanner = useCallback(async () => {
-    if (scannerRef.current) {
-      try {
+    if (isTransitioningRef.current) return;
+    isTransitioningRef.current = true;
+
+    try {
+      if (scannerRef.current) {
         if (scannerRef.current.isScanning) {
           await scannerRef.current.stop();
         }
-        scannerRef.current.clear();
-      } catch (_e) {}
-      scannerRef.current = null;
+        try {
+          scannerRef.current.clear();
+        } catch (_cErr) {}
+        scannerRef.current = null;
+      }
+    } catch (err) {
+      console.warn('[QrScanner] Error stopping scanner:', err);
+    } finally {
+      if (isMountedRef.current) {
+        setIsScanning(false);
+      }
+      isTransitioningRef.current = false;
     }
-    setIsScanning(false);
   }, []);
 
-  const startCamera = useCallback(async (cameraId?: string) => {
-    setIsInitializing(true);
-    setScannerError(null);
-
-    // Clean up any existing scanner instance first
-    await stopScanner();
-
-    try {
-      const containerEl = document.getElementById(containerId);
-      if (!containerEl) return;
-
-      const html5QrCode = new Html5Qrcode(containerId);
-      scannerRef.current = html5QrCode;
-
-      // Query available cameras
-      let devices: CameraDevice[] = [];
-      try {
-        devices = await Html5Qrcode.getCameras();
-        if (devices && devices.length > 0) {
-          setCameras(devices);
-        }
-      } catch (_e) {}
-
-      const scanConfig = {
-        fps: 15,
-        qrbox: { width: 250, height: 250 },
-        aspectRatio: 1.0,
-      };
-
-      const handleDecoded = (decodedText: string) => {
-        if (isCooldownRef.current) return;
-        isCooldownRef.current = true;
-        onScanSuccessRef.current(decodedText);
-        setTimeout(() => {
-          isCooldownRef.current = false;
-        }, 1800);
-      };
-
-      if (cameraId) {
-        await html5QrCode.start(cameraId, scanConfig, handleDecoded, () => {});
-        setSelectedCameraId(cameraId);
-      } else if (devices && devices.length > 0) {
-        const backCamera = devices.find((d) =>
-          /back|rear|environment|wide|0, facing back/i.test(d.label)
-        ) || devices[0];
-
-        setSelectedCameraId(backCamera.id);
-        await html5QrCode.start(backCamera.id, scanConfig, handleDecoded, () => {});
-      } else {
-        await html5QrCode.start({ facingMode: 'environment' }, scanConfig, handleDecoded, () => {});
+  const startCamera = useCallback(
+    async (targetCameraId?: string, targetFacingMode: 'environment' | 'user' = facingMode) => {
+      if (!isMountedRef.current) return;
+      if (isTransitioningRef.current) {
+        // Queue or wait if already transitioning
+        return;
       }
 
-      setIsScanning(true);
-    } catch (err: any) {
-      console.warn('[QrScanner] Camera start error:', err);
-      const errMsg =
-        err?.name === 'NotAllowedError' || err?.message?.includes('Permission')
-          ? 'Camera access permission denied. Please allow camera permissions in your browser.'
-          : err?.name === 'NotReadableError' || err?.message?.includes('busy')
-          ? 'Camera is in use by another tab or app. Please close other camera tabs and tap Retry.'
-          : err?.message || 'Unable to access camera.';
-      setScannerError(errMsg);
-      setIsScanning(false);
-    } finally {
-      setIsInitializing(false);
-    }
-  }, [containerId, stopScanner]);
+      setIsInitializing(true);
+      setScannerError(null);
+
+      // Clean up previous scanner
+      await stopScanner();
+
+      if (!isMountedRef.current) return;
+      isTransitioningRef.current = true;
+
+      try {
+        const containerEl = document.getElementById(containerId);
+        if (!containerEl) {
+          isTransitioningRef.current = false;
+          setIsInitializing(false);
+          return;
+        }
+
+        // Clean out any stale child nodes in the container
+        containerEl.innerHTML = '';
+
+        const html5QrCode = new Html5Qrcode(containerId);
+        scannerRef.current = html5QrCode;
+
+        const scanConfig = {
+          fps: 15,
+          qrbox: { width: 260, height: 260 },
+          aspectRatio: 1.0,
+        };
+
+        const handleDecoded = (decodedText: string) => {
+          if (isCooldownRef.current) return;
+          isCooldownRef.current = true;
+          onScanSuccessRef.current(decodedText);
+          setTimeout(() => {
+            isCooldownRef.current = false;
+          }, 1800);
+        };
+
+        // If a specific camera was picked, use its ID; otherwise use facingMode constraints
+        if (targetCameraId) {
+          await html5QrCode.start(targetCameraId, scanConfig, handleDecoded, () => {});
+          if (isMountedRef.current) {
+            setSelectedCameraId(targetCameraId);
+          }
+        } else {
+          await html5QrCode.start(
+            { facingMode: targetFacingMode },
+            scanConfig,
+            handleDecoded,
+            () => {}
+          );
+        }
+
+        if (isMountedRef.current) {
+          setIsScanning(true);
+          // Query available cameras after camera access is established so labels are populated
+          try {
+            const devices = await Html5Qrcode.getCameras();
+            if (devices && devices.length > 0) {
+              // Deduplicate devices
+              const unique = devices.filter(
+                (d, idx, self) => idx === self.findIndex((t) => t.id === d.id)
+              );
+              setCameras(unique);
+            }
+          } catch (_camErr) {}
+        }
+      } catch (err: any) {
+        console.warn('[QrScanner] Camera start error:', err);
+        if (isMountedRef.current) {
+          const errMsg =
+            err?.name === 'NotAllowedError' || err?.message?.includes('Permission')
+              ? 'Camera permission denied. Please enable camera access in browser permissions.'
+              : err?.name === 'NotReadableError' || err?.message?.includes('busy')
+              ? 'Camera is in use by another tab or app. Please close other camera tabs and tap Retry.'
+              : err?.message || 'Unable to start camera.';
+          setScannerError(errMsg);
+          setIsScanning(false);
+        }
+      } finally {
+        isTransitioningRef.current = false;
+        if (isMountedRef.current) {
+          setIsInitializing(false);
+        }
+      }
+    },
+    [containerId, facingMode, stopScanner]
+  );
 
   useEffect(() => {
-    let mounted = true;
-    const timer = setTimeout(() => {
-      if (mounted) {
+    isMountedRef.current = true;
+    let timer: NodeJS.Timeout;
+
+    // Small delay to ensure DOM is ready and any React StrictMode cycle completes
+    timer = setTimeout(() => {
+      if (isMountedRef.current) {
         startCamera();
       }
-    }, 150);
+    }, 250);
 
     return () => {
-      mounted = false;
+      isMountedRef.current = false;
       clearTimeout(timer);
       stopScanner();
     };
   }, []);
 
+  const handleToggleFacingMode = () => {
+    const nextMode = facingMode === 'environment' ? 'user' : 'environment';
+    setFacingMode(nextMode);
+    setSelectedCameraId('');
+    startCamera(undefined, nextMode);
+  };
+
   const handleSwitchCamera = (newId: string) => {
+    setSelectedCameraId(newId);
     startCamera(newId);
   };
 
@@ -134,8 +188,9 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
             <select
               value={selectedCameraId}
               onChange={(e) => handleSwitchCamera(e.target.value)}
-              className="text-[11px] font-semibold bg-zinc-100 border border-zinc-200 rounded-lg px-2 py-1 text-zinc-800 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="text-[11px] font-semibold bg-zinc-100 border border-zinc-200 rounded-lg px-2 py-1 text-zinc-800 focus:outline-none focus:ring-1 focus:ring-brand-500 max-w-[140px] truncate"
             >
+              <option value="">Default ({facingMode === 'environment' ? 'Back' : 'Front'})</option>
               {cameras.map((c, idx) => (
                 <option key={c.id} value={c.id}>
                   {c.label || `Camera ${idx + 1}`}
@@ -143,6 +198,14 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
               ))}
             </select>
           )}
+
+          <button
+            onClick={handleToggleFacingMode}
+            title="Flip Camera (Front / Back)"
+            className="p-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-lg border border-zinc-200 transition-colors"
+          >
+            <SwitchCamera className="w-3.5 h-3.5" />
+          </button>
 
           <button
             onClick={() => (isScanning ? stopScanner() : startCamera(selectedCameraId))}
@@ -195,4 +258,3 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
     </div>
   );
 };
-
