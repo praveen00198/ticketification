@@ -22,6 +22,16 @@ console.log(`[DIAG] platform=${process.platform} arch=${process.arch}`);
 import app from './app';
 import config from './config/env';
 
+// Safe Storage diagnostic logging (zero secrets/tokens logged)
+console.log(`[DIAG:Storage] ${JSON.stringify({
+  serviceRoleConfigured: !!config.env.supabaseServiceRoleKey,
+  supabaseUrlConfigured: !!config.env.supabaseUrl,
+  bucketName: config.env.supabaseBucket || 'ticket-images',
+  clientType: 'server-service-role',
+  hasCustomAuthorizationHeader: false,
+})}`);
+
+
 async function startServer() {
   const PORT = config.env.port;
   app.listen(PORT, () => {

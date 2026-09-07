@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '../../../config/supabase';
+import { supabaseAdmin, supabasePublic } from '../../../config/supabase';
 import { userRepository, UserRepository } from '../repositories/user.repository';
 import {
   ValidationError,
@@ -15,14 +15,14 @@ export class AuthService {
   async register(input: RegisterInput): Promise<AuthResponse> {
     const { name, email, password } = input;
 
-    if (!supabaseAdmin) {
+    if (!supabaseAdmin && !supabasePublic) {
       throw new AppError('Authentication service is not configured. Check server environment.', 503);
     }
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    // Create user in Supabase Auth
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    // Create user in Supabase Auth via admin client
+    const { data: authData, error: authError } = await supabaseAdmin!.auth.admin.createUser({
       email: normalizedEmail,
       password,
       email_confirm: true,
@@ -55,8 +55,9 @@ export class AuthService {
       console.warn('[AuthService] Could not sync user profile to database during registration:', dbErr);
     }
 
-    // Sign in to obtain session token
-    const { data: sessionData, error: sessionError } = await supabaseAdmin.auth.signInWithPassword({
+    // Sign in to obtain session token using public client to avoid mutating admin client
+    const authClient = supabasePublic || supabaseAdmin!;
+    const { data: sessionData, error: sessionError } = await authClient.auth.signInWithPassword({
       email: normalizedEmail,
       password,
     });
@@ -88,16 +89,19 @@ export class AuthService {
   async login(input: LoginInput): Promise<AuthResponse> {
     const { email, password } = input;
 
-    if (!supabaseAdmin) {
+    if (!supabaseAdmin && !supabasePublic) {
       throw new AppError('Authentication service is not configured. Check server environment.', 503);
     }
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+    // Sign in user using public client to keep admin/storage clients untainted
+    const authClient = supabasePublic || supabaseAdmin!;
+    const { data, error } = await authClient.auth.signInWithPassword({
       email: normalizedEmail,
       password,
     });
+
 
     if (error) {
       if (

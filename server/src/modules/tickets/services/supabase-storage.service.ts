@@ -1,18 +1,22 @@
 import fs from 'fs';
 import config from '../../../config/env';
-import { supabaseAdmin } from '../../../config/supabase';
+import { supabaseStorageAdmin, supabaseAdmin } from '../../../config/supabase';
 import { StorageError } from '../../../middlewares/error.middleware';
 
 export class SupabaseStorageService {
   private bucket: string;
   private bucketEnsured = false;
 
+  private get client() {
+    return supabaseStorageAdmin || supabaseAdmin;
+  }
+
   constructor() {
     this.bucket = config.env.supabaseBucket || 'ticket-images';
   }
 
   public isConfigured(): boolean {
-    return !!(supabaseAdmin && config.env.supabaseUrl);
+    return !!(this.client && config.env.supabaseUrl);
   }
 
   public getBucketName(): string {
@@ -45,11 +49,11 @@ export class SupabaseStorageService {
    * Ensures the target bucket exists and is configured for public access.
    */
   public async ensureBucket(): Promise<void> {
-    if (this.bucketEnsured || !supabaseAdmin) return;
+    if (this.bucketEnsured || !this.client) return;
     try {
-      const { data: bucket, error } = await supabaseAdmin.storage.getBucket(this.bucket);
+      const { data: bucket, error } = await this.client.storage.getBucket(this.bucket);
       if (error || !bucket) {
-        const { error: createErr } = await supabaseAdmin.storage.createBucket(this.bucket, {
+        const { error: createErr } = await this.client.storage.createBucket(this.bucket, {
           public: true,
         });
         if (createErr && !createErr.message.includes('already exists')) {
@@ -73,7 +77,7 @@ export class SupabaseStorageService {
     fileData: Buffer | string,
     contentType: string = 'image/png'
   ): Promise<{ publicUrl: string; storagePath: string }> {
-    if (!supabaseAdmin) {
+    if (!this.client) {
       throw new StorageError(
         'Supabase Storage is not configured. SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be provided in environment variables.'
       );
@@ -111,7 +115,7 @@ export class SupabaseStorageService {
     const maxRetries = 3;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      const { data, error } = await supabaseAdmin.storage
+      const { data, error } = await this.client.storage
         .from(this.bucket)
         .upload(cleanPath, buffer, {
           contentType: mimeType,
@@ -140,7 +144,7 @@ export class SupabaseStorageService {
       );
     }
 
-    const { data: urlData } = supabaseAdmin.storage
+    const { data: urlData } = this.client.storage
       .from(this.bucket)
       .getPublicUrl(uploadData?.path || cleanPath);
 
@@ -160,7 +164,7 @@ export class SupabaseStorageService {
    * Download a ticket asset buffer from Supabase Storage.
    */
   async downloadTicketImage(storagePath: string): Promise<Buffer> {
-    if (!supabaseAdmin) {
+    if (!this.client) {
       throw new StorageError('Supabase Storage is not configured.');
     }
 
@@ -176,7 +180,7 @@ export class SupabaseStorageService {
       cleanPath = cleanPath.substring(this.bucket.length + 1);
     }
 
-    const { data, error } = await supabaseAdmin.storage.from(this.bucket).download(cleanPath);
+    const { data, error } = await this.client.storage.from(this.bucket).download(cleanPath);
     if (error || !data) {
       throw new StorageError(
         `Failed to download ticket asset from Supabase Storage (${cleanPath}): ${error?.message || 'Not found'}`
@@ -191,12 +195,12 @@ export class SupabaseStorageService {
    * Delete a single ticket asset from Supabase Storage.
    */
   async deleteTicketImage(storagePath: string): Promise<boolean> {
-    if (!supabaseAdmin) {
+    if (!this.client) {
       throw new StorageError('Supabase Storage is not configured.');
     }
 
     const cleanPath = storagePath.replace(/^\/+/, '');
-    const { error } = await supabaseAdmin.storage.from(this.bucket).remove([cleanPath]);
+    const { error } = await this.client.storage.from(this.bucket).remove([cleanPath]);
 
     if (error) {
       throw new StorageError(
@@ -211,14 +215,14 @@ export class SupabaseStorageService {
    * Batch delete multiple ticket assets from Supabase Storage.
    */
   async deleteTicketImages(storagePaths: string[]): Promise<number> {
-    if (!supabaseAdmin) {
+    if (!this.client) {
       throw new StorageError('Supabase Storage is not configured.');
     }
 
     if (storagePaths.length === 0) return 0;
 
     const cleanPaths = storagePaths.map((p) => p.replace(/^\/+/, ''));
-    const { data, error } = await supabaseAdmin.storage.from(this.bucket).remove(cleanPaths);
+    const { data, error } = await this.client.storage.from(this.bucket).remove(cleanPaths);
 
     if (error) {
       throw new StorageError(
@@ -243,7 +247,7 @@ export class SupabaseStorageService {
     }
 
     try {
-      const { data, error } = await supabaseAdmin!.storage.getBucket(this.bucket);
+      const { data, error } = await this.client!.storage.getBucket(this.bucket);
       if (error) {
         return {
           configured: true,
