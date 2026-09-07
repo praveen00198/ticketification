@@ -101,14 +101,21 @@ export class AuthService {
     });
 
     if (error) {
-      if (error.message.includes('Invalid login credentials')) {
-        throw new AppError('Invalid email or password. Please check your credentials.', 401);
+      if (
+        error.message.includes('Invalid login credentials') ||
+        error.message.includes('invalid_grant') ||
+        error.message.includes('user_not_found')
+      ) {
+        throw new AppError('Invalid email or password. Please check your credentials and try again.', 401);
       }
-      throw new AppError(`Login failed: ${error.message}`, 401);
+      if (error.message.includes('Email not confirmed')) {
+        throw new AppError('Email address has not been confirmed. Please verify your email or check your Supabase Auth settings.', 401);
+      }
+      throw new AppError(error.message, 401);
     }
 
     if (!data.user || !data.session) {
-      throw new AppError('Login failed: No session returned.', 500);
+      throw new AppError('Login failed: No active session was created.', 500);
     }
 
     // Ensure user profile exists in our table (resilient to DB connection)

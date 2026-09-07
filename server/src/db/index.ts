@@ -1,7 +1,12 @@
+import dns from 'dns';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import config from '../config/env';
 import * as schema from './schema';
+
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder('ipv4first');
+}
 
 /**
  * PostgreSQL connection via postgres.js driver.
