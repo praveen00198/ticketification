@@ -7,8 +7,8 @@ import config from './env';
  * Used for: Auth admin operations, Storage uploads, bypassing RLS when needed.
  */
 export const supabaseAdmin =
-  config.env.supabaseUrl && (config.env.supabaseServiceRoleKey || config.env.supabaseAnonKey)
-    ? createClient(config.env.supabaseUrl, config.env.supabaseServiceRoleKey || config.env.supabaseAnonKey, {
+  config.env.supabaseUrl && config.env.supabaseServiceRoleKey
+    ? createClient(config.env.supabaseUrl, config.env.supabaseServiceRoleKey, {
         auth: {
           persistSession: false,
           autoRefreshToken: false,

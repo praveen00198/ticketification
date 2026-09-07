@@ -1,7 +1,7 @@
 import fs from 'fs';
 import config from '../../../config/env';
 import { supabaseAdmin } from '../../../config/supabase';
-import { AppError } from '../../../middlewares/error.middleware';
+import { StorageError } from '../../../middlewares/error.middleware';
 
 export class SupabaseStorageService {
   private bucket: string;
@@ -19,7 +19,32 @@ export class SupabaseStorageService {
     return this.bucket;
   }
 
-  private async ensureBucket(): Promise<void> {
+  /**
+   * Constructs the canonical storage path hierarchy: events/{eventId}/tickets/{filename}
+   */
+  public buildTicketStoragePath(eventId: string, filename: string): string {
+    const cleanEventId = (eventId || '').trim().replace(/^\/+|\/+$/g, '');
+    const cleanFilename = (filename || '').trim().replace(/^\/+|\/+$/g, '');
+    return `events/${cleanEventId}/tickets/${cleanFilename}`;
+  }
+
+  /**
+   * Parses a canonical storage path into eventId and filename.
+   */
+  public parseTicketStoragePath(storagePath: string): { eventId: string; filename: string } | null {
+    const clean = (storagePath || '').trim().replace(/^\/+|\/+$/g, '');
+    const match = clean.match(/^events\/([^/]+)\/tickets\/([^/]+)$/);
+    if (!match) return null;
+    return {
+      eventId: match[1],
+      filename: match[2],
+    };
+  }
+
+  /**
+   * Ensures the target bucket exists and is configured for public access.
+   */
+  public async ensureBucket(): Promise<void> {
     if (this.bucketEnsured || !supabaseAdmin) return;
     try {
       const { data: bucket, error } = await supabaseAdmin.storage.getBucket(this.bucket);
@@ -39,19 +64,18 @@ export class SupabaseStorageService {
   }
 
   /**
-   * Upload a generated ticket image (Buffer, File path, SVG string, or Base64) to Supabase Storage.
-   * Returns the permanent public CDN URL and canonical storage path.
-   * Throws AppError on failure to ensure zero silent corruptions.
+   * Upload a generated ticket image to Supabase Storage.
+   * Format is strictly image/png by default.
+   * Throws StorageError on failure to ensure zero silent fallbacks.
    */
   async uploadTicketImage(
     storagePath: string,
     fileData: Buffer | string,
-    contentType: string = 'image/svg+xml'
+    contentType: string = 'image/png'
   ): Promise<{ publicUrl: string; storagePath: string }> {
     if (!supabaseAdmin) {
-      throw new AppError(
-        'Supabase Storage is not configured. SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be provided in environment variables.',
-        500
+      throw new StorageError(
+        'Supabase Storage is not configured. SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be provided in environment variables.'
       );
     }
 
@@ -70,12 +94,8 @@ export class SupabaseStorageService {
           const rawBase64 = fileData.replace(/^data:[^;]+;base64,/, '');
           buffer = Buffer.from(rawBase64, 'base64');
         }
-      } else if (fileData.startsWith('<svg') || fileData.includes('<svg')) {
-        mimeType = 'image/svg+xml';
-        buffer = Buffer.from(fileData, 'utf-8');
       } else if (fs.existsSync(fileData)) {
-        if (fileData.endsWith('.svg')) mimeType = 'image/svg+xml';
-        else if (fileData.endsWith('.png')) mimeType = 'image/png';
+        if (fileData.endsWith('.png')) mimeType = 'image/png';
         buffer = fs.readFileSync(fileData);
       } else {
         buffer = Buffer.from(fileData, 'utf-8');
@@ -115,9 +135,8 @@ export class SupabaseStorageService {
 
     if (lastError) {
       console.error(`[SupabaseStorageService] Upload permanently failed for ${cleanPath}:`, lastError);
-      throw new AppError(
-        `Failed to upload ticket image to Supabase Storage (${cleanPath}): ${lastError.message}`,
-        500
+      throw new StorageError(
+        `Failed to upload ticket image to Supabase Storage (${cleanPath}): ${lastError.message}`
       );
     }
 
@@ -126,9 +145,8 @@ export class SupabaseStorageService {
       .getPublicUrl(uploadData?.path || cleanPath);
 
     if (!urlData?.publicUrl) {
-      throw new AppError(
-        `Failed to obtain public URL for uploaded ticket (${cleanPath}) from Supabase Storage`,
-        500
+      throw new StorageError(
+        `Failed to obtain public URL for uploaded ticket (${cleanPath}) from Supabase Storage`
       );
     }
 
@@ -143,8 +161,9 @@ export class SupabaseStorageService {
    */
   async downloadTicketImage(storagePath: string): Promise<Buffer> {
     if (!supabaseAdmin) {
-      throw new AppError('Supabase Storage is not configured.', 500);
+      throw new StorageError('Supabase Storage is not configured.');
     }
+
     let cleanPath = storagePath.replace(/^\/+/, '');
     if (cleanPath.startsWith('http://') || cleanPath.startsWith('https://')) {
       const marker = `/storage/v1/object/public/${this.bucket}/`;
@@ -159,13 +178,93 @@ export class SupabaseStorageService {
 
     const { data, error } = await supabaseAdmin.storage.from(this.bucket).download(cleanPath);
     if (error || !data) {
-      throw new AppError(
-        `Failed to download ticket asset from Supabase Storage (${cleanPath}): ${error?.message || 'Not found'}`,
-        404
+      throw new StorageError(
+        `Failed to download ticket asset from Supabase Storage (${cleanPath}): ${error?.message || 'Not found'}`
       );
     }
+
     const arrayBuffer = await data.arrayBuffer();
     return Buffer.from(arrayBuffer);
+  }
+
+  /**
+   * Delete a single ticket asset from Supabase Storage.
+   */
+  async deleteTicketImage(storagePath: string): Promise<boolean> {
+    if (!supabaseAdmin) {
+      throw new StorageError('Supabase Storage is not configured.');
+    }
+
+    const cleanPath = storagePath.replace(/^\/+/, '');
+    const { error } = await supabaseAdmin.storage.from(this.bucket).remove([cleanPath]);
+
+    if (error) {
+      throw new StorageError(
+        `Failed to delete ticket asset from Supabase Storage (${cleanPath}): ${error.message}`
+      );
+    }
+
+    return true;
+  }
+
+  /**
+   * Batch delete multiple ticket assets from Supabase Storage.
+   */
+  async deleteTicketImages(storagePaths: string[]): Promise<number> {
+    if (!supabaseAdmin) {
+      throw new StorageError('Supabase Storage is not configured.');
+    }
+
+    if (storagePaths.length === 0) return 0;
+
+    const cleanPaths = storagePaths.map((p) => p.replace(/^\/+/, ''));
+    const { data, error } = await supabaseAdmin.storage.from(this.bucket).remove(cleanPaths);
+
+    if (error) {
+      throw new StorageError(
+        `Failed to batch delete ticket assets from Supabase Storage: ${error.message}`
+      );
+    }
+
+    return data?.length || cleanPaths.length;
+  }
+
+  /**
+   * Storage service health check.
+   */
+  async checkHealth(): Promise<{ configured: boolean; bucket: string; ready: boolean; error?: string }> {
+    if (!this.isConfigured()) {
+      return {
+        configured: false,
+        bucket: this.bucket,
+        ready: false,
+        error: 'Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY',
+      };
+    }
+
+    try {
+      const { data, error } = await supabaseAdmin!.storage.getBucket(this.bucket);
+      if (error) {
+        return {
+          configured: true,
+          bucket: this.bucket,
+          ready: false,
+          error: error.message,
+        };
+      }
+      return {
+        configured: true,
+        bucket: this.bucket,
+        ready: !!data,
+      };
+    } catch (err: any) {
+      return {
+        configured: true,
+        bucket: this.bucket,
+        ready: false,
+        error: err?.message || 'Health check error',
+      };
+    }
   }
 }
 

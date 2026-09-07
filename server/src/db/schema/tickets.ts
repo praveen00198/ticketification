@@ -24,4 +24,6 @@ export const tickets = pgTable('tickets', {
   index('idx_tickets_verification_token').on(table.verificationToken),
   index('idx_tickets_guest').on(table.guestId),
   index('idx_tickets_status').on(table.status),
+  index('idx_tickets_event_status').on(table.eventId, table.status),
+  index('idx_tickets_event_type').on(table.eventId, table.ticketTypeId),
 ]);

@@ -6,29 +6,51 @@ import { guestRepository, GuestRepository } from '../../guests/repositories/gues
 import { eventRepository, EventRepository } from '../../events/repositories/event.repository';
 import { ticketTypeRepository, TicketTypeRepository } from '../../events/repositories/ticket-type.repository';
 import { qrService, QrService } from './qr.service';
-import { ticketImageService, TicketImageService, isPngBuffer, formatTicketFileName } from './ticket-image.service';
+import {
+  ticketImageService,
+  TicketImageService,
+  TicketImageData,
+  isPngBuffer,
+  formatTicketFileName,
+} from './ticket-image.service';
 import { supabaseStorageService, SupabaseStorageService } from './supabase-storage.service';
-import { AppError } from '../../../middlewares/error.middleware';
+import {
+  AppError,
+  NotFoundError,
+  ValidationError,
+  StorageError,
+} from '../../../middlewares/error.middleware';
+import { GenerateTicketsResult } from '../ticket.types';
 
 export { formatTicketFileName };
 
+let _archiverModule: any = null;
+
 /**
- * Safely instantiates a ZipArchive instance across all archiver version module formats (v7 and v8+).
+ * Safely instantiates a ZipArchive instance across archiver version module formats (CJS/ESM).
  */
-function createZipArchive(options: any = { zlib: { level: 6 } }) {
+async function createZipArchive(options: any = { zlib: { level: 6 } }) {
   try {
-    const archiverModule: any = require('archiver');
-    if (archiverModule && typeof archiverModule.ZipArchive === 'function') {
-      return new archiverModule.ZipArchive(options);
+    if (!_archiverModule) {
+      try {
+        _archiverModule = require('archiver');
+      } catch {
+        const imported = await import('archiver');
+        _archiverModule = imported.default || imported;
+      }
     }
-    if (typeof archiverModule === 'function') {
-      return archiverModule('zip', options);
+
+    if (typeof _archiverModule === 'function') {
+      return _archiverModule('zip', options);
     }
-    if (archiverModule && typeof archiverModule.default === 'function') {
-      return archiverModule.default('zip', options);
+    if (typeof _archiverModule?.ZipArchive === 'function') {
+      return new _archiverModule.ZipArchive(options);
     }
-    if (archiverModule?.default && typeof archiverModule.default.ZipArchive === 'function') {
-      return new archiverModule.default.ZipArchive(options);
+    if (typeof _archiverModule?.default === 'function') {
+      return _archiverModule.default('zip', options);
+    }
+    if (typeof _archiverModule?.default?.ZipArchive === 'function') {
+      return new _archiverModule.default.ZipArchive(options);
     }
   } catch (err) {
     console.error('[Archiver] Error initializing archiver engine:', err);
@@ -49,20 +71,21 @@ export class TicketService {
 
   /**
    * Generate tickets for all guests of an event.
+   * Produces genuine PNG binaries (0x89504E47) and uploads directly to Supabase Storage.
    */
-  async generateTicketsForEvent(eventId: string, userId: string) {
+  async generateTicketsForEvent(eventId: string, userId: string): Promise<GenerateTicketsResult> {
     const event = await this.eventRepo.findByIdAndOwner(eventId, userId);
     if (!event) {
-      throw new AppError('Event not found or unauthorized', 404);
+      throw new NotFoundError('Event not found or unauthorized');
     }
 
-    // 1. Fetch all guests for this event (up to 50,000)
+    // 1. Fetch all guests for this event
     const guests = await this.guestRepo.findByEventId(eventId, 50000, 0);
     if (guests.length === 0) {
-      throw new AppError('No guests found for this event. Please import guests first.', 400);
+      throw new ValidationError('No guests found for this event. Please import guests first.');
     }
 
-    // 2. Fetch existing tickets to avoid regenerating duplicate tickets for same guest
+    // 2. Fetch existing tickets to avoid regenerating duplicates
     const existingTickets = await this.ticketRepo.findByEventId(eventId, { limit: 50000 });
     const guestsWithTickets = new Set(
       existingTickets.map((t) => t.ticket.guestId).filter(Boolean)
@@ -70,11 +93,9 @@ export class TicketService {
 
     const pendingGuests = guests.filter((g) => !guestsWithTickets.has(g.id));
 
-    // Ensure Supabase Storage is configured
     if (!this.storageServ.isConfigured()) {
-      throw new AppError(
-        'Supabase Storage is not configured. Please ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are configured in the environment.',
-        500
+      throw new StorageError(
+        'Supabase Storage is not configured. Please ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are configured in the environment.'
       );
     }
 
@@ -86,7 +107,7 @@ export class TicketService {
       };
     }
 
-    // 3. Fetch ticket types (auto-seed default types if none exist)
+    // 3. Resolve ticket types (auto-seed default types if none exist)
     let ticketTypes = await this.ticketTypeRepo.findByEventId(eventId);
     if (ticketTypes.length === 0) {
       const defaultTypes = [
@@ -113,7 +134,11 @@ export class TicketService {
 
     let nextSeq = await this.ticketRepo.getNextSequenceNumber(eventId);
     const ticketsToInsert: any[] = [];
-    const uploadTasks: Array<{ storagePath: string; svg: string; ticketRecord: any }> = [];
+    const generationTasks: Array<{
+      storagePath: string;
+      ticketData: TicketImageData;
+      ticketRecord: any;
+    }> = [];
 
     const safePrefix =
       (event.name || 'EVT').trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase() || 'EVT';
@@ -122,15 +147,14 @@ export class TicketService {
       const guestCategory = (guest.category || 'GENERAL').toUpperCase().trim();
       const matchedType = typeMap.get(guestCategory) || defaultType;
 
-      // Generate 64-char crypto token
+      // 64-char crypto token (zero PII)
       const verificationToken = this.qrServ.generateVerificationToken();
       const qrDataUrl = await this.qrServ.generateQrDataUrl(verificationToken);
 
-      // Generate Ticket Asset (1620x2025)
       const ticketSeqStr = nextSeq.toString().padStart(5, '0');
       const displayId = `${safePrefix}-${ticketSeqStr}`;
 
-      const svgData = {
+      const ticketData: TicketImageData = {
         ticketId: displayId,
         guestName: guest.name || 'Valued Guest',
         eventName: event.name,
@@ -141,8 +165,8 @@ export class TicketService {
         phone: guest.phone || undefined,
       };
 
-      const svg = this.imageServ.buildSvg(svgData);
-      const storagePath = `events/${eventId}/tickets/ticket-${displayId}.svg`;
+      // Canonical PNG storage path
+      const storagePath = `events/${eventId}/tickets/ticket-${displayId}.png`;
 
       const ticketRecord = {
         eventId,
@@ -152,45 +176,56 @@ export class TicketService {
         status: 'ACTIVE',
         usagePolicy: matchedType.usagePolicy || 'SINGLE_USE',
         assetPath: storagePath,
-        assetUrl: '', // Populated upon successful Supabase Storage upload
+        assetUrl: '',
         sequenceNumber: nextSeq,
         createdBy: userId,
       };
 
       ticketsToInsert.push(ticketRecord);
-      uploadTasks.push({
+      generationTasks.push({
         storagePath,
-        svg,
+        ticketData,
         ticketRecord,
       });
 
       nextSeq++;
     }
 
-    // Stable parallel upload to Supabase Storage in batches of 5 to avoid Gateway Timeouts
-    if (uploadTasks.length > 0) {
-      const BATCH_SIZE = 5;
-      for (let i = 0; i < uploadTasks.length; i += BATCH_SIZE) {
-        const batch = uploadTasks.slice(i, i + BATCH_SIZE);
-        await Promise.all(
-          batch.map(async (task) => {
-            const uploadResult = await this.storageServ.uploadTicketImage(
-              task.storagePath,
-              task.svg,
-              'image/svg+xml'
+    // High-performance batch PNG rendering & upload to Supabase Storage
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < generationTasks.length; i += BATCH_SIZE) {
+      const batch = generationTasks.slice(i, i + BATCH_SIZE);
+      const renderedBatch = await this.imageServ.renderBatchTickets(
+        batch.map((b) => b.ticketData),
+        5
+      );
+
+      await Promise.all(
+        batch.map(async (task, idx) => {
+          const rendered = renderedBatch[idx];
+          if (!rendered || !isPngBuffer(rendered.pngBuffer)) {
+            throw new StorageError(
+              `Rendered ticket failed PNG binary validation for ticket ${task.ticketData.ticketId}`
             );
-            task.ticketRecord.assetUrl = uploadResult.publicUrl;
-            task.ticketRecord.assetPath = uploadResult.storagePath;
-          })
-        );
-      }
+          }
+
+          const uploadResult = await this.storageServ.uploadTicketImage(
+            task.storagePath,
+            rendered.pngBuffer,
+            'image/png'
+          );
+
+          task.ticketRecord.assetUrl = uploadResult.publicUrl;
+          task.ticketRecord.assetPath = uploadResult.storagePath;
+        })
+      );
     }
 
-    // Insert records into PostgreSQL only after all images are verified in Supabase Storage
+    // Persist to PostgreSQL only after all PNGs are successfully uploaded to Supabase Storage
     const inserted = await this.ticketRepo.createMany(ticketsToInsert);
 
     return {
-      message: `Successfully generated and uploaded ${inserted.length} tickets to Supabase Storage.`,
+      message: `Successfully generated and uploaded ${inserted.length} PNG tickets to Supabase Storage.`,
       generatedCount: inserted.length,
       totalGuests: guests.length,
     };
@@ -198,6 +233,7 @@ export class TicketService {
 
   /**
    * Generate unassigned worker tickets (guestId = null).
+   * Renders genuine PNG binaries and uploads directly to Supabase Storage.
    */
   async generateUnassignedWorkerTickets(
     eventId: string,
@@ -206,18 +242,17 @@ export class TicketService {
     ticketTypeName = 'WORKER'
   ) {
     if (count <= 0 || count > 500) {
-      throw new AppError('Quantity must be between 1 and 500.', 400);
+      throw new ValidationError('Quantity must be between 1 and 500.');
     }
 
     const event = await this.eventRepo.findByIdAndOwner(eventId, userId);
     if (!event) {
-      throw new AppError('Event not found or unauthorized', 404);
+      throw new NotFoundError('Event not found or unauthorized');
     }
 
     if (!this.storageServ.isConfigured()) {
-      throw new AppError(
-        'Supabase Storage is not configured. Please ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are configured in the environment.',
-        500
+      throw new StorageError(
+        'Supabase Storage is not configured. Please ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are configured in the environment.'
       );
     }
 
@@ -237,7 +272,11 @@ export class TicketService {
 
     let nextSeq = await this.ticketRepo.getNextSequenceNumber(eventId);
     const ticketsToInsert: any[] = [];
-    const uploadTasks: Array<{ storagePath: string; svg: string; ticketRecord: any }> = [];
+    const generationTasks: Array<{
+      storagePath: string;
+      ticketData: TicketImageData;
+      ticketRecord: any;
+    }> = [];
 
     for (let i = 0; i < count; i++) {
       const verificationToken = this.qrServ.generateVerificationToken();
@@ -246,17 +285,16 @@ export class TicketService {
       const ticketSeqStr = nextSeq.toString().padStart(5, '0');
       const displayId = `WRK-${ticketSeqStr}`;
 
-      const workerData = {
+      const workerData: TicketImageData = {
         ticketId: displayId,
-        guestName: 'UNASSIGNED STAFF',
+        guestName: 'Event Staff',
         eventName: event.name,
         eventDate: event.date,
         ticketType: workerType.label || 'Event Staff',
         qrCodeDataUrl: qrDataUrl,
       };
 
-      const svg = this.imageServ.buildSvg(workerData);
-      const storagePath = `events/${eventId}/tickets/ticket-${displayId}.svg`;
+      const storagePath = `events/${eventId}/tickets/ticket-${displayId}.png`;
 
       const ticketRecord = {
         eventId,
@@ -266,37 +304,49 @@ export class TicketService {
         status: 'ACTIVE',
         usagePolicy: 'REUSABLE',
         assetPath: storagePath,
-        assetUrl: '', // Populated upon Supabase Storage upload
+        assetUrl: '',
         sequenceNumber: nextSeq,
         createdBy: userId,
       };
 
       ticketsToInsert.push(ticketRecord);
-      uploadTasks.push({
+      generationTasks.push({
         storagePath,
-        svg,
+        ticketData: workerData,
         ticketRecord,
       });
 
       nextSeq++;
     }
 
-    if (uploadTasks.length > 0) {
-      const BATCH_SIZE = 5;
-      for (let i = 0; i < uploadTasks.length; i += BATCH_SIZE) {
-        const batch = uploadTasks.slice(i, i + BATCH_SIZE);
-        await Promise.all(
-          batch.map(async (task) => {
-            const uploadResult = await this.storageServ.uploadTicketImage(
-              task.storagePath,
-              task.svg,
-              'image/svg+xml'
+    // High-performance batch PNG rendering & upload to Supabase Storage
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < generationTasks.length; i += BATCH_SIZE) {
+      const batch = generationTasks.slice(i, i + BATCH_SIZE);
+      const renderedBatch = await this.imageServ.renderBatchTickets(
+        batch.map((b) => b.ticketData),
+        5
+      );
+
+      await Promise.all(
+        batch.map(async (task, idx) => {
+          const rendered = renderedBatch[idx];
+          if (!rendered || !isPngBuffer(rendered.pngBuffer)) {
+            throw new StorageError(
+              `Rendered worker ticket failed PNG binary validation for ticket ${task.ticketData.ticketId}`
             );
-            task.ticketRecord.assetUrl = uploadResult.publicUrl;
-            task.ticketRecord.assetPath = uploadResult.storagePath;
-          })
-        );
-      }
+          }
+
+          const uploadResult = await this.storageServ.uploadTicketImage(
+            task.storagePath,
+            rendered.pngBuffer,
+            'image/png'
+          );
+
+          task.ticketRecord.assetUrl = uploadResult.publicUrl;
+          task.ticketRecord.assetPath = uploadResult.storagePath;
+        })
+      );
     }
 
     const createdTickets = await this.ticketRepo.createMany(ticketsToInsert);
@@ -313,7 +363,7 @@ export class TicketService {
   async getTicketsByEvent(eventId: string, userId: string, options: TicketFilterOptions = {}) {
     const event = await this.eventRepo.findByIdAndOwner(eventId, userId);
     if (!event) {
-      throw new AppError('Event not found or unauthorized', 404);
+      throw new NotFoundError('Event not found or unauthorized');
     }
 
     const tickets = await this.ticketRepo.findByEventId(eventId, options);
@@ -356,7 +406,7 @@ export class TicketService {
   }
 
   /**
-   * Get a single ticket by ID or token.
+   * Get a single ticket by ID or verification token.
    */
   async getTicketById(idOrToken: string) {
     let ticket = await this.ticketRepo.findById(idOrToken);
@@ -367,235 +417,129 @@ export class TicketService {
   }
 
   /**
-   * Stream a ZIP archive containing all PNG ticket images retrieved from Supabase Storage and a CSV manifest.
-   * Processes in memory-conscious batches so large events (1,000+ tickets) stream smoothly.
-   * All files inside the ZIP are genuine PNG binaries formatted as <Guest-Name>-<Ticket-ID>.png.
+   * Download a single ticket asset as a genuine PNG buffer with canonical filename.
+   * Directly reuses existing stored PNG asset; zero on-demand ticket regeneration.
+   */
+  async downloadTicket(
+    ticketIdOrToken: string,
+    userId: string
+  ): Promise<{ buffer: Buffer; fileName: string; contentType: string }> {
+    const rawRecord: any = await this.getTicketById(ticketIdOrToken);
+    if (!rawRecord) {
+      throw new NotFoundError('Ticket not found');
+    }
+
+    // Support both joined record from Repository and plain ticket object
+    const ticket = rawRecord.ticket || rawRecord;
+    let event = rawRecord.event;
+    if (!event && ticket.eventId) {
+      event = await this.eventRepo.findByIdAndOwner(ticket.eventId, userId);
+    }
+
+    // Verify ownership via event createdBy
+    if (!event || event.createdBy !== userId) {
+      throw new NotFoundError('Ticket not found or unauthorized');
+    }
+
+    const guest = rawRecord.guest || (ticket.guestId ? await this.guestRepo.findById(ticket.guestId) : null);
+    const guestName = guest?.name || null;
+    const seqStr = ticket.sequenceNumber.toString().padStart(5, '0');
+    const isWorker = !ticket.guestId || ticket.usagePolicy === 'REUSABLE';
+    const safePrefix =
+      (event.name || 'EVT').trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase() || 'EVT';
+    const displayId = isWorker ? `WRK-${seqStr}` : `${safePrefix}-${seqStr}`;
+    const fileName = formatTicketFileName(guestName, displayId);
+
+    const candidatePaths = [
+      ticket.assetPath,
+      `events/${ticket.eventId}/tickets/ticket-${displayId}.png`,
+    ].filter(Boolean) as string[];
+
+    let fileBuffer: Buffer | null = null;
+    for (const p of candidatePaths) {
+      try {
+        const buf = await this.storageServ.downloadTicketImage(p);
+        if (isPngBuffer(buf)) {
+          fileBuffer = buf;
+          break;
+        }
+      } catch {
+        // try next candidate path
+      }
+    }
+
+    if (!fileBuffer || !isPngBuffer(fileBuffer)) {
+      throw new NotFoundError('Stored ticket PNG asset could not be located in storage');
+    }
+
+    return {
+      buffer: fileBuffer,
+      fileName,
+      contentType: 'image/png',
+    };
+  }
+
+  /**
+   * Stream a ZIP archive containing genuine PNG ticket assets retrieved from Supabase Storage.
+   * Reuses existing stored PNG assets directly; zero on-demand ticket regeneration.
    */
   async streamTicketsZip(eventId: string, userId: string, streamOut: NodeJS.WritableStream) {
     const event = await this.eventRepo.findByIdAndOwner(eventId, userId);
     if (!event) {
-      throw new AppError('Event not found or unauthorized', 404);
+      throw new NotFoundError('Event not found or unauthorized');
     }
 
     const tickets = await this.ticketRepo.findByEventId(eventId, { limit: 50000 });
     if (tickets.length === 0) {
-      throw new AppError('No tickets found to export for this event.', 400);
+      throw new ValidationError('No tickets found to export for this event.');
     }
 
-    const archive = createZipArchive({ zlib: { level: 6 } });
+    const archive = await createZipArchive({ zlib: { level: 6 } });
     archive.on('error', (err: any) => {
       console.error('[BulkExport] Archive error:', err);
     });
     archive.pipe(streamOut);
 
-    const csvRows = [
-      ['Sequence', 'Guest Name', 'Category', 'Status', 'Usage Policy', 'File Name', 'Asset Source', 'Verification Token', 'Asset URL'].join(','),
-    ];
+    const safePrefix =
+      (event.name || 'EVT').trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase() || 'EVT';
 
-    let retrievedPngCount = 0;
-    let convertedFromSvgCount = 0;
-    let recoveredPngCount = 0;
-    const BATCH_SIZE = 20;
+    const BATCH_SIZE = 10;
+    for (let i = 0; i < tickets.length; i += BATCH_SIZE) {
+      const batch = tickets.slice(i, i + BATCH_SIZE);
 
-    let browser: any = null;
-    let page: any = null;
-    let browserFailed = false;
-
-    const ensurePage = async () => {
-      if (browserFailed) return null;
-      if (!browser) {
-        try {
-          browser = await this.imageServ.launchBrowser();
-        } catch (bErr) {
-          console.warn('[BulkExport] Browser launch unavailable, streaming storage tickets directly:', bErr);
-          browserFailed = true;
-          return null;
-        }
-      }
-      if (!page && browser) {
-        try {
-          page = await browser.newPage();
-          await page.setViewport({ width: 1620, height: 2025 });
-        } catch (pErr) {
-          console.warn('[BulkExport] Failed to create browser page:', pErr);
-          return null;
-        }
-      }
-      return page;
-    };
-
-    try {
-      for (let i = 0; i < tickets.length; i += BATCH_SIZE) {
-        const batch = tickets.slice(i, i + BATCH_SIZE);
-
-        const batchResults = [];
-        for (const t of batch) {
+      await Promise.all(
+        batch.map(async (t) => {
           const seqStr = t.ticket.sequenceNumber.toString().padStart(5, '0');
-          const displayId = `${event.name.substring(0, 3).toUpperCase()}-${seqStr}`;
+          const isWorker = !t.ticket.guestId || t.ticketType.usagePolicy === 'REUSABLE';
+          const displayId = isWorker ? `WRK-${seqStr}` : `${safePrefix}-${seqStr}`;
           const fileName = formatTicketFileName(t.guest?.name, displayId);
 
-          const pngStoragePath = `events/${eventId}/tickets/ticket-${displayId}.png`;
+          const candidatePaths = [
+            t.ticket.assetPath,
+            `events/${eventId}/tickets/ticket-${displayId}.png`,
+          ].filter(Boolean) as string[];
 
           let fileBuffer: Buffer | null = null;
-          let source = 'SUPABASE_STORAGE_PNG';
-
-          // 1. Try to download directly from pngStoragePath
-          try {
-            const buf = await this.storageServ.downloadTicketImage(pngStoragePath);
-            if (isPngBuffer(buf)) {
-              fileBuffer = buf;
-            }
-          } catch (_e) {}
-
-          // 2. If not found as PNG, check current assetPath
-          if (!fileBuffer && t.ticket.assetPath && t.ticket.assetPath !== pngStoragePath) {
+          for (const p of candidatePaths) {
             try {
-              const buf = await this.storageServ.downloadTicketImage(t.ticket.assetPath);
+              const buf = await this.storageServ.downloadTicketImage(p);
               if (isPngBuffer(buf)) {
                 fileBuffer = buf;
-              } else {
-                // It's an SVG from Supabase Storage! Convert to genuine PNG
-                const p = await ensurePage();
-                if (p) {
-                  fileBuffer = await this.imageServ.renderSvgOnPage(buf.toString('utf-8'), p);
-                  source = 'CONVERTED_FROM_STORAGE_SVG';
-
-                  // Persist the PNG back to Supabase Storage
-                  try {
-                    const uploadResult = await this.storageServ.uploadTicketImage(
-                      pngStoragePath,
-                      fileBuffer,
-                      'image/png'
-                    );
-                    await this.ticketRepo.update(t.ticket.id, {
-                      assetUrl: uploadResult.publicUrl,
-                      assetPath: uploadResult.storagePath,
-                    });
-                  } catch (_cacheErr) {}
-                } else {
-                  fileBuffer = buf;
-                  source = 'STORAGE_SVG_FALLBACK';
-                }
+                break;
               }
-            } catch (_e) {}
-          }
-
-          // 3. Fallback recovery: render fresh PNG from template & QR if storage asset was missing
-          if (!fileBuffer) {
-            const p = await ensurePage();
-            const qrDataUrl = await this.qrServ.generateQrDataUrl(t.ticket.verificationToken);
-            const svg = this.imageServ.buildSvg({
-              ticketId: displayId,
-              guestName: t.guest?.name || (t.ticket.usagePolicy === 'REUSABLE' ? 'Event Staff' : 'Valued Guest'),
-              eventName: event.name,
-              eventDate: event.date,
-              ticketType: t.ticketType.label || t.ticketType.name,
-              qrCodeDataUrl: qrDataUrl,
-              organization: t.guest?.organization || undefined,
-              phone: t.guest?.phone || undefined,
-            });
-
-            if (p) {
-              source = 'RECOVERED_ON_DEMAND_PNG';
-              fileBuffer = await this.imageServ.renderSvgOnPage(svg, p);
-
-              try {
-                const uploadResult = await this.storageServ.uploadTicketImage(
-                  pngStoragePath,
-                  fileBuffer,
-                  'image/png'
-                );
-                await this.ticketRepo.update(t.ticket.id, {
-                  assetUrl: uploadResult.publicUrl,
-                  assetPath: uploadResult.storagePath,
-                });
-              } catch (_saveErr) {}
-            } else {
-              source = 'RECOVERED_ON_DEMAND_SVG';
-              fileBuffer = Buffer.from(svg, 'utf-8');
+            } catch {
+              // try next path
             }
           }
 
-          // Final guarantee: MUST be genuine PNG binary if page is available
-          if (fileBuffer && !isPngBuffer(fileBuffer)) {
-            const p = await ensurePage();
-            if (p) {
-              fileBuffer = await this.imageServ.renderSvgOnPage(fileBuffer.toString('utf-8'), p);
-            }
+          if (fileBuffer && isPngBuffer(fileBuffer)) {
+            archive.append(fileBuffer, { name: fileName });
           }
-
-          if (fileBuffer) {
-            batchResults.push({
-              t,
-              fileName,
-              fileBuffer,
-              source,
-              seqStr,
-            });
-          }
-        }
-
-        for (const item of batchResults) {
-          if (item.source === 'SUPABASE_STORAGE_PNG') {
-            retrievedPngCount++;
-          } else if (item.source === 'CONVERTED_FROM_STORAGE_SVG') {
-            convertedFromSvgCount++;
-          } else {
-            recoveredPngCount++;
-          }
-
-          if (item.fileBuffer) {
-            archive.append(item.fileBuffer, { name: item.fileName });
-          }
-
-          csvRows.push(
-            [
-              `#${item.seqStr}`,
-              `"${(item.t.guest?.name || 'Staff').replace(/"/g, '""')}"`,
-              `"${item.t.ticketType.name.replace(/"/g, '""')}"`,
-              item.t.ticket.status,
-              item.t.ticket.usagePolicy,
-              item.fileName,
-              item.source,
-              item.t.ticket.verificationToken,
-              `"${item.t.ticket.assetUrl || ''}"`,
-            ].join(',')
-          );
-        }
-      }
-
-      // Include manifest and summary
-      archive.append(csvRows.join('\n'), { name: 'tickets-manifest.csv' });
-      archive.append(
-        [
-          '================================================',
-          'EVENT TICKET BULK EXPORT SUMMARY',
-          '================================================',
-          `Event: ${event.name}`,
-          `Date: ${event.date}`,
-          `Total Tickets Exported: ${tickets.length}`,
-          `Retrieved as PNG from Supabase Storage: ${retrievedPngCount}`,
-          `Converted from Storage SVG to PNG: ${convertedFromSvgCount}`,
-          `Recovered On-Demand PNG: ${recoveredPngCount}`,
-          `Export Generated At: ${new Date().toISOString()}`,
-          '================================================',
-        ].join('\n'),
-        { name: 'export-summary.txt' }
+        })
       );
-
-      await archive.finalize();
-    } finally {
-      if (page) {
-        try {
-          await page.close();
-        } catch (_e) {}
-      }
-      if (browser) {
-        try {
-          await browser.close();
-        } catch (_e) {}
-      }
     }
+
+    await archive.finalize();
   }
 }
 

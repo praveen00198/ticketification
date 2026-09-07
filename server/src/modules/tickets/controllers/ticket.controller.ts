@@ -1,19 +1,22 @@
 import { Response, NextFunction } from 'express';
 import { ticketService } from '../services/ticket.service';
 import { AuthenticatedRequest } from '../../../middlewares/auth.middleware';
-import { AppError } from '../../../middlewares/error.middleware';
+import { AuthenticationError } from '../../../middlewares/error.middleware';
+import {
+  validateEventIdParam,
+  validateTicketIdParam,
+  validateGenerateWorkerTicketsInput,
+  validateTicketFilterQuery,
+} from '../ticket.validation';
 
 export class TicketController {
-  async generateTickets(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  async generateTickets(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      if (!req.user) throw new AppError('Unauthorized', 401);
+      if (!req.user) throw new AuthenticationError();
 
-      const eventId = (req.params.eventId || req.body.eventId) as string;
-      if (!eventId) {
-        throw new AppError('Event ID is required for ticket generation', 400);
-      }
-
+      const eventId = validateEventIdParam(req.params.eventId || req.body.eventId);
       const result = await ticketService.generateTicketsForEvent(eventId, req.user.id);
+
       res.status(201).json({
         success: true,
         data: result,
@@ -23,17 +26,12 @@ export class TicketController {
     }
   }
 
-  async generateWorkerTickets(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  async generateWorkerTickets(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      if (!req.user) throw new AppError('Unauthorized', 401);
+      if (!req.user) throw new AuthenticationError();
 
-      const eventId = (req.params.eventId || req.body.eventId) as string;
-      const count = parseInt(req.body.count, 10) || 10;
-      const ticketTypeName = req.body.ticketTypeName || 'WORKER';
-
-      if (!eventId) {
-        throw new AppError('Event ID is required', 400);
-      }
+      const eventId = validateEventIdParam(req.params.eventId || req.body.eventId);
+      const { count, ticketTypeName } = validateGenerateWorkerTicketsInput(req.body);
 
       const result = await ticketService.generateUnassignedWorkerTickets(
         eventId,
@@ -51,55 +49,66 @@ export class TicketController {
     }
   }
 
-  async getAllTickets(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  async getAllTickets(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      if (!req.user) throw new AppError('Unauthorized', 401);
+      if (!req.user) throw new AuthenticationError();
 
-      const eventId = (req.params.eventId || req.query.eventId) as string;
-      if (!eventId) {
-        return res.json({ success: true, data: { tickets: [], total: 0 } });
+      const rawEventId = req.params.eventId || req.query.eventId;
+      if (!rawEventId) {
+        res.status(200).json({ success: true, data: { tickets: [], total: 0 } });
+        return;
       }
 
-      const status = req.query.status as string;
-      const ticketTypeId = req.query.ticketTypeId as string;
-      const search = req.query.search as string;
-      const limit = parseInt(req.query.limit as string, 10) || 1000;
-      const offset = parseInt(req.query.offset as string, 10) || 0;
+      const eventId = validateEventIdParam(rawEventId);
+      const filterOptions = validateTicketFilterQuery(req.query);
 
-      const result = await ticketService.getTicketsByEvent(eventId, req.user.id, {
-        status,
-        ticketTypeId,
-        search,
-        limit,
-        offset,
-      });
+      const result = await ticketService.getTicketsByEvent(eventId, req.user.id, filterOptions);
 
-      res.json({ success: true, data: result });
+      res.status(200).json({ success: true, data: result });
     } catch (err) {
       next(err);
     }
   }
 
-  async getTicketById(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  async getTicketById(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const ticket = await ticketService.getTicketById(req.params.id);
+      const ticketId = validateTicketIdParam(req.params.id);
+      const ticket = await ticketService.getTicketById(ticketId);
+
       if (!ticket) {
-        throw new AppError('Ticket not found', 404);
+        res.status(404).json({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Ticket not found' },
+        });
+        return;
       }
-      res.json({ success: true, data: ticket });
+
+      res.status(200).json({ success: true, data: ticket });
     } catch (err) {
       next(err);
     }
   }
 
-  async exportTicketsZip(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  async downloadTicket(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      if (!req.user) throw new AppError('Unauthorized', 401);
+      if (!req.user) throw new AuthenticationError();
 
-      const eventId = (req.params.eventId || req.query.eventId) as string;
-      if (!eventId) {
-        throw new AppError('Event ID is required', 400);
-      }
+      const ticketId = validateTicketIdParam(req.params.ticketId || req.params.id);
+      const result = await ticketService.downloadTicket(ticketId, req.user.id);
+
+      res.setHeader('Content-Type', result.contentType);
+      res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
+      res.send(result.buffer);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async exportTicketsZip(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) throw new AuthenticationError();
+
+      const eventId = validateEventIdParam(req.params.eventId || req.query.eventId);
 
       res.setHeader('Content-Type', 'application/zip');
       res.setHeader('Content-Disposition', `attachment; filename="tickets-export.zip"`);

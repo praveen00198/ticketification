@@ -1,8 +1,12 @@
 import { Router } from 'express';
 import { verificationController } from '../controllers/verification.controller';
 import { authMiddleware } from '../../../middlewares/auth.middleware';
+import { scannerRateLimiter } from '../../../middlewares/rate-limit.middleware';
 
 const router = Router({ mergeParams: true });
+
+// Apply scanner rate limiter to protect all scan and lookup endpoints
+router.use(scannerRateLimiter);
 
 // Public lookup for phone camera scans (no auth needed to view verification page)
 router.get('/:token', (req, res, next) =>

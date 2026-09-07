@@ -7,7 +7,6 @@ import verificationRoutes from './modules/verification/routes/verification.route
 import dashboardRoutes from './modules/dashboard/routes/dashboard.routes';
 import eventRoutes from './modules/events/routes/event.routes';
 import { ticketService } from './modules/tickets/services/ticket.service';
-import { ticketRepository } from './modules/tickets/repositories/ticket.repository';
 import { errorHandler } from './middlewares/error.middleware';
 import config from './config/env';
 
@@ -58,9 +57,7 @@ app.get('/uploads/tickets/:filename', async (req, res) => {
   const filename = req.params.filename;
   try {
     const cleanToken = filename.replace(/\.(svg|png)$/, '').replace(/^ticket-/, '');
-    const ticketRecord =
-      (await ticketService.getTicketById(cleanToken)) ||
-      (await ticketRepository.findByVerificationToken(cleanToken));
+    const ticketRecord = await ticketService.getTicketById(cleanToken);
 
     if (ticketRecord?.ticket?.assetUrl && ticketRecord.ticket.assetUrl.includes('supabase.co')) {
       return res.redirect(301, ticketRecord.ticket.assetUrl);
@@ -74,7 +71,6 @@ app.use('/api/auth', authRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/guests', guestRoutes);
 app.use('/api/verify', verificationRoutes);
-app.use('/api/tickets', verificationRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 

@@ -55,6 +55,19 @@ export class GuestImportRepository {
   }
 
   /**
+   * Find a specific import scoped to an event (IDOR prevention).
+   */
+  async findByIdAndEventId(id: string, eventId: string) {
+    const result = await db
+      .select()
+      .from(guestImports)
+      .where(and(eq(guestImports.id, id), eq(guestImports.eventId, eventId)))
+      .limit(1);
+
+    return result[0] || null;
+  }
+
+  /**
    * Create a new guest import record.
    */
   async create(data: CreateGuestImportInput) {
@@ -86,6 +99,18 @@ export class GuestImportRepository {
     const result = await db
       .update(guestImports)
       .set(data)
+      .where(eq(guestImports.id, id))
+      .returning();
+
+    return result[0] || null;
+  }
+
+  /**
+   * Delete an import session.
+   */
+  async delete(id: string) {
+    const result = await db
+      .delete(guestImports)
       .where(eq(guestImports.id, id))
       .returning();
 

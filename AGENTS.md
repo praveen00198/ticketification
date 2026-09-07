@@ -1,66 +1,69 @@
-# AGENTS.md — Permanent Project Rules & Guidelines
+# AGENTS.md — Permanent Project Rules & Engineering Governance
 
-## Project Purpose
-QR Ticket Generation & Verification Platform — a production-quality event ticketing console for administrators to register/login, create events, import categorized guest lists from Excel, generate cryptographically verified image/QR tickets, download tickets individually or in bulk, and scan/verify QR tickets on event day with proper check-in enforcement.
+## 1. Project Purpose
+Ticketification is a production-oriented event ticket generation and QR verification platform. It allows event administrators to register/login, create events, import categorized guest lists from Excel with dynamic header mapping, generate cryptographically verified high-resolution PNG tickets with embedded QR codes, upload assets to Supabase Storage, download tickets individually or in bulk ZIP archives, and scan/verify QR tickets on event day with server-enforced atomic single-use and reusable worker check-in policies.
 
-## Tech Stack
-- **Backend**: Node.js, Express, TypeScript, Drizzle ORM, Supabase (PostgreSQL + Auth + Storage), Puppeteer, `qrcode`.
-- **Frontend**: React 18, TypeScript, Vite, Tailwind CSS, `html5-qrcode`, Remix Icon.
-- **Database**: Supabase PostgreSQL (relational modeling, foreign keys, constraints, indexes).
-- **ORM**: Drizzle ORM (TypeScript-native, SQL-like, explicit queries).
-- **Storage**: Supabase Storage (event-scoped ticket image assets).
-- **Auth**: Supabase Auth (email/password, JWT validation).
+---
 
-## Context-First Development
-1. **Read `PROJECT_CONTEXT.md` before starting any task.**
-2. Read relevant `docs/*` files before modifying architecture.
-3. Never blindly scan the entire repository if context docs contain the required information.
-4. **Update `PROJECT_CONTEXT.md` after significant changes.**
-5. Never change architecture without documenting the decision in `docs/decisions.md`.
+## 2. Engineering Governance & Sources of Truth
+The following documentation files in the project root constitute the engineering source of truth:
+1. `PRD.md` — Product Requirements Document
+2. `ARCHITECTURE.md` — System Architecture & Layered Boundaries
+3. `RULES.md` — Non-negotiable Engineering Rules & Invariants
+4. `PHASES.md` — Phase Definitions & Completion Criteria
+5. `DESIGN.md` — Design System & Visual Specification
+6. `MEMORY.md` — Operational Knowledge & Audit Discoveries
+7. `AGENTS.md` — Agent Guidelines & Invariants (this file)
+8. `DECISION.md` — Architecture Decision Records (ADRs)
+9. `TESTING.md` — Test Strategy & Verification Matrix
 
-## Non-Negotiable Database Rules
-1. **ALL order-sensitive queries MUST use explicit `ORDER BY`**. Never rely on implicit database ordering, natural order, physical storage order, or query planner order.
-2. Use Drizzle ORM for all database interactions. No raw SQL unless absolutely necessary.
-3. Use proper relational modeling: foreign keys, unique constraints, check constraints, indexes.
-4. Use database transactions where atomicity is required (e.g., check-in operations).
-5. Store missing/optional data as `NULL`, never as placeholder values (`"N/A"`, `"0000000000"`).
+Requirements must never exist solely inside chat messages.
 
-## Architecture Constraints
-- Modular monolith pattern: routes → controllers → services → repositories.
-- **Controller**: HTTP concerns only. No business logic, no DB queries.
-- **Service**: Business logic. No HTTP response handling, no direct DB queries.
-- **Repository**: Database interaction via Drizzle ORM. No business decisions.
-- QR code verification and check-in status checks must be evaluated exclusively server-side.
-- QR payload contains secure token URL (`https://APP_DOMAIN/verify/<SECURE_TOKEN>`), never raw personal details.
-- Atomic check-in for single-use tickets via conditional SQL update.
+---
 
-## Environment & Secrets Rules
-1. Never commit actual secret keys (`SUPABASE_SERVICE_ROLE_KEY`, Supabase URL/keys) to Git.
-2. Track `.env.example` templates in root, `server/`, and `client/`.
-3. Backend configuration must be accessed strictly through `config.env` from `server/src/config/env.ts`.
-4. Frontend environment variables must use `VITE_` prefix and never expose private server credentials.
-5. **Never expose `SUPABASE_SERVICE_ROLE_KEY` to the frontend.**
+## 3. Mandatory Agent Workflow (13-Step Cycle)
+Whenever any task or modification is requested:
+1. **Read project documentation first** (`PRD.md`, `ARCHITECTURE.md`, `RULES.md`, etc.).
+2. **Read relevant skills** in `.agents/skills/` before working in that domain.
+3. **Inspect only relevant code** — do not blindly scan the entire repository.
+4. **Understand existing architecture** and dependency direction.
+5. **Determine scope** and identify potential side-effects.
+6. **Create an implementation plan** (if non-trivial).
+7. **Implement the smallest correct change**.
+8. **Follow strict layered architecture**:
+   `Route` ➔ `Controller` ➔ `Validation` ➔ `Service` ➔ `Repository` ➔ `Database/Storage`.
+9. **Test the change** using automated test suites (`npm test`).
+10. **Run regression checks** on related modules.
+11. **Verify actual behavior** (type check `npm run build` on both client and server).
+12. **Update documentation** (`ARCHITECTURE.md`, `DECISION.md`, `MEMORY.md` as needed).
+13. **Report exactly what changed**.
 
-## Out of Scope (Current Version)
-- Email delivery (Resend, SES, SMTP)
-- WhatsApp delivery (Meta Cloud API)
-- Any third-party messaging integration
+---
 
-## Development Rules
-1. Never introduce dependencies without justification.
-2. Never bypass authorization — server-side enforcement always.
-3. Never break existing business rules without documenting the change.
-4. Run TypeScript type checking after changes.
-5. Run production build verification before declaring work complete.
-6. Review affected files before marking tasks complete.
+## 4. Absolute Invariants for Agents
+Agents MUST NOT:
+- Rewrite unrelated code or refactor outside the approved task scope.
+- Introduce unnecessary dependencies (e.g. Redis, BullMQ, Kafka, microservices).
+- Bypass the layered architecture (e.g. calling `db` from a service or controller).
+- Create duplicate or competing implementations (`verifyV2`, `ticketNew`, etc.).
+- Make silent fallbacks (e.g. saving locally when Supabase fails, or serving SVG as PNG).
+- Delete Supabase Auth users, database tables, or Supabase Storage objects.
+- Change the design system or introduce random purple/violet/indigo colors.
+- Claim completion without running type checking, build, and test verification.
 
-## Relevant Context Files
-- [PROJECT_CONTEXT.md](file:///c:/Users/Aman/OneDrive/Desktop/Ticket/PROJECT_CONTEXT.md)
-- [docs/architecture.md](file:///c:/Users/Aman/OneDrive/Desktop/Ticket/docs/architecture.md)
-- [docs/data-flow.md](file:///c:/Users/Aman/OneDrive/Desktop/Ticket/docs/data-flow.md)
-- [docs/api-contracts.md](file:///c:/Users/Aman/OneDrive/Desktop/Ticket/docs/api-contracts.md)
-- [docs/database-schema.md](file:///c:/Users/Aman/OneDrive/Desktop/Ticket/docs/database-schema.md)
-- [docs/design-system.md](file:///c:/Users/Aman/OneDrive/Desktop/Ticket/docs/design-system.md)
-- [docs/ticket-engine.md](file:///c:/Users/Aman/OneDrive/Desktop/Ticket/docs/ticket-engine.md)
-- [docs/verification-rules.md](file:///c:/Users/Aman/OneDrive/Desktop/Ticket/docs/verification-rules.md)
-- [docs/decisions.md](file:///c:/Users/Aman/OneDrive/Desktop/Ticket/docs/decisions.md)
+---
+
+## 5. Domain Skills Map (`.agents/skills/`)
+Before performing domain-specific work, invoke the corresponding skill:
+- **`frontend-design`**: Visual tokens, dark theme palette, color rules, layout hierarchy.
+- **`frontend-engineering`**: React 18, Vite, component separation, API clients.
+- **`backend-engineering`**: Layered architecture, controllers, services, repositories.
+- **`supabase-engineering`**: PostgreSQL, Drizzle ORM, Supabase Auth & Storage.
+- **`security-engineering`**: IDOR prevention, token security, upload sanitization, secrets.
+- **`testing-engineering`**: Test pyramids, unit/integration/E2E tests, regression prevention.
+- **`ticket-system`**: PNG rendering, QR token generation, atomic check-in, worker flows.
+
+---
+
+## 6. Legacy Code & Data Preservation
+Treat existing code as `LEGACY / UNTRUSTED IMPLEMENTATION`. Code may be refactored or replaced in accordance with the phased plan, but existing user data, Auth users, PostgreSQL records, and Supabase Storage assets MUST be strictly preserved.

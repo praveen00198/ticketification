@@ -16,8 +16,8 @@ export interface TicketImageData {
 
 /**
  * Generates a high-resolution PNG ticket image using Puppeteer.
- * The image is designed to be sent via WhatsApp as a scannable ticket card.
- * Produces an 800x1200 pixel PNG with embedded QR code.
+ * Produces a 1620x2025 pixel PNG with embedded QR code on the official visual template.
+ * Invariant (FR-TCK-3): Internal Ticket ID MUST NOT be visibly printed on the image card.
  */
 export class TicketImageService {
   private templateBase64: string | null = null;
@@ -51,102 +51,12 @@ export class TicketImageService {
     }
   }
 
-  private buildHtml(data: TicketImageData): string {
-    const bgStyle = this.templateBase64
-      ? `background-image: url('${this.templateBase64}'); background-size: 1620px 2025px; background-position: center; background-repeat: no-repeat;`
-      : `background: linear-gradient(135deg, #7f1d1d 0%, #991b1b 100%);`;
-
-    return `
-    <!DOCTYPE html>
-    <html lang="hi">
-    <head>
-      <meta charset="UTF-8">
-      <style>
-        @import url('https://fonts.googleapis.com/css2?family=Mukta:wght@600;700;800&family=Noto+Sans+Devanagari:wght@600;700;800;900&family=Hind:wght@600;700&family=Poppins:wght@600;700;800&display=swap');
-        
-        * {
-          box-sizing: border-box;
-          margin: 0;
-          padding: 0;
-        }
-        body {
-          width: 1620px;
-          height: 2025px;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          background-color: #000;
-          -webkit-print-color-adjust: exact;
-        }
-        .invitation-container {
-          width: 1620px;
-          height: 2025px;
-          position: relative;
-          ${bgStyle}
-        }
-        .content-wrapper {
-          position: absolute;
-          top: 960px;
-          left: 50%;
-          transform: translateX(-50%);
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          width: 1200px;
-        }
-        .qr-card {
-          background: #FFFFFF;
-          padding: 16px;
-          border-radius: 24px;
-          border: 4px solid #FCD34D;
-          box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
-          display: inline-block;
-        }
-        .qr-img {
-          width: 380px;
-          height: 380px;
-          display: block;
-          border-radius: 12px;
-        }
-        .guest-name-box {
-          margin-top: 38px;
-          text-align: center;
-          width: 100%;
-          max-width: 1100px;
-        }
-        .guest-name {
-          font-family: 'Noto Sans Devanagari', 'Mukta', 'Hind', 'Poppins', sans-serif;
-          font-size: 72px;
-          font-weight: 800;
-          color: #FFE680;
-          letter-spacing: 1px;
-          line-height: 1.35;
-          text-shadow: 0 4px 12px rgba(0, 0, 0, 0.9), 0 0 22px rgba(252, 211, 77, 0.45);
-        }
-      </style>
-    </head>
-    <body>
-      <div class="invitation-container">
-        <div class="content-wrapper">
-          <div class="qr-card">
-            <img src="${data.qrCodeDataUrl}" class="qr-img" alt="QR Code" />
-          </div>
-          <div class="guest-name-box">
-            <div class="guest-name">${data.guestName}</div>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
-    `;
-  }
-
   public buildSvg(data: TicketImageData): string {
     const bgImage = this.templateBase64
       ? `<image href="${this.templateBase64}" width="1620" height="2025" preserveAspectRatio="none"/>`
       : `<rect width="1620" height="2025" fill="#7f1d1d"/>`;
 
-    const safeGuestName = (data.guestName || 'Guest')
+    const safeGuestName = (data.guestName || 'Valued Guest')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
@@ -159,7 +69,7 @@ export class TicketImageService {
       @import url('https://fonts.googleapis.com/css2?family=Mukta:wght@700;800&amp;family=Noto+Sans+Devanagari:wght@700;800;900&amp;display=swap');
       .guest-text {
         font-family: 'Noto Sans Devanagari', 'Mukta', 'Hind', sans-serif;
-        font-size: 72px;
+        font-size: 76px;
         font-weight: 800;
         fill: #FFE680;
         text-anchor: middle;
@@ -179,7 +89,7 @@ export class TicketImageService {
     <image href="${data.qrCodeDataUrl}" x="16" y="16" width="380" height="380"/>
   </g>
 
-  <!-- Guest Name -->
+  <!-- Guest Name (Ticket ID is NOT visibly rendered per FR-TCK-3) -->
   <text
     x="810"
     y="1490"
@@ -227,7 +137,7 @@ export class TicketImageService {
 
   /**
    * Converts SVG markup to a genuine PNG image buffer using Puppeteer.
-   * Ensures output is a valid PNG binary with standard PNG header (0x89504E47).
+   * Validates that output is a valid PNG binary with standard PNG header (0x89504E47).
    */
   async svgToPng(svg: string, sharedBrowser?: Browser): Promise<Buffer> {
     const ownBrowser = !sharedBrowser;
@@ -241,7 +151,12 @@ export class TicketImageService {
       await page.evaluateHandle('document.fonts.ready');
       const screenshot = await page.screenshot({ type: 'png', fullPage: true });
       await page.close();
-      return Buffer.from(screenshot);
+
+      const pngBuffer = Buffer.from(screenshot);
+      if (!isPngBuffer(pngBuffer)) {
+        throw new Error('Puppeteer screenshot failed PNG binary header verification');
+      }
+      return pngBuffer;
     } finally {
       if (ownBrowser && browser) {
         await browser.close();
@@ -251,13 +166,16 @@ export class TicketImageService {
 
   /**
    * Fast rendering of SVG onto a pre-existing Puppeteer Page instance.
-   * Reuses the open page rather than opening/closing browser tabs to achieve ~10-20ms conversion per image.
    */
   async renderSvgOnPage(svg: string, page: Page): Promise<Buffer> {
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>* { margin: 0; padding: 0; box-sizing: border-box; } body { width: 1620px; height: 2025px; overflow: hidden; background-color: #000; }</style></head><body>${svg}</body></html>`;
     await page.setContent(html, { waitUntil: 'domcontentloaded' });
     const screenshot = await page.screenshot({ type: 'png', fullPage: true });
-    return Buffer.from(screenshot);
+    const pngBuffer = Buffer.from(screenshot);
+    if (!isPngBuffer(pngBuffer)) {
+      throw new Error('Rendered page screenshot failed PNG binary verification');
+    }
+    return pngBuffer;
   }
 
   /**
@@ -273,6 +191,42 @@ export class TicketImageService {
     const imageBase64 = `data:image/png;base64,${pngBuffer.toString('base64')}`;
 
     return { pngBuffer, svg, imageBase64, fileName };
+  }
+
+  /**
+   * Batch render multiple tickets with a single reusable browser session.
+   */
+  async renderBatchTickets(
+    items: TicketImageData[],
+    batchConcurrency = 5
+  ): Promise<Array<{ ticketId: string; pngBuffer: Buffer; fileName: string }>> {
+    if (items.length === 0) return [];
+
+    const browser = await this.launchBrowser();
+    try {
+      const results: Array<{ ticketId: string; pngBuffer: Buffer; fileName: string }> = [];
+
+      for (let i = 0; i < items.length; i += batchConcurrency) {
+        const slice = items.slice(i, i + batchConcurrency);
+        const batchResults = await Promise.all(
+          slice.map(async (item) => {
+            const fileName = `ticket-${item.ticketId}.png`;
+            const svg = this.buildSvg(item);
+            const pngBuffer = await this.svgToPng(svg, browser);
+            return {
+              ticketId: item.ticketId,
+              pngBuffer,
+              fileName,
+            };
+          })
+        );
+        results.push(...batchResults);
+      }
+
+      return results;
+    } finally {
+      await browser.close();
+    }
   }
 }
 
@@ -320,5 +274,3 @@ export function isPngBuffer(buf: Buffer | null | undefined): boolean {
 }
 
 export const ticketImageService = new TicketImageService();
-
-

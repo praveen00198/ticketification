@@ -1,6 +1,3 @@
-import { db } from '../../../db';
-import { tickets, guests } from '../../../db/schema';
-import { eq, and, sql } from 'drizzle-orm';
 import { ticketRepository, TicketRepository } from '../../tickets/repositories/ticket.repository';
 import { checkinRepository, CheckinRepository } from '../repositories/checkin.repository';
 import { guestRepository, GuestRepository } from '../../guests/repositories/guest.repository';
@@ -235,18 +232,14 @@ export class VerificationService {
       // If unassigned worker, assign name now
       if (!ticket.guestId && input.workerName && input.workerName.trim()) {
         const trimmedName = input.workerName.trim();
-        const newGuest = await this.guestRepo.insertMany([
-          {
-            eventId: ticket.eventId,
-            name: trimmedName,
-            category: ticketType.name,
-          },
-        ]);
+        const newGuest = await this.guestRepo.create({
+          eventId: ticket.eventId,
+          name: trimmedName,
+          category: ticketType.name,
+        });
 
-        if (newGuest.length > 0) {
-          await this.ticketRepo.update(ticket.id, {
-            guestId: newGuest[0].id,
-          });
+        if (newGuest) {
+          await this.ticketRepo.assignGuest(ticket.id, newGuest.id);
           assignedName = trimmedName;
         }
       }
@@ -272,16 +265,9 @@ export class VerificationService {
     }
 
     // Handle Single-Use Ticket Atomic Check-in (Race condition proof)
-    const updated = await db
-      .update(tickets)
-      .set({
-        status: 'USED',
-        updatedAt: new Date(),
-      })
-      .where(and(eq(tickets.id, ticket.id), eq(tickets.status, 'ACTIVE')))
-      .returning();
+    const updated = await this.ticketRepo.markAsUsedAtomic(ticket.id);
 
-    if (updated.length === 0) {
+    if (!updated) {
       const lastCheckin = await this.checkinRepo.getLastCheckinForTicket(ticket.id);
       const timeStr = lastCheckin?.checkedInAt
         ? new Date(lastCheckin.checkedInAt).toLocaleTimeString()
@@ -431,18 +417,14 @@ export class VerificationService {
       // If unassigned worker and name was provided, assign name
       if (!ticket.guestId && input.workerName && input.workerName.trim()) {
         const trimmedName = input.workerName.trim();
-        const newGuest = await this.guestRepo.insertMany([
-          {
-            eventId: ticket.eventId,
-            name: trimmedName,
-            category: ticketType.name,
-          },
-        ]);
+        const newGuest = await this.guestRepo.create({
+          eventId: ticket.eventId,
+          name: trimmedName,
+          category: ticketType.name,
+        });
 
-        if (newGuest.length > 0) {
-          await this.ticketRepo.update(ticket.id, {
-            guestId: newGuest[0].id,
-          });
+        if (newGuest) {
+          await this.ticketRepo.assignGuest(ticket.id, newGuest.id);
           assignedName = trimmedName;
         }
       }
@@ -479,16 +461,9 @@ export class VerificationService {
     }
 
     // Handle Active Single-Use Ticket: ATOMIC Check-in (Race Condition Proof)
-    const updated = await db
-      .update(tickets)
-      .set({
-        status: 'USED',
-        updatedAt: new Date(),
-      })
-      .where(and(eq(tickets.id, ticket.id), eq(tickets.status, 'ACTIVE')))
-      .returning();
+    const updated = await this.ticketRepo.markAsUsedAtomic(ticket.id);
 
-    if (updated.length === 0) {
+    if (!updated) {
       const lastCheckin = await this.checkinRepo.getLastCheckinForTicket(ticket.id);
       const timeStr = lastCheckin?.checkedInAt
         ? new Date(lastCheckin.checkedInAt).toLocaleTimeString()

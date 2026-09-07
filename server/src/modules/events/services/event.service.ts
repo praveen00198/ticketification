@@ -1,7 +1,14 @@
 import { eventRepository, EventRepository, CreateEventInput, UpdateEventInput } from '../repositories/event.repository';
 import { ticketTypeRepository, TicketTypeRepository, CreateTicketTypeInput } from '../repositories/ticket-type.repository';
 import { userRepository, UserRepository } from '../../auth/repositories/user.repository';
-import { AppError } from '../../../middlewares/error.middleware';
+import {
+  ValidationError,
+  NotFoundError,
+  AuthorizationError,
+  ConflictError,
+  AppError,
+} from '../../../middlewares/error.middleware';
+import { CreateEventDTO, UpdateEventDTO, CreateTicketTypeDTO, EventResponse } from '../event.types';
 
 export const DEFAULT_TICKET_TYPES = [
   { name: 'GENERAL', label: 'General Guest', usagePolicy: 'SINGLE_USE' },
@@ -19,24 +26,25 @@ export class EventService {
   ) {}
 
   /**
-   * List all events owned by the user.
+   * List all events owned by the user, ordered newest first.
    */
-  async getEventsByOwner(userId: string) {
-    return await this.eventRepo.findByOwner(userId);
+  async getEventsByOwner(userId: string): Promise<EventResponse[]> {
+    const events = await this.eventRepo.findByOwner(userId);
+    return events as EventResponse[];
   }
 
   /**
    * Create a new event and automatically provision default ticket types.
    */
-  async createEvent(userId: string, data: Omit<CreateEventInput, 'createdBy'>) {
+  async createEvent(userId: string, data: CreateEventDTO): Promise<EventResponse> {
     if (!data.name || !data.name.trim()) {
-      throw new AppError('Event name is required', 400);
+      throw new ValidationError('Event name is required.');
     }
     if (!data.date) {
-      throw new AppError('Event date is required', 400);
+      throw new ValidationError('Event date is required.');
     }
 
-    // Ensure the creator profile exists in public.users to satisfy foreign key constraint
+    // Ensure creator profile exists in public.users to satisfy foreign key constraint
     try {
       const existingUser = await this.userRepo.findById(userId);
       if (!existingUser) {
@@ -71,20 +79,20 @@ export class EventService {
     return {
       ...event,
       ticketTypes,
-    };
+    } as EventResponse;
   }
 
   /**
-   * Get event details with ownership verification.
+   * Get event details with strict ownership verification.
    */
-  async getEventById(eventId: string, userId: string) {
+  async getEventById(eventId: string, userId: string): Promise<EventResponse> {
     const event = await this.eventRepo.findById(eventId);
     if (!event) {
-      throw new AppError('Event not found', 404);
+      throw new NotFoundError('Event not found.');
     }
 
     if (event.createdBy !== userId) {
-      throw new AppError('Access denied: You do not own this event', 403);
+      throw new AuthorizationError('Access denied: You do not own this event.');
     }
 
     const types = await this.ticketTypeRepo.findByEventId(eventId);
@@ -92,63 +100,72 @@ export class EventService {
     return {
       ...event,
       ticketTypes: types,
-    };
+    } as EventResponse;
   }
 
   /**
-   * Update event details with ownership verification.
+   * Update event details with strict ownership verification.
    */
-  async updateEvent(eventId: string, userId: string, data: UpdateEventInput) {
+  async updateEvent(eventId: string, userId: string, data: UpdateEventDTO): Promise<EventResponse> {
     const event = await this.eventRepo.findById(eventId);
     if (!event) {
-      throw new AppError('Event not found', 404);
+      throw new NotFoundError('Event not found.');
     }
 
     if (event.createdBy !== userId) {
-      throw new AppError('Access denied: You do not own this event', 403);
+      throw new AuthorizationError('Access denied: You do not own this event.');
     }
 
     const updated = await this.eventRepo.update(eventId, data);
-    return updated;
+    if (!updated) {
+      throw new AppError('Failed to update event.', 500);
+    }
+
+    const types = await this.ticketTypeRepo.findByEventId(eventId);
+
+    return {
+      ...updated,
+      ticketTypes: types,
+    } as EventResponse;
   }
 
   /**
-   * Delete an event with ownership verification.
+   * Delete an event with strict ownership verification.
    */
-  async deleteEvent(eventId: string, userId: string) {
+  async deleteEvent(eventId: string, userId: string): Promise<void> {
     const event = await this.eventRepo.findById(eventId);
     if (!event) {
-      throw new AppError('Event not found', 404);
+      throw new NotFoundError('Event not found.');
     }
 
     if (event.createdBy !== userId) {
-      throw new AppError('Access denied: You do not own this event', 403);
+      throw new AuthorizationError('Access denied: You do not own this event.');
     }
 
-    return await this.eventRepo.delete(eventId);
+    await this.eventRepo.delete(eventId);
   }
 
   /**
-   * Add a custom ticket type to an event.
+   * Add a custom ticket type to an event with ownership check.
    */
   async addTicketType(
     eventId: string,
     userId: string,
-    ticketTypeData: { name: string; label: string; usagePolicy?: string }
+    ticketTypeData: CreateTicketTypeDTO
   ) {
     const event = await this.eventRepo.findById(eventId);
     if (!event) {
-      throw new AppError('Event not found', 404);
+      throw new NotFoundError('Event not found.');
     }
 
     if (event.createdBy !== userId) {
-      throw new AppError('Access denied: You do not own this event', 403);
+      throw new AuthorizationError('Access denied: You do not own this event.');
     }
 
     const normalizedName = ticketTypeData.name.toUpperCase().trim();
     const existing = await this.ticketTypeRepo.findByEventAndName(eventId, normalizedName);
     if (existing) {
-      throw new AppError(`Ticket type '${normalizedName}' already exists for this event`, 409);
+      throw new ConflictError(`Ticket type '${normalizedName}' already exists for this event.`);
     }
 
     return await this.ticketTypeRepo.create({
@@ -165,11 +182,11 @@ export class EventService {
   async getTicketTypes(eventId: string, userId: string) {
     const event = await this.eventRepo.findById(eventId);
     if (!event) {
-      throw new AppError('Event not found', 404);
+      throw new NotFoundError('Event not found.');
     }
 
     if (event.createdBy !== userId) {
-      throw new AppError('Access denied: You do not own this event', 403);
+      throw new AuthorizationError('Access denied: You do not own this event.');
     }
 
     let types = await this.ticketTypeRepo.findByEventId(eventId);

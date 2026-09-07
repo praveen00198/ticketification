@@ -1,17 +1,22 @@
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../../../middlewares/auth.middleware';
 import { eventService } from '../services/event.service';
-import { AppError } from '../../../middlewares/error.middleware';
+import { AuthenticationError } from '../../../middlewares/error.middleware';
+import {
+  validateCreateEventInput,
+  validateUpdateEventInput,
+  validateCreateTicketTypeInput,
+} from '../event.validation';
 
 export class EventController {
-  async listMyEvents(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  async listMyEvents(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {
-        throw new AppError('Unauthorized', 401);
+        throw new AuthenticationError();
       }
 
       const events = await eventService.getEventsByOwner(req.user.id);
-      res.json({
+      res.status(200).json({
         success: true,
         data: events,
       });
@@ -20,16 +25,16 @@ export class EventController {
     }
   }
 
-  async getEvent(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  async getEvent(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {
-        throw new AppError('Unauthorized', 401);
+        throw new AuthenticationError();
       }
 
-      const { eventId } = req.params;
+      const eventId = req.params.eventId || req.params.id;
       const event = await eventService.getEventById(eventId, req.user.id);
 
-      res.json({
+      res.status(200).json({
         success: true,
         data: event,
       });
@@ -38,23 +43,14 @@ export class EventController {
     }
   }
 
-  async createEvent(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  async createEvent(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {
-        throw new AppError('Unauthorized', 401);
+        throw new AuthenticationError();
       }
 
-      const { name, date, time, venue, description, organizerName, logoUrl, ticketTemplateUrl } = req.body;
-      const event = await eventService.createEvent(req.user.id, {
-        name,
-        date,
-        time,
-        venue,
-        description,
-        organizerName,
-        logoUrl,
-        ticketTemplateUrl,
-      });
+      const validatedData = validateCreateEventInput(req.body);
+      const event = await eventService.createEvent(req.user.id, validatedData);
 
       res.status(201).json({
         success: true,
@@ -65,16 +61,17 @@ export class EventController {
     }
   }
 
-  async updateEvent(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  async updateEvent(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {
-        throw new AppError('Unauthorized', 401);
+        throw new AuthenticationError();
       }
 
-      const { eventId } = req.params;
-      const updated = await eventService.updateEvent(eventId, req.user.id, req.body);
+      const eventId = req.params.eventId || req.params.id;
+      const validatedData = validateUpdateEventInput(req.body);
+      const updated = await eventService.updateEvent(eventId, req.user.id, validatedData);
 
-      res.json({
+      res.status(200).json({
         success: true,
         data: updated,
       });
@@ -83,16 +80,16 @@ export class EventController {
     }
   }
 
-  async deleteEvent(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  async deleteEvent(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {
-        throw new AppError('Unauthorized', 401);
+        throw new AuthenticationError();
       }
 
-      const { eventId } = req.params;
+      const eventId = req.params.eventId || req.params.id;
       await eventService.deleteEvent(eventId, req.user.id);
 
-      res.json({
+      res.status(200).json({
         success: true,
         message: 'Event deleted successfully',
       });
@@ -101,16 +98,16 @@ export class EventController {
     }
   }
 
-  async listTicketTypes(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  async listTicketTypes(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {
-        throw new AppError('Unauthorized', 401);
+        throw new AuthenticationError();
       }
 
-      const { eventId } = req.params;
+      const eventId = req.params.eventId || req.params.id;
       const ticketTypes = await eventService.getTicketTypes(eventId, req.user.id);
 
-      res.json({
+      res.status(200).json({
         success: true,
         data: ticketTypes,
       });
@@ -119,24 +116,15 @@ export class EventController {
     }
   }
 
-  async createTicketType(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  async createTicketType(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {
-        throw new AppError('Unauthorized', 401);
+        throw new AuthenticationError();
       }
 
-      const { eventId } = req.params;
-      const { name, label, usagePolicy } = req.body;
-
-      if (!name) {
-        throw new AppError('Ticket type name is required', 400);
-      }
-
-      const newType = await eventService.addTicketType(eventId, req.user.id, {
-        name,
-        label: label || name,
-        usagePolicy,
-      });
+      const eventId = req.params.eventId || req.params.id;
+      const validatedData = validateCreateTicketTypeInput(req.body);
+      const newType = await eventService.addTicketType(eventId, req.user.id, validatedData);
 
       res.status(201).json({
         success: true,

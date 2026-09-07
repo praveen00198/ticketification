@@ -2,16 +2,18 @@ import { Request, Response, NextFunction } from 'express';
 import { verificationService } from '../services/verification.service';
 import { AuthenticatedRequest } from '../../../middlewares/auth.middleware';
 import { AppError } from '../../../middlewares/error.middleware';
+import {
+  validateVerificationToken,
+  validateOptionalEventId,
+  validateOptionalWorkerName,
+} from '../verification.validation';
 
 export class VerificationController {
   async verifyToken(req: Request, res: Response, next: NextFunction) {
     try {
-      const token = (req.params.token || req.body.token || req.query.token) as string;
-      const eventId = (req.body.eventId || req.query.eventId) as string | undefined;
-
-      if (!token) {
-        throw new AppError('Verification token is required', 400);
-      }
+      const rawToken = req.params.token || req.body.token || req.query.token;
+      const token = validateVerificationToken(rawToken);
+      const eventId = validateOptionalEventId(req.body.eventId || req.query.eventId);
 
       const result = await verificationService.verifyToken(token, eventId);
       res.json({
@@ -25,12 +27,10 @@ export class VerificationController {
 
   async checkIn(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const { token, eventId, workerName } = req.body;
+      const token = validateVerificationToken(req.body.token);
+      const eventId = validateOptionalEventId(req.body.eventId);
+      const workerName = validateOptionalWorkerName(req.body.workerName);
       const verifiedBy = req.user ? req.user.email : 'Admin Scanner';
-
-      if (!token) {
-        throw new AppError('Verification token is required for check-in', 400);
-      }
 
       const result = await verificationService.checkInTicket({
         token,
@@ -50,14 +50,11 @@ export class VerificationController {
 
   async scanAndCheckIn(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const token = (req.body.token || req.params.token || req.query.token) as string;
-      const eventId = (req.body.eventId || req.query.eventId) as string | undefined;
-      const workerName = req.body.workerName as string | undefined;
+      const rawToken = req.body.token || req.params.token || req.query.token;
+      const token = validateVerificationToken(rawToken);
+      const eventId = validateOptionalEventId(req.body.eventId || req.query.eventId);
+      const workerName = validateOptionalWorkerName(req.body.workerName);
       const verifiedBy = req.user ? req.user.email : 'Admin Scanner';
-
-      if (!token) {
-        throw new AppError('Verification token is required', 400);
-      }
 
       const result = await verificationService.scanAndCheckIn({
         token,

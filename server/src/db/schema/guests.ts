@@ -18,4 +18,5 @@ export const guests = pgTable('guests', {
 }, (table) => [
   index('idx_guests_event').on(table.eventId),
   index('idx_guests_import').on(table.importId),
+  index('idx_guests_event_category').on(table.eventId, table.category),
 ]);

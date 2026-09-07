@@ -1,23 +1,22 @@
 import { supabaseAdmin } from '../../../config/supabase';
 import { userRepository, UserRepository } from '../repositories/user.repository';
-import { AppError } from '../../../middlewares/error.middleware';
+import {
+  ValidationError,
+  AuthenticationError,
+  ConflictError,
+  NotFoundError,
+  AppError,
+} from '../../../middlewares/error.middleware';
+import { RegisterInput, LoginInput, AuthResponse } from '../auth.types';
 
 export class AuthService {
   constructor(private userRepo: UserRepository = userRepository) {}
 
-  async register(name: string, email: string, password: string) {
-    if (!name || !name.trim()) {
-      throw new AppError('Full name is required.', 400);
-    }
-    if (!email || !email.trim()) {
-      throw new AppError('Email address is required.', 400);
-    }
-    if (!password || password.length < 6) {
-      throw new AppError('Password must be at least 6 characters long.', 400);
-    }
+  async register(input: RegisterInput): Promise<AuthResponse> {
+    const { name, email, password } = input;
 
     if (!supabaseAdmin) {
-      throw new AppError('Authentication service not configured.', 503);
+      throw new AppError('Authentication service is not configured. Check server environment.', 503);
     }
 
     const normalizedEmail = email.trim().toLowerCase();
@@ -31,17 +30,20 @@ export class AuthService {
     });
 
     if (authError) {
-      if (authError.message.includes('already been registered') || authError.message.includes('already exists')) {
-        throw new AppError('An account with this email address already exists. Please sign in.', 400);
+      if (
+        authError.message.includes('already been registered') ||
+        authError.message.includes('already exists')
+      ) {
+        throw new ConflictError('An account with this email address already exists. Please sign in.');
       }
-      throw new AppError(`Registration failed: ${authError.message}`, 400);
+      throw new ValidationError(`Registration failed: ${authError.message}`);
     }
 
     if (!authData.user) {
       throw new AppError('Registration failed: No user returned from auth service.', 500);
     }
 
-    // Sync user profile to our users table (resilient to DB latency)
+    // Sync user profile to database
     try {
       await this.userRepo.upsert({
         id: authData.user.id,
@@ -53,14 +55,13 @@ export class AuthService {
       console.warn('[AuthService] Could not sync user profile to database during registration:', dbErr);
     }
 
-    // Sign in to get a session token
+    // Sign in to obtain session token
     const { data: sessionData, error: sessionError } = await supabaseAdmin.auth.signInWithPassword({
       email: normalizedEmail,
       password,
     });
 
     if (sessionError || !sessionData.session) {
-      // User created but auto-login failed — they can login manually
       return {
         user: {
           id: authData.user.id,
@@ -84,13 +85,11 @@ export class AuthService {
     };
   }
 
-  async login(email: string, password: string) {
-    if (!email || !password) {
-      throw new AppError('Email and password are required.', 400);
-    }
+  async login(input: LoginInput): Promise<AuthResponse> {
+    const { email, password } = input;
 
     if (!supabaseAdmin) {
-      throw new AppError('Authentication service not configured.', 503);
+      throw new AppError('Authentication service is not configured. Check server environment.', 503);
     }
 
     const normalizedEmail = email.trim().toLowerCase();
@@ -106,19 +105,19 @@ export class AuthService {
         error.message.includes('invalid_grant') ||
         error.message.includes('user_not_found')
       ) {
-        throw new AppError('Invalid email or password. Please check your credentials and try again.', 401);
+        throw new AuthenticationError('Invalid email or password. Please check your credentials and try again.');
       }
       if (error.message.includes('Email not confirmed')) {
-        throw new AppError('Email address has not been confirmed. Please verify your email or check your Supabase Auth settings.', 401);
+        throw new AuthenticationError('Email address has not been confirmed.');
       }
-      throw new AppError(error.message, 401);
+      throw new AuthenticationError(error.message);
     }
 
     if (!data.user || !data.session) {
       throw new AppError('Login failed: No active session was created.', 500);
     }
 
-    // Ensure user profile exists in our table (resilient to DB connection)
+    // Ensure user profile exists in database
     let profileName = data.user.user_metadata?.name || 'Admin';
     try {
       const profile = await this.userRepo.upsert({
@@ -173,7 +172,25 @@ export class AuthService {
       }
     }
 
-    throw new AppError('User profile not found.', 404);
+    throw new NotFoundError('User profile not found.');
+  }
+
+  async changePassword(userId: string, newPassword: string): Promise<void> {
+    if (!newPassword || newPassword.length < 6) {
+      throw new ValidationError('Password must be at least 6 characters long.');
+    }
+
+    if (!supabaseAdmin) {
+      throw new AppError('Authentication service is not configured.', 503);
+    }
+
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+      password: newPassword,
+    });
+
+    if (error) {
+      throw new AppError(`Failed to update password: ${error.message}`, 400);
+    }
   }
 }
 

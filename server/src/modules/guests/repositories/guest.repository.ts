@@ -1,6 +1,7 @@
 import { db } from '../../../db';
 import { guests } from '../../../db/schema';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, sql, ilike, or } from 'drizzle-orm';
+import { GuestFilterOptions } from '../guest.types';
 
 export interface CreateGuestInput {
   eventId: string;
@@ -16,28 +17,126 @@ export interface CreateGuestInput {
 
 export class GuestRepository {
   /**
-   * Find all guests for an event, explicitly ordered by createdAt DESC.
+   * Find guests for an event with optional search and category filters.
+   * Explicitly ordered by createdAt DESC.
    */
-  async findByEventId(eventId: string, limit = 500, offset = 0) {
+  async findByEventId(
+    eventId: string,
+    optionsOrLimit?: GuestFilterOptions | number,
+    maybeOffset?: number
+  ) {
+    let options: GuestFilterOptions = {};
+    if (typeof optionsOrLimit === 'number') {
+      options = { limit: optionsOrLimit, offset: maybeOffset || 0 };
+    } else if (optionsOrLimit && typeof optionsOrLimit === 'object') {
+      options = optionsOrLimit;
+    }
+
+    const limit = options.limit || 500;
+    const offset = options.offset || 0;
+
+    const conditions = [eq(guests.eventId, eventId)];
+
+    if (options.category) {
+      conditions.push(eq(guests.category, options.category));
+    }
+
+    if (options.search) {
+      const searchPattern = `%${options.search}%`;
+      conditions.push(
+        or(
+          ilike(guests.name, searchPattern),
+          ilike(guests.email, searchPattern),
+          ilike(guests.phone, searchPattern),
+          ilike(guests.organization, searchPattern)
+        )!
+      );
+    }
+
     return await db
       .select()
       .from(guests)
-      .where(eq(guests.eventId, eventId))
+      .where(and(...conditions))
       .orderBy(desc(guests.createdAt))
       .limit(limit)
       .offset(offset);
   }
 
   /**
-   * Count all guests for an event.
+   * Count guests for an event with optional filters.
    */
-  async countByEventId(eventId: string): Promise<number> {
+  async countByEventId(eventId: string, options: GuestFilterOptions = {}): Promise<number> {
+    const conditions = [eq(guests.eventId, eventId)];
+
+    if (options.category) {
+      conditions.push(eq(guests.category, options.category));
+    }
+
+    if (options.search) {
+      const searchPattern = `%${options.search}%`;
+      conditions.push(
+        or(
+          ilike(guests.name, searchPattern),
+          ilike(guests.email, searchPattern),
+          ilike(guests.phone, searchPattern),
+          ilike(guests.organization, searchPattern)
+        )!
+      );
+    }
+
     const result = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(guests)
-      .where(eq(guests.eventId, eventId));
+      .where(and(...conditions));
 
     return result[0]?.count || 0;
+  }
+
+  /**
+   * Create a single guest record.
+   */
+  async create(data: CreateGuestInput) {
+    const result = await db
+      .insert(guests)
+      .values({
+        eventId: data.eventId,
+        name: data.name ? data.name.trim() : null,
+        email: data.email ? data.email.trim().toLowerCase() : null,
+        phone: data.phone ? data.phone.trim() : null,
+        organization: data.organization ? data.organization.trim() : null,
+        designation: data.designation ? data.designation.trim() : null,
+        category: data.category.trim(),
+        metadata: data.metadata || {},
+        importId: data.importId || null,
+      })
+      .returning();
+
+    return result[0];
+  }
+
+  /**
+   * Update a guest by ID.
+   */
+  async update(id: string, data: Partial<CreateGuestInput>) {
+    const updatePayload: Record<string, any> = {
+      updatedAt: new Date(),
+    };
+
+    if (data.name !== undefined) updatePayload.name = data.name ? data.name.trim() : null;
+    if (data.email !== undefined) updatePayload.email = data.email ? data.email.trim().toLowerCase() : null;
+    if (data.phone !== undefined) updatePayload.phone = data.phone ? data.phone.trim() : null;
+    if (data.organization !== undefined) updatePayload.organization = data.organization ? data.organization.trim() : null;
+    if (data.designation !== undefined) updatePayload.designation = data.designation ? data.designation.trim() : null;
+    if (data.category !== undefined) updatePayload.category = data.category.trim();
+    if (data.metadata !== undefined) updatePayload.metadata = data.metadata;
+
+    const result = await db
+      .update(guests)
+      .set(updatePayload)
+      .where(eq(guests.id, id))
+      .returning();
+
+    return result[0] || null;
   }
 
   /**

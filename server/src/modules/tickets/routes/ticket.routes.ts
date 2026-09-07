@@ -23,6 +23,10 @@ router.get('/events/:eventId', (req, res, next) =>
   ticketController.getAllTickets(req, res, next)
 );
 
+router.get('/events/:eventId/tickets/:ticketId/download', (req, res, next) =>
+  ticketController.downloadTicket(req, res, next)
+);
+
 // Fallback direct routes
 router.get('/export-zip', (req, res, next) =>
   ticketController.exportTicketsZip(req, res, next)
@@ -38,6 +42,10 @@ router.post('/generate-worker', (req, res, next) =>
 
 router.get('/', (req, res, next) =>
   ticketController.getAllTickets(req, res, next)
+);
+
+router.get('/:id/download', (req, res, next) =>
+  ticketController.downloadTicket(req, res, next)
 );
 
 router.get('/:id', (req, res, next) =>

@@ -239,6 +239,39 @@ export class TicketRepository {
 
     return result[0] || null;
   }
+
+  /**
+   * Atomically marks an ACTIVE ticket as USED in a race-condition-proof manner.
+   * Returns the updated ticket row if status was ACTIVE, or null if already used or cancelled.
+   */
+  async markAsUsedAtomic(ticketId: string) {
+    const result = await db
+      .update(tickets)
+      .set({
+        status: 'USED',
+        updatedAt: new Date(),
+      })
+      .where(and(eq(tickets.id, ticketId), eq(tickets.status, 'ACTIVE')))
+      .returning();
+
+    return result[0] || null;
+  }
+
+  /**
+   * Assigns a guest ID to a ticket (e.g. on first scan of an unassigned worker pass).
+   */
+  async assignGuest(ticketId: string, guestId: string) {
+    const result = await db
+      .update(tickets)
+      .set({
+        guestId,
+        updatedAt: new Date(),
+      })
+      .where(eq(tickets.id, ticketId))
+      .returning();
+
+    return result[0] || null;
+  }
 }
 
 export const ticketRepository = new TicketRepository();
