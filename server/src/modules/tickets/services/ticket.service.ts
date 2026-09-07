@@ -77,7 +77,9 @@ export class TicketService {
     }
 
     let nextSeq = await this.ticketRepo.getNextSequenceNumber(eventId);
-    const ticketsToInsert = [];
+    const ticketsToInsert: any[] = [];
+    const uploadTasks: Array<{ storageFileName: string; data: string; ticket: any }> = [];
+    const isStorageConfigured = this.storageServ.isConfigured();
 
     for (const guest of pendingGuests) {
       const guestCategory = (guest.category || 'GENERAL').toUpperCase().trim();
@@ -91,7 +93,7 @@ export class TicketService {
       const ticketSeqStr = nextSeq.toString().padStart(5, '0');
       const displayId = `${event.name.substring(0, 3).toUpperCase()}-${ticketSeqStr}`;
 
-      const { filePath, publicUrl } = await this.imageServ.generateTicketImage({
+      const { filePath, publicUrl, imageBase64 } = await this.imageServ.generateTicketImage({
         ticketId: displayId,
         guestName: guest.name || 'Valued Guest',
         eventName: event.name,
@@ -102,7 +104,7 @@ export class TicketService {
         phone: guest.phone || undefined,
       });
 
-      ticketsToInsert.push({
+      const ticketRecord = {
         eventId,
         guestId: guest.id,
         ticketTypeId: matchedType.id,
@@ -113,9 +115,45 @@ export class TicketService {
         assetUrl: publicUrl,
         sequenceNumber: nextSeq,
         createdBy: userId,
-      });
+      };
+
+      ticketsToInsert.push(ticketRecord);
+
+      if (isStorageConfigured) {
+        const storageFileName = `tickets/${eventId}/${verificationToken}.svg`;
+        uploadTasks.push({
+          storageFileName,
+          data: filePath,
+          ticket: ticketRecord,
+        });
+      }
 
       nextSeq++;
+    }
+
+    // High-speed parallel upload to Supabase Storage in batches of 25
+    if (uploadTasks.length > 0) {
+      const BATCH_SIZE = 25;
+      for (let i = 0; i < uploadTasks.length; i += BATCH_SIZE) {
+        const batch = uploadTasks.slice(i, i + BATCH_SIZE);
+        await Promise.all(
+          batch.map(async (task) => {
+            try {
+              const cloudUrl = await this.storageServ.uploadTicketImage(
+                task.storageFileName,
+                task.data,
+                'image/svg+xml'
+              );
+              if (cloudUrl) {
+                task.ticket.assetUrl = cloudUrl;
+                task.ticket.assetPath = task.storageFileName;
+              }
+            } catch (err) {
+              console.warn('[TicketService] Storage upload fallback to local URL:', err);
+            }
+          })
+        );
+      }
     }
 
     // High-speed chunked batch insert into PostgreSQL
@@ -161,7 +199,9 @@ export class TicketService {
     }
 
     let nextSeq = await this.ticketRepo.getNextSequenceNumber(eventId);
-    const ticketsToInsert = [];
+    const ticketsToInsert: any[] = [];
+    const uploadTasks: Array<{ storageFileName: string; data: string; ticket: any }> = [];
+    const isStorageConfigured = this.storageServ.isConfigured();
 
     for (let i = 0; i < count; i++) {
       const verificationToken = this.qrServ.generateVerificationToken();
@@ -179,7 +219,7 @@ export class TicketService {
         qrCodeDataUrl: qrDataUrl,
       });
 
-      ticketsToInsert.push({
+      const ticketRecord = {
         eventId,
         guestId: null, // Unassigned
         ticketTypeId: workerType.id,
@@ -190,9 +230,44 @@ export class TicketService {
         assetUrl: publicUrl,
         sequenceNumber: nextSeq,
         createdBy: userId,
-      });
+      };
+
+      ticketsToInsert.push(ticketRecord);
+
+      if (isStorageConfigured) {
+        const storageFileName = `tickets/${eventId}/${verificationToken}.svg`;
+        uploadTasks.push({
+          storageFileName,
+          data: filePath,
+          ticket: ticketRecord,
+        });
+      }
 
       nextSeq++;
+    }
+
+    if (uploadTasks.length > 0) {
+      const BATCH_SIZE = 25;
+      for (let i = 0; i < uploadTasks.length; i += BATCH_SIZE) {
+        const batch = uploadTasks.slice(i, i + BATCH_SIZE);
+        await Promise.all(
+          batch.map(async (task) => {
+            try {
+              const cloudUrl = await this.storageServ.uploadTicketImage(
+                task.storageFileName,
+                task.data,
+                'image/svg+xml'
+              );
+              if (cloudUrl) {
+                task.ticket.assetUrl = cloudUrl;
+                task.ticket.assetPath = task.storageFileName;
+              }
+            } catch (err) {
+              console.warn('[TicketService] Storage upload fallback to local URL:', err);
+            }
+          })
+        );
+      }
     }
 
     const createdTickets = await this.ticketRepo.createMany(ticketsToInsert);

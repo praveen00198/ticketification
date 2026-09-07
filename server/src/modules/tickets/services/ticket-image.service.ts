@@ -33,9 +33,14 @@ export class TicketImageService {
 
   private loadTemplate() {
     const candidates = [
+      path.resolve(__dirname, '../../../../assets/ticket_template.png'),
+      path.resolve(__dirname, '../../../assets/ticket_template.png'),
+      path.resolve(__dirname, '../../assets/ticket_template.png'),
+      path.resolve(__dirname, '../assets/ticket_template.png'),
       path.resolve(process.cwd(), 'assets', 'ticket_template.png'),
-      path.resolve(process.cwd(), '../client/assets', 'ticket_template.png'),
-      path.resolve(process.cwd(), 'client/assets', 'ticket_template.png'),
+      path.resolve(process.cwd(), 'server', 'assets', 'ticket_template.png'),
+      path.resolve(process.cwd(), '../client', 'assets', 'ticket_template.png'),
+      path.resolve(process.cwd(), 'client', 'assets', 'ticket_template.png'),
     ];
 
     for (const p of candidates) {
