@@ -9,6 +9,7 @@ import verificationRoutes from './modules/verification/routes/verification.route
 import dashboardRoutes from './modules/dashboard/routes/dashboard.routes';
 import eventRoutes from './modules/events/routes/event.routes';
 import { ticketService } from './modules/tickets/services/ticket.service';
+import { ticketRepository } from './modules/tickets/repositories/ticket.repository';
 import { qrService } from './modules/tickets/services/qr.service';
 import { ticketImageService } from './modules/tickets/services/ticket-image.service';
 import { errorHandler } from './middlewares/error.middleware';
@@ -50,9 +51,48 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 const uploadsPath = path.resolve(process.cwd(), config.env.uploadDir);
 
 app.get('/uploads/tickets/:filename', async (req, res) => {
-  const filePath = path.join(uploadsPath, 'tickets', req.params.filename);
+  const filename = req.params.filename;
+  const filePath = path.join(uploadsPath, 'tickets', filename);
+  
   if (fs.existsSync(filePath)) {
+    if (filename.endsWith('.svg')) {
+      res.setHeader('Content-Type', 'image/svg+xml');
+    } else if (filename.endsWith('.png')) {
+      res.setHeader('Content-Type', 'image/png');
+    }
     return res.sendFile(filePath);
+  }
+
+  // On-demand dynamic generation fallback
+  try {
+    const cleanToken = filename.replace(/\.(svg|png)$/, '').replace(/^ticket-/, '');
+    const ticketRecord =
+      (await ticketService.getTicketById(cleanToken)) ||
+      (await ticketRepository.findByVerificationToken(cleanToken));
+
+    if (ticketRecord) {
+      const qrDataUrl = await qrService.generateQrDataUrl(ticketRecord.ticket.verificationToken);
+      const ticketSeqStr = ticketRecord.ticket.sequenceNumber.toString().padStart(5, '0');
+      const displayId = `${ticketRecord.event.name.substring(0, 3).toUpperCase()}-${ticketSeqStr}`;
+
+      const { filePath: newPath } = await ticketImageService.generateTicketImage({
+        ticketId: displayId,
+        guestName: ticketRecord.guest?.name || 'Valued Guest',
+        eventName: ticketRecord.event.name,
+        eventDate: ticketRecord.event.date,
+        ticketType: ticketRecord.ticketType.label || ticketRecord.ticketType.name,
+        qrCodeDataUrl: qrDataUrl,
+        organization: ticketRecord.guest?.organization || undefined,
+        phone: ticketRecord.guest?.phone || undefined,
+      });
+
+      if (fs.existsSync(newPath)) {
+        res.setHeader('Content-Type', 'image/svg+xml');
+        return res.sendFile(newPath);
+      }
+    }
+  } catch (genErr) {
+    console.warn('[Uploads] Error during on-demand ticket regeneration:', genErr);
   }
 
   return res.status(404).send('Ticket image not found');

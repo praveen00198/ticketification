@@ -60,27 +60,34 @@ export class TicketRepository {
   }
 
   /**
-   * Batch insert tickets.
+   * Batch insert tickets in chunks to stay well within Postgres parameter limits.
    */
   async createMany(items: CreateTicketInput[]) {
     if (items.length === 0) return [];
-    return await db
-      .insert(tickets)
-      .values(
-        items.map((data) => ({
-          eventId: data.eventId,
-          guestId: data.guestId || null,
-          ticketTypeId: data.ticketTypeId,
-          verificationToken: data.verificationToken,
-          status: data.status || 'ACTIVE',
-          usagePolicy: data.usagePolicy || 'SINGLE_USE',
-          assetPath: data.assetPath || null,
-          assetUrl: data.assetUrl || null,
-          sequenceNumber: data.sequenceNumber,
-          createdBy: data.createdBy,
-        }))
-      )
-      .returning();
+    const CHUNK_SIZE = 500;
+    const results = [];
+    for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+      const chunk = items.slice(i, i + CHUNK_SIZE);
+      const inserted = await db
+        .insert(tickets)
+        .values(
+          chunk.map((data) => ({
+            eventId: data.eventId,
+            guestId: data.guestId || null,
+            ticketTypeId: data.ticketTypeId,
+            verificationToken: data.verificationToken,
+            status: data.status || 'ACTIVE',
+            usagePolicy: data.usagePolicy || 'SINGLE_USE',
+            assetPath: data.assetPath || null,
+            assetUrl: data.assetUrl || null,
+            sequenceNumber: data.sequenceNumber,
+            createdBy: data.createdBy,
+          }))
+        )
+        .returning();
+      results.push(...inserted);
+    }
+    return results;
   }
 
   /**
@@ -129,7 +136,7 @@ export class TicketRepository {
    * Find all tickets for an event with deterministic sequence order and optional filters.
    */
   async findByEventId(eventId: string, options: TicketFilterOptions = {}) {
-    const limit = options.limit || 1000;
+    const limit = options.limit || 10000;
     const offset = options.offset || 0;
 
     const conditions = [eq(tickets.eventId, eventId)];

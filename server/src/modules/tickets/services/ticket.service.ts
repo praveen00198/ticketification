@@ -30,14 +30,14 @@ export class TicketService {
       throw new AppError('Event not found or unauthorized', 404);
     }
 
-    // 1. Fetch all guests for this event
-    const guests = await this.guestRepo.findByEventId(eventId, 5000, 0);
+    // 1. Fetch all guests for this event (up to 50,000)
+    const guests = await this.guestRepo.findByEventId(eventId, 50000, 0);
     if (guests.length === 0) {
       throw new AppError('No guests found for this event. Please import guests first.', 400);
     }
 
     // 2. Fetch existing tickets to avoid regenerating duplicate tickets for same guest
-    const existingTickets = await this.ticketRepo.findByEventId(eventId, { limit: 5000 });
+    const existingTickets = await this.ticketRepo.findByEventId(eventId, { limit: 50000 });
     const guestsWithTickets = new Set(
       existingTickets.map((t) => t.ticket.guestId).filter(Boolean)
     );
@@ -77,7 +77,7 @@ export class TicketService {
     }
 
     let nextSeq = await this.ticketRepo.getNextSequenceNumber(eventId);
-    let generatedCount = 0;
+    const ticketsToInsert = [];
 
     for (const guest of pendingGuests) {
       const guestCategory = (guest.category || 'GENERAL').toUpperCase().trim();
@@ -87,11 +87,11 @@ export class TicketService {
       const verificationToken = this.qrServ.generateVerificationToken();
       const qrDataUrl = await this.qrServ.generateQrDataUrl(verificationToken);
 
-      // Generate Ticket Image (1620x2025)
+      // Generate Vector Ticket Image Asset (1620x2025)
       const ticketSeqStr = nextSeq.toString().padStart(5, '0');
       const displayId = `${event.name.substring(0, 3).toUpperCase()}-${ticketSeqStr}`;
 
-      const { filePath, publicUrl, imageBase64 } = await this.imageServ.generateTicketImage({
+      const { filePath, publicUrl } = await this.imageServ.generateTicketImage({
         ticketId: displayId,
         guestName: guest.name || 'Valued Guest',
         eventName: event.name,
@@ -102,44 +102,28 @@ export class TicketService {
         phone: guest.phone || undefined,
       });
 
-      // Optional upload to Supabase Storage
-      let assetUrl = publicUrl;
-      let assetPath = filePath;
-
-      if (this.storageServ.isConfigured()) {
-        const storageFileName = `tickets/${eventId}/${verificationToken}.png`;
-        const cloudUrl = await this.storageServ.uploadTicketImage(
-          storageFileName,
-          imageBase64 || filePath,
-          'image/png'
-        );
-        if (cloudUrl) {
-          assetUrl = cloudUrl;
-          assetPath = storageFileName;
-        }
-      }
-
-      // Insert Ticket Record
-      await this.ticketRepo.create({
+      ticketsToInsert.push({
         eventId,
         guestId: guest.id,
         ticketTypeId: matchedType.id,
         verificationToken,
         status: 'ACTIVE',
         usagePolicy: matchedType.usagePolicy || 'SINGLE_USE',
-        assetPath,
-        assetUrl,
+        assetPath: filePath,
+        assetUrl: publicUrl,
         sequenceNumber: nextSeq,
         createdBy: userId,
       });
 
       nextSeq++;
-      generatedCount++;
     }
 
+    // High-speed chunked batch insert into PostgreSQL
+    const inserted = await this.ticketRepo.createMany(ticketsToInsert);
+
     return {
-      message: `Successfully generated ${generatedCount} tickets.`,
-      generatedCount,
+      message: `Successfully generated ${inserted.length} tickets.`,
+      generatedCount: inserted.length,
       totalGuests: guests.length,
     };
   }
@@ -177,7 +161,7 @@ export class TicketService {
     }
 
     let nextSeq = await this.ticketRepo.getNextSequenceNumber(eventId);
-    const createdTickets = [];
+    const ticketsToInsert = [];
 
     for (let i = 0; i < count; i++) {
       const verificationToken = this.qrServ.generateVerificationToken();
@@ -186,7 +170,7 @@ export class TicketService {
       const ticketSeqStr = nextSeq.toString().padStart(5, '0');
       const displayId = `WRK-${ticketSeqStr}`;
 
-      const { filePath, publicUrl, imageBase64 } = await this.imageServ.generateTicketImage({
+      const { filePath, publicUrl } = await this.imageServ.generateTicketImage({
         ticketId: displayId,
         guestName: 'UNASSIGNED STAFF',
         eventName: event.name,
@@ -195,41 +179,26 @@ export class TicketService {
         qrCodeDataUrl: qrDataUrl,
       });
 
-      let assetUrl = publicUrl;
-      let assetPath = filePath;
-
-      if (this.storageServ.isConfigured()) {
-        const storageFileName = `tickets/${eventId}/${verificationToken}.png`;
-        const cloudUrl = await this.storageServ.uploadTicketImage(
-          storageFileName,
-          imageBase64 || filePath,
-          'image/png'
-        );
-        if (cloudUrl) {
-          assetUrl = cloudUrl;
-          assetPath = storageFileName;
-        }
-      }
-
-      const ticket = await this.ticketRepo.create({
+      ticketsToInsert.push({
         eventId,
         guestId: null, // Unassigned
         ticketTypeId: workerType.id,
         verificationToken,
         status: 'ACTIVE',
         usagePolicy: 'REUSABLE',
-        assetPath,
-        assetUrl,
+        assetPath: filePath,
+        assetUrl: publicUrl,
         sequenceNumber: nextSeq,
         createdBy: userId,
       });
 
-      createdTickets.push(ticket);
       nextSeq++;
     }
 
+    const createdTickets = await this.ticketRepo.createMany(ticketsToInsert);
+
     return {
-      message: `Successfully generated ${count} unassigned worker tickets.`,
+      message: `Successfully generated ${createdTickets.length} unassigned worker tickets.`,
       tickets: createdTickets,
     };
   }
@@ -336,11 +305,25 @@ export class TicketService {
         ].join(',')
       );
 
-      // Add image file to archive if exists on local disk
+      // Add image file to archive (from local disk or generate SVG on-the-fly)
       if (t.ticket.assetPath && fs.existsSync(t.ticket.assetPath)) {
-        const fileExt = path.extname(t.ticket.assetPath) || '.png';
+        const fileExt = path.extname(t.ticket.assetPath) || '.svg';
         const zipFileName = `tickets/ticket-${seqStr}-${guestName.replace(/[^a-zA-Z0-9]/g, '_')}${fileExt}`;
         archive.file(t.ticket.assetPath, { name: zipFileName });
+      } else {
+        const qrDataUrl = await this.qrServ.generateQrDataUrl(token);
+        const displayId = `${event.name.substring(0, 3).toUpperCase()}-${seqStr}`;
+        const svg = this.imageServ.buildSvg({
+          ticketId: displayId,
+          guestName: t.guest?.name || 'Valued Guest',
+          eventName: event.name,
+          eventDate: event.date,
+          ticketType: t.ticketType.label || t.ticketType.name,
+          qrCodeDataUrl: qrDataUrl,
+          organization: t.guest?.organization || undefined,
+          phone: t.guest?.phone || undefined,
+        });
+        archive.append(svg, { name: `tickets/ticket-${seqStr}-${guestName.replace(/[^a-zA-Z0-9]/g, '_')}.svg` });
       }
     }
 

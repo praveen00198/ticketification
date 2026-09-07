@@ -185,7 +185,8 @@ export class TicketImageService {
   }
 
   /**
-   * Generate a ticket image PNG/SVG, save to disk, and return persistent Base64 + public URL.
+   * Generate a high-resolution vector SVG ticket asset, save to disk, and return Base64 + public URL.
+   * Runs in microseconds without spawning external browser processes.
    */
   async generateTicketImage(data: TicketImageData): Promise<{ filePath: string; publicUrl: string; imageBase64: string }> {
     if (!fs.existsSync(this.outputDir)) {
@@ -194,46 +195,15 @@ export class TicketImageService {
       } catch (_e) {}
     }
 
-    const fileName = `ticket-${data.ticketId}.png`;
+    const fileName = `ticket-${data.ticketId}.svg`;
     const filePath = path.join(this.outputDir, fileName);
-    let imageBase64 = '';
-
-    const html = this.buildHtml(data);
+    const svg = this.buildSvg(data);
+    const imageBase64 = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
 
     try {
-      const browser = await puppeteer.launch({
-        headless: config.env.puppeteerHeadless ? 'shell' : false,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--no-first-run',
-          '--no-zygote',
-          '--single-process',
-        ],
-      });
-      const page = await browser.newPage();
-      await page.setViewport({ width: 1620, height: 2025 });
-      await page.setContent(html, { waitUntil: 'networkidle0' });
-      await page.evaluateHandle('document.fonts.ready');
-      const screenshotBuffer = await page.screenshot({ path: filePath, type: 'png', fullPage: true });
-      await browser.close();
-
-      if (Buffer.isBuffer(screenshotBuffer)) {
-        imageBase64 = `data:image/png;base64,${screenshotBuffer.toString('base64')}`;
-      } else if (fs.existsSync(filePath)) {
-        imageBase64 = `data:image/png;base64,${fs.readFileSync(filePath).toString('base64')}`;
-      }
-    } catch (error) {
-      console.warn('[TicketImageService] Puppeteer unavailable on host, generating vector SVG ticket asset:', error);
-      const svg = this.buildSvg(data);
-      imageBase64 = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
-      try {
-        fs.writeFileSync(filePath, svg, 'utf-8');
-      } catch (writeErr) {
-        console.warn('[TicketImageService] Could not write fallback to disk:', writeErr);
-      }
+      fs.writeFileSync(filePath, svg, 'utf-8');
+    } catch (writeErr) {
+      console.warn('[TicketImageService] Could not write ticket file to disk:', writeErr);
     }
 
     // Construct public URL based on storage base URL (Render supplies RENDER_EXTERNAL_URL)

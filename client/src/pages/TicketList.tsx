@@ -52,6 +52,7 @@ export const TicketList: React.FC = () => {
       const data = await ticketsApi.getTickets(currentEvent.id, {
         status: statusFilter === 'ALL' ? undefined : statusFilter,
         search: search.trim() || undefined,
+        limit: 5000,
       });
       setTickets(data.tickets);
       setTotalCount(data.total);
