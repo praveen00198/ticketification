@@ -1,3 +1,7 @@
+import { initFonts } from '../../../utils/font-initializer';
+// Initialize Fontconfig with bundled Devanagari fonts before Sharp loads
+initFonts();
+
 import puppeteer, { Browser, Page } from 'puppeteer';
 import sharp from 'sharp';
 import path from 'path';
@@ -37,6 +41,7 @@ export class TicketImageService {
   private fontBase64: string | null = null;
 
   constructor() {
+    initFonts();
     this.loadTemplate();
     this.loadFont();
   }

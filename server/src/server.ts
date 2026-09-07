@@ -6,6 +6,10 @@ if (dns.setDefaultResultOrder) {
   dns.setDefaultResultOrder('ipv4first');
 }
 
+import { initFonts } from './utils/font-initializer';
+// Initialize Fontconfig with bundled Devanagari fonts before Sharp loads
+initFonts();
+
 import { logMemory } from './utils/memory-logger';
 import sharp from 'sharp';
 
