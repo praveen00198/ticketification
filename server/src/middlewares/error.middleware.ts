@@ -23,7 +23,7 @@ export function errorHandler(
   const isAppError =
     err instanceof AppError ||
     err?.isAppError === true ||
-    (typeof err?.statusCode === 'number' && err.statusCode >= 400 && err.statusCode < 500);
+    (typeof err?.statusCode === 'number' && err.statusCode >= 400 && err.statusCode <= 599);
 
   const statusCode = isAppError ? err.statusCode || 400 : 500;
   let message = err?.message || 'An unexpected internal server error occurred.';
@@ -43,7 +43,7 @@ export function errorHandler(
   } else if (message.includes('relation') && message.includes('does not exist')) {
     message = 'Database service initialization error. Please contact the administrator.';
   } else if (statusCode === 500 && !isAppError) {
-    message = 'A server error occurred. Please try again or contact support.';
+    message = err?.message ? `Server Error: ${err.message}` : 'A server error occurred. Please try again or contact support.';
   }
 
   res.status(statusCode).json({

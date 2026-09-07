@@ -33,7 +33,7 @@ export class TicketRepository {
       .from(tickets)
       .where(eq(tickets.eventId, eventId));
 
-    return (result[0]?.maxSeq || 0) + 1;
+    return Number(result[0]?.maxSeq || 0) + 1;
   }
 
   /**
