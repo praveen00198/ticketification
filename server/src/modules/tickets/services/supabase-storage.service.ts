@@ -86,24 +86,44 @@ export class SupabaseStorageService {
 
     const cleanPath = storagePath.replace(/^\/+/, '');
 
-    const { data, error } = await supabaseAdmin.storage
-      .from(this.bucket)
-      .upload(cleanPath, buffer, {
-        contentType: mimeType,
-        upsert: true,
-      });
+    let uploadData: any = null;
+    let lastError: any = null;
+    const maxRetries = 3;
 
-    if (error) {
-      console.error(`[SupabaseStorageService] Upload failed for ${cleanPath}:`, error);
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const { data, error } = await supabaseAdmin.storage
+        .from(this.bucket)
+        .upload(cleanPath, buffer, {
+          contentType: mimeType,
+          upsert: true,
+        });
+
+      if (!error) {
+        uploadData = data;
+        lastError = null;
+        break;
+      }
+
+      lastError = error;
+      console.warn(
+        `[SupabaseStorageService] Upload attempt ${attempt}/${maxRetries} failed for ${cleanPath}: ${error.message}`
+      );
+      if (attempt < maxRetries) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 600));
+      }
+    }
+
+    if (lastError) {
+      console.error(`[SupabaseStorageService] Upload permanently failed for ${cleanPath}:`, lastError);
       throw new AppError(
-        `Failed to upload ticket image to Supabase Storage (${cleanPath}): ${error.message}`,
+        `Failed to upload ticket image to Supabase Storage (${cleanPath}): ${lastError.message}`,
         500
       );
     }
 
     const { data: urlData } = supabaseAdmin.storage
       .from(this.bucket)
-      .getPublicUrl(data?.path || cleanPath);
+      .getPublicUrl(uploadData?.path || cleanPath);
 
     if (!urlData?.publicUrl) {
       throw new AppError(

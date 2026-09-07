@@ -167,9 +167,9 @@ export class TicketService {
       nextSeq++;
     }
 
-    // High-speed parallel upload to Supabase Storage in batches of 25
+    // Stable parallel upload to Supabase Storage in batches of 5 to avoid Gateway Timeouts
     if (uploadTasks.length > 0) {
-      const BATCH_SIZE = 25;
+      const BATCH_SIZE = 5;
       for (let i = 0; i < uploadTasks.length; i += BATCH_SIZE) {
         const batch = uploadTasks.slice(i, i + BATCH_SIZE);
         await Promise.all(
@@ -282,7 +282,7 @@ export class TicketService {
     }
 
     if (uploadTasks.length > 0) {
-      const BATCH_SIZE = 25;
+      const BATCH_SIZE = 5;
       for (let i = 0; i < uploadTasks.length; i += BATCH_SIZE) {
         const batch = uploadTasks.slice(i, i + BATCH_SIZE);
         await Promise.all(
