@@ -71,9 +71,9 @@ export class SupabaseStorageService {
         return null;
       }
 
-      // Retrieve public URL
-      const { data: urlData } = supabaseAdmin.storage.from(this.bucket).getPublicUrl(data.path);
-      return urlData.publicUrl || null;
+      // Retrieve public URL safely
+      const { data: urlData } = supabaseAdmin.storage.from(this.bucket).getPublicUrl(data?.path || fileName);
+      return urlData?.publicUrl || null;
     } catch (err: any) {
       console.warn(`[SupabaseStorageService] Exception during upload for ${fileName}:`, err.message);
       return null;

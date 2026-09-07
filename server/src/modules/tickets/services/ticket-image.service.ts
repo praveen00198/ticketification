@@ -188,6 +188,12 @@ export class TicketImageService {
    * Generate a ticket image PNG/SVG, save to disk, and return persistent Base64 + public URL.
    */
   async generateTicketImage(data: TicketImageData): Promise<{ filePath: string; publicUrl: string; imageBase64: string }> {
+    if (!fs.existsSync(this.outputDir)) {
+      try {
+        fs.mkdirSync(this.outputDir, { recursive: true });
+      } catch (_e) {}
+    }
+
     const fileName = `ticket-${data.ticketId}.png`;
     const filePath = path.join(this.outputDir, fileName);
     let imageBase64 = '';
@@ -220,7 +226,7 @@ export class TicketImageService {
         imageBase64 = `data:image/png;base64,${fs.readFileSync(filePath).toString('base64')}`;
       }
     } catch (error) {
-      console.warn('[TicketImageService] Puppeteer failed on host, building high-res SVG fallback:', error);
+      console.warn('[TicketImageService] Puppeteer unavailable on host, generating vector SVG ticket asset:', error);
       const svg = this.buildSvg(data);
       imageBase64 = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
       try {
