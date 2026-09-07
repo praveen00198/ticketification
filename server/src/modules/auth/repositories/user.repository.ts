@@ -15,18 +15,28 @@ export class UserRepository {
 
   async upsert(data: { id: string; name: string; email: string; role?: string }) {
     const existing = await this.findById(data.id);
+    const emailToUse = data.email?.trim() ? data.email.trim().toLowerCase() : `${data.id}@ticketification.internal`;
+    const nameToUse = data.name?.trim() || 'Admin';
+    const roleToUse = data.role || 'ADMIN';
+
     if (existing) {
       const result = await db.update(users)
-        .set({ name: data.name, email: data.email.toLowerCase(), updatedAt: new Date() })
+        .set({ 
+          name: nameToUse, 
+          email: emailToUse, 
+          role: roleToUse,
+          updatedAt: new Date() 
+        })
         .where(eq(users.id, data.id))
         .returning();
       return result[0];
     }
+
     const result = await db.insert(users).values({
       id: data.id,
-      name: data.name,
-      email: data.email.toLowerCase(),
-      role: data.role || 'ADMIN',
+      name: nameToUse,
+      email: emailToUse,
+      role: roleToUse,
     }).returning();
     return result[0];
   }

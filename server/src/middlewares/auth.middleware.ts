@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabaseAdmin } from '../config/supabase';
+import { userRepository } from '../modules/auth/repositories/user.repository';
 import { AppError } from './error.middleware';
 
 export interface AuthenticatedRequest extends Request {
@@ -47,6 +48,18 @@ export async function authMiddleware(
       email: user.email || '',
       role: user.user_metadata?.role || 'ADMIN',
     };
+
+    // Ensure the user row exists in public.users to fulfill foreign key constraints
+    try {
+      await userRepository.upsert({
+        id: user.id,
+        name: user.user_metadata?.name || user.email?.split('@')[0] || 'Admin',
+        email: user.email || '',
+        role: user.user_metadata?.role || 'ADMIN',
+      });
+    } catch (syncErr) {
+      console.warn('[authMiddleware] Could not sync user to public.users:', syncErr);
+    }
 
     next();
   } catch (error) {

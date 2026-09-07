@@ -1,5 +1,6 @@
 import { eventRepository, EventRepository, CreateEventInput, UpdateEventInput } from '../repositories/event.repository';
 import { ticketTypeRepository, TicketTypeRepository, CreateTicketTypeInput } from '../repositories/ticket-type.repository';
+import { userRepository, UserRepository } from '../../auth/repositories/user.repository';
 import { AppError } from '../../../middlewares/error.middleware';
 
 export const DEFAULT_TICKET_TYPES = [
@@ -13,7 +14,8 @@ export const DEFAULT_TICKET_TYPES = [
 export class EventService {
   constructor(
     private readonly eventRepo: EventRepository = eventRepository,
-    private readonly ticketTypeRepo: TicketTypeRepository = ticketTypeRepository
+    private readonly ticketTypeRepo: TicketTypeRepository = ticketTypeRepository,
+    private readonly userRepo: UserRepository = userRepository
   ) {}
 
   /**
@@ -32,6 +34,21 @@ export class EventService {
     }
     if (!data.date) {
       throw new AppError('Event date is required', 400);
+    }
+
+    // Ensure the creator profile exists in public.users to satisfy foreign key constraint
+    try {
+      const existingUser = await this.userRepo.findById(userId);
+      if (!existingUser) {
+        await this.userRepo.upsert({
+          id: userId,
+          name: data.organizerName?.trim() || 'Admin',
+          email: `${userId}@ticketification.internal`,
+          role: 'ADMIN',
+        });
+      }
+    } catch (syncErr) {
+      console.warn('[EventService] Pre-event user upsert fallback:', syncErr);
     }
 
     // 1. Create event record
