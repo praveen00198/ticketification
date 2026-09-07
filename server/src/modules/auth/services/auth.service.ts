@@ -41,21 +41,19 @@ export class AuthService {
       throw new AppError('Registration failed: No user returned from auth service.', 500);
     }
 
-    // Sync user profile to our users table
-    const profile = await this.userRepo.upsert({
-      id: authData.user.id,
-      name: name.trim(),
-      email: normalizedEmail,
-      role: 'ADMIN',
-    });
+    // Sync user profile to our users table (resilient to DB latency)
+    try {
+      await this.userRepo.upsert({
+        id: authData.user.id,
+        name: name.trim(),
+        email: normalizedEmail,
+        role: 'ADMIN',
+      });
+    } catch (dbErr) {
+      console.warn('[AuthService] Could not sync user profile to database during registration:', dbErr);
+    }
 
     // Sign in to get a session token
-    const { data: signInData, error: signInError } = await supabaseAdmin.auth.admin.generateLink({
-      type: 'magiclink',
-      email: normalizedEmail,
-    });
-
-    // For immediate login after registration, use signInWithPassword
     const { data: sessionData, error: sessionError } = await supabaseAdmin.auth.signInWithPassword({
       email: normalizedEmail,
       password,
@@ -113,36 +111,62 @@ export class AuthService {
       throw new AppError('Login failed: No session returned.', 500);
     }
 
-    // Ensure user profile exists in our table
-    const profile = await this.userRepo.upsert({
-      id: data.user.id,
-      name: data.user.user_metadata?.name || 'User',
-      email: normalizedEmail,
-      role: data.user.user_metadata?.role || 'ADMIN',
-    });
+    // Ensure user profile exists in our table (resilient to DB connection)
+    let profileName = data.user.user_metadata?.name || 'Admin';
+    try {
+      const profile = await this.userRepo.upsert({
+        id: data.user.id,
+        name: data.user.user_metadata?.name || 'Admin',
+        email: normalizedEmail,
+        role: data.user.user_metadata?.role || 'ADMIN',
+      });
+      if (profile?.name) {
+        profileName = profile.name;
+      }
+    } catch (dbErr) {
+      console.warn('[AuthService] Could not sync user profile to database during login:', dbErr);
+    }
 
     return {
       user: {
         id: data.user.id,
-        name: profile?.name || data.user.user_metadata?.name || 'User',
+        name: profileName,
         email: normalizedEmail,
-        role: profile?.role || 'ADMIN',
+        role: data.user.user_metadata?.role || 'ADMIN',
       },
       token: data.session.access_token,
     };
   }
 
   async getMe(userId: string) {
-    const user = await this.userRepo.findById(userId);
-    if (!user) {
-      throw new AppError('User profile not found.', 404);
+    try {
+      const user = await this.userRepo.findById(userId);
+      if (user) {
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+        };
+      }
+    } catch (dbErr) {
+      console.warn('[AuthService] Could not query user profile from DB:', dbErr);
     }
-    return {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-    };
+
+    // Fallback to Supabase Auth user record if database query failed
+    if (supabaseAdmin) {
+      const { data } = await supabaseAdmin.auth.admin.getUserById(userId);
+      if (data?.user) {
+        return {
+          id: data.user.id,
+          name: data.user.user_metadata?.name || data.user.email?.split('@')[0] || 'Admin',
+          email: data.user.email || '',
+          role: data.user.user_metadata?.role || 'ADMIN',
+        };
+      }
+    }
+
+    throw new AppError('User profile not found.', 404);
   }
 }
 

@@ -16,6 +16,7 @@ if (connectionString) {
     max: 10,
     idle_timeout: 20,
     connect_timeout: 10,
+    prepare: false, // Required for Supabase connection poolers / PgBouncer
   });
   db = drizzle(client, { schema });
 } else {

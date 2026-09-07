@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Ticket, Lock, Mail, User as UserIcon, AlertCircle, ArrowRight, Calendar } from 'lucide-react';
+import { Ticket, Lock, Mail, User as UserIcon, AlertCircle, ArrowRight } from 'lucide-react';
 import { apiClient } from '../api/client';
 
 interface RegisterProps {
@@ -15,7 +15,6 @@ export const Register: React.FC<RegisterProps> = ({
 }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState(initialEmail);
-  const [eventName, setEventName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -41,7 +40,6 @@ export const Register: React.FC<RegisterProps> = ({
       const res: any = await apiClient.post('/auth/register', {
         name,
         email,
-        eventName,
         password,
       });
       if (res.success && res.data) {
@@ -97,7 +95,7 @@ export const Register: React.FC<RegisterProps> = ({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Rahul Sharma"
-                  className="w-full pl-10 pr-4 py-2.5 bg-surface-bg border border-surface-border rounded-lg text-sm text-surface-charcoal focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-zinc-300 rounded-lg text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm"
                 />
               </div>
             </div>
@@ -114,24 +112,7 @@ export const Register: React.FC<RegisterProps> = ({
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="admin@ticketification.com"
-                  className="w-full pl-10 pr-4 py-2.5 bg-surface-bg border border-surface-border rounded-lg text-sm text-surface-charcoal focus:outline-none focus:ring-2 focus:ring-brand-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-surface-charcoal uppercase tracking-wider mb-1.5">
-                Event Name
-              </label>
-              <div className="relative">
-                <Calendar className="w-4 h-4 text-zinc-400 absolute left-3.5 top-3.5" />
-                <input
-                  type="text"
-                  required
-                  value={eventName}
-                  onChange={(e) => setEventName(e.target.value)}
-                  placeholder="e.g. Annual Tech Leadership Summit 2026"
-                  className="w-full pl-10 pr-4 py-2.5 bg-surface-bg border border-surface-border rounded-lg text-sm text-surface-charcoal focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-zinc-300 rounded-lg text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm"
                 />
               </div>
             </div>
@@ -149,7 +130,7 @@ export const Register: React.FC<RegisterProps> = ({
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="At least 6 characters"
-                  className="w-full pl-10 pr-4 py-2.5 bg-surface-bg border border-surface-border rounded-lg text-sm text-surface-charcoal focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-zinc-300 rounded-lg text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm"
                 />
               </div>
             </div>
@@ -167,7 +148,7 @@ export const Register: React.FC<RegisterProps> = ({
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Re-enter password"
-                  className="w-full pl-10 pr-4 py-2.5 bg-surface-bg border border-surface-border rounded-lg text-sm text-surface-charcoal focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-zinc-300 rounded-lg text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm"
                 />
               </div>
             </div>

@@ -73,7 +73,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToRegist
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="admin@ticketification.com"
-                  className="w-full pl-10 pr-4 py-2.5 bg-surface-bg border border-surface-border rounded-lg text-sm text-surface-charcoal focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-zinc-300 rounded-lg text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm"
                 />
               </div>
             </div>
@@ -90,7 +90,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToRegist
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
-                  className="w-full pl-10 pr-4 py-2.5 bg-surface-bg border border-surface-border rounded-lg text-sm text-surface-charcoal focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-zinc-300 rounded-lg text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm"
                 />
               </div>
             </div>
