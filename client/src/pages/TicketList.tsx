@@ -176,7 +176,7 @@ export const TicketList: React.FC = () => {
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2.5 flex-wrap">
-          {tickets.length > 0 && (
+          {(totalCount > 0 || tickets.length > 0) && (
             <button
               onClick={handleDownloadZip}
               disabled={downloadingZip}
@@ -185,7 +185,7 @@ export const TicketList: React.FC = () => {
               {downloadingZip ? (
                 <>
                   <RefreshCw className="w-3.5 h-3.5 animate-spin text-brand-600" />
-                  <span>Archiving ZIP...</span>
+                  <span>Preparing ZIP...</span>
                 </>
               ) : (
                 <>
@@ -394,7 +394,11 @@ export const TicketList: React.FC = () => {
                             href={t.assetUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            download={`ticket-${t.sequenceNumber}.png`}
+                            download={
+                              t.guest?.name && t.guest.name !== 'UNASSIGNED'
+                                ? `${t.guest.name.trim().replace(/[/\\?%*:|"<>]/g, '').replace(/[\s_]+/g, '-')}-${currentEvent.name.substring(0, 3).toUpperCase()}-${t.sequenceNumber.toString().padStart(5, '0')}.png`
+                                : `${currentEvent.name.substring(0, 3).toUpperCase()}-${t.sequenceNumber.toString().padStart(5, '0')}.png`
+                            }
                             className="p-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-900 rounded-lg border border-zinc-200 transition-colors shadow-sm"
                             title="Download PNG"
                           >

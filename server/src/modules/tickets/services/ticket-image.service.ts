@@ -1,4 +1,4 @@
-import puppeteer from 'puppeteer';
+import puppeteer, { Browser } from 'puppeteer';
 import path from 'path';
 import fs from 'fs';
 import config from '../../../config/env';
@@ -185,17 +185,105 @@ export class TicketImageService {
   }
 
   /**
-   * Generate an in-memory high-resolution vector SVG ticket asset.
-   * Runs in microseconds without disk I/O or external browser processes.
+   * Launch a shared Puppeteer browser instance with headless flags optimized for high-performance rendering.
    */
-  async generateTicketImage(data: TicketImageData): Promise<{ svg: string; imageBase64: string; fileName: string }> {
-    const fileName = `ticket-${data.ticketId}.svg`;
-    const svg = this.buildSvg(data);
-    const imageBase64 = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+  async launchBrowser(): Promise<Browser> {
+    return await puppeteer.launch({
+      headless: config.env.puppeteerHeadless ? 'shell' : false,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--no-first-run',
+        '--no-zygote',
+      ],
+    });
+  }
 
-    return { svg, imageBase64, fileName };
+  /**
+   * Converts SVG markup to a genuine PNG image buffer using Puppeteer.
+   * Ensures output is a valid PNG binary with standard PNG header (0x89504E47).
+   */
+  async svgToPng(svg: string, sharedBrowser?: Browser): Promise<Buffer> {
+    const ownBrowser = !sharedBrowser;
+    const browser = sharedBrowser || (await this.launchBrowser());
+
+    try {
+      const page = await browser.newPage();
+      await page.setViewport({ width: 1620, height: 2025 });
+      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>* { margin: 0; padding: 0; box-sizing: border-box; } body { width: 1620px; height: 2025px; overflow: hidden; background-color: #000; }</style></head><body>${svg}</body></html>`;
+      await page.setContent(html, { waitUntil: 'domcontentloaded' });
+      await page.evaluateHandle('document.fonts.ready');
+      const screenshot = await page.screenshot({ type: 'png', fullPage: true });
+      await page.close();
+      return Buffer.from(screenshot);
+    } finally {
+      if (ownBrowser && browser) {
+        await browser.close();
+      }
+    }
+  }
+
+  /**
+   * Generate an in-memory high-resolution PNG ticket asset.
+   */
+  async generateTicketImage(
+    data: TicketImageData,
+    sharedBrowser?: Browser
+  ): Promise<{ pngBuffer: Buffer; svg: string; imageBase64: string; fileName: string }> {
+    const fileName = `ticket-${data.ticketId}.png`;
+    const svg = this.buildSvg(data);
+    const pngBuffer = await this.svgToPng(svg, sharedBrowser);
+    const imageBase64 = `data:image/png;base64,${pngBuffer.toString('base64')}`;
+
+    return { pngBuffer, svg, imageBase64, fileName };
   }
 }
 
+/**
+ * Formats a clean, safe, and collision-resistant ticket download filename.
+ * Pattern: <Guest-Name>-<Ticket-ID>.png (e.g. Rahul-Sharma-GAN-00001.png).
+ * If guest name is missing or unassigned: <Ticket-ID>.png (e.g. GAN-00001.png).
+ */
+export function formatTicketFileName(guestName: string | null | undefined, ticketId: string): string {
+  const cleanId = (ticketId || '00000').trim().replace(/[^a-zA-Z0-9_-]/g, '');
+  if (!guestName || !guestName.trim()) {
+    return `${cleanId}.png`;
+  }
+
+  const cleanName = guestName
+    .replace(/[/\\?%*:|"<>.]+/g, ' ') // convert illegal chars, slashes, and traversal dots to spaces
+    .trim()
+    .replace(/[^a-zA-Z0-9\s_-]/g, '') // strip any remaining unexpected characters
+    .replace(/[\s_]+/g, '-') // replace whitespace & underscores with hyphens
+    .replace(/-+/g, '-') // collapse consecutive hyphens
+    .replace(/^-+|-+$/g, ''); // trim leading/trailing hyphens
+
+  if (!cleanName || cleanName === '-' || cleanName.toLowerCase() === 'undefined' || cleanName.toLowerCase() === 'null') {
+    return `${cleanId}.png`;
+  }
+
+  return `${cleanName}-${cleanId}.png`;
+}
+
+/**
+ * Validates whether a given buffer has a standard 8-byte PNG header (89 50 4E 47 0D 0A 1A 0A).
+ */
+export function isPngBuffer(buf: Buffer | null | undefined): boolean {
+  if (!buf || !Buffer.isBuffer(buf) || buf.length < 8) return false;
+  return (
+    buf[0] === 0x89 &&
+    buf[1] === 0x50 &&
+    buf[2] === 0x4e &&
+    buf[3] === 0x47 &&
+    buf[4] === 0x0d &&
+    buf[5] === 0x0a &&
+    buf[6] === 0x1a &&
+    buf[7] === 0x0a
+  );
+}
+
 export const ticketImageService = new TicketImageService();
+
 

@@ -153,5 +153,40 @@ describe('VerificationService & QrService Engine', () => {
       expect(result.message).toContain('already been checked in');
     });
   });
+
+  describe('formatTicketFileName & isPngBuffer Validation', () => {
+    it('should format filename as <Guest-Name>-<Ticket-ID>.png', () => {
+      const { formatTicketFileName } = require('../src/modules/tickets/services/ticket-image.service');
+      expect(formatTicketFileName('Rahul Sharma', 'GAN-00001')).toBe('Rahul-Sharma-GAN-00001.png');
+      expect(formatTicketFileName('Aman Patel', 'GAN-00002')).toBe('Aman-Patel-GAN-00002.png');
+      expect(formatTicketFileName('Priya Shah', 'GAN-00003')).toBe('Priya-Shah-GAN-00003.png');
+    });
+
+    it('should fallback to <Ticket-ID>.png when guest name is missing or unassigned', () => {
+      const { formatTicketFileName } = require('../src/modules/tickets/services/ticket-image.service');
+      expect(formatTicketFileName('', 'GAN-00004')).toBe('GAN-00004.png');
+      expect(formatTicketFileName(null, 'GAN-00005')).toBe('GAN-00005.png');
+      expect(formatTicketFileName(undefined, 'GAN-00006')).toBe('GAN-00006.png');
+      expect(formatTicketFileName('   ', 'GAN-00007')).toBe('GAN-00007.png');
+    });
+
+    it('should sanitize path traversal and special characters safely', () => {
+      const { formatTicketFileName } = require('../src/modules/tickets/services/ticket-image.service');
+      expect(formatTicketFileName('../../Rahul', 'GAN-00008')).toBe('Rahul-GAN-00008.png');
+      expect(formatTicketFileName('Rahul/Sharma:VIP*', 'GAN-00009')).toBe('Rahul-Sharma-VIP-GAN-00009.png');
+    });
+
+    it('should distinguish genuine PNG buffer from SVG content', () => {
+      const { isPngBuffer } = require('../src/modules/tickets/services/ticket-image.service');
+      const pngHeader = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00]);
+      const svgBuffer = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>', 'utf-8');
+
+      expect(isPngBuffer(pngHeader)).toBe(true);
+      expect(isPngBuffer(svgBuffer)).toBe(false);
+      expect(isPngBuffer(null)).toBe(false);
+      expect(isPngBuffer(Buffer.from([]))).toBe(false);
+    });
+  });
 });
+
 
