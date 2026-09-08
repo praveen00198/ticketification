@@ -1,5 +1,6 @@
 import { ValidationError } from '../../middlewares/error.middleware';
 import { GenerateWorkerTicketsDTO, TicketFilterQuery } from './ticket.types';
+import { isValidTemplateId, DEFAULT_TEMPLATE_ID } from './ticket-templates';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -27,6 +28,28 @@ export function validateTicketIdParam(ticketId: unknown): string {
   return ticketId.trim();
 }
 
+/**
+ * Validates an incoming templateId parameter against the authoritative server-side registry.
+ * Returns the default template ID when the parameter is omitted (backwards compatibility).
+ */
+export function validateTemplateId(templateId: unknown): string {
+  if (templateId === undefined || templateId === null || templateId === '') {
+    return DEFAULT_TEMPLATE_ID;
+  }
+  if (typeof templateId !== 'string') {
+    throw new ValidationError('Invalid template ID', [
+      { field: 'templateId', message: 'Template ID must be a string' },
+    ]);
+  }
+  const cleaned = templateId.trim();
+  if (!isValidTemplateId(cleaned)) {
+    throw new ValidationError('Invalid template ID', [
+      { field: 'templateId', message: `Invalid template ID '${cleaned}'. Allowed values: standard, event_staff, event_worker` },
+    ]);
+  }
+  return cleaned;
+}
+
 export function validateGenerateWorkerTicketsInput(input: unknown): GenerateWorkerTicketsDTO {
   const payload = (input && typeof input === 'object' ? input : {}) as Record<string, any>;
   const errors: Array<{ field: string; message: string }> = [];
@@ -52,11 +75,22 @@ export function validateGenerateWorkerTicketsInput(input: unknown): GenerateWork
     }
   }
 
+  let templateId = DEFAULT_TEMPLATE_ID;
+  if (payload.templateId !== undefined && payload.templateId !== null) {
+    if (typeof payload.templateId !== 'string' || !payload.templateId.trim()) {
+      errors.push({ field: 'templateId', message: 'Template ID must be a non-empty string' });
+    } else if (!isValidTemplateId(payload.templateId.trim())) {
+      errors.push({ field: 'templateId', message: `Invalid template ID '${payload.templateId.trim()}'. Allowed values: standard, event_staff, event_worker` });
+    } else {
+      templateId = payload.templateId.trim();
+    }
+  }
+
   if (errors.length > 0) {
     throw new ValidationError('Invalid worker ticket generation payload', errors);
   }
 
-  return { count, ticketTypeName };
+  return { count, ticketTypeName, templateId };
 }
 
 export function validateTicketFilterQuery(query: unknown): TicketFilterQuery {

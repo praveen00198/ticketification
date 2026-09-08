@@ -7,6 +7,7 @@ import {
   validateTicketIdParam,
   validateGenerateWorkerTicketsInput,
   validateTicketFilterQuery,
+  validateTemplateId,
 } from '../ticket.validation';
 
 export class TicketController {
@@ -14,8 +15,9 @@ export class TicketController {
     try {
       if (!req.user) throw new AuthenticationError();
 
-      const eventId = validateEventIdParam(req.params.eventId || req.body.eventId);
-      const result = await ticketService.generateTicketsForEvent(eventId, req.user.id);
+      const eventId = validateEventIdParam(req.params.eventId || req.body?.eventId);
+      const templateId = validateTemplateId(req.body?.templateId || req.query?.templateId);
+      const result = await ticketService.generateTicketsForEvent(eventId, req.user.id, templateId);
 
       res.status(201).json({
         success: true,
@@ -30,14 +32,15 @@ export class TicketController {
     try {
       if (!req.user) throw new AuthenticationError();
 
-      const eventId = validateEventIdParam(req.params.eventId || req.body.eventId);
-      const { count, ticketTypeName } = validateGenerateWorkerTicketsInput(req.body);
+      const eventId = validateEventIdParam(req.params.eventId || req.body?.eventId);
+      const { count, ticketTypeName, templateId } = validateGenerateWorkerTicketsInput(req.body);
 
       const result = await ticketService.generateUnassignedWorkerTickets(
         eventId,
         req.user.id,
         count,
-        ticketTypeName
+        ticketTypeName,
+        templateId
       );
 
       res.status(201).json({

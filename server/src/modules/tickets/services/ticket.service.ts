@@ -22,6 +22,7 @@ import {
 } from '../../../middlewares/error.middleware';
 import { GenerateTicketsResult } from '../ticket.types';
 import { logMemory, MemoryTracker } from '../../../utils/memory-logger';
+import { getTemplateById, DEFAULT_TEMPLATE_ID } from '../ticket-templates';
 
 export { formatTicketFileName };
 
@@ -74,7 +75,11 @@ export class TicketService {
    * Generate tickets for all guests of an event.
    * Produces genuine PNG binaries (0x89504E47) and uploads directly to Supabase Storage.
    */
-  async generateTicketsForEvent(eventId: string, userId: string): Promise<GenerateTicketsResult> {
+  async generateTicketsForEvent(
+    eventId: string,
+    userId: string,
+    templateId: string = DEFAULT_TEMPLATE_ID
+  ): Promise<GenerateTicketsResult> {
     const tracker = new MemoryTracker();
 
     // ── LIFECYCLE POINT 3: Immediately before ticket generation starts ──
@@ -83,6 +88,19 @@ export class TicketService {
     const event = await this.eventRepo.findByIdAndOwner(eventId, userId);
     if (!event) {
       throw new NotFoundError('Event not found or unauthorized');
+    }
+
+    const templateConfig = getTemplateById(templateId);
+    if (!templateConfig) {
+      throw new ValidationError(`Invalid template ID: ${templateId}`);
+    }
+
+    let templateBuffer: Buffer | null = null;
+    if (templateConfig.id === DEFAULT_TEMPLATE_ID && typeof this.imageServ.getDefaultTemplateBuffer === 'function') {
+      templateBuffer = this.imageServ.getDefaultTemplateBuffer();
+    }
+    if (!templateBuffer && typeof this.imageServ.resolveTemplateBuffer === 'function') {
+      templateBuffer = await this.imageServ.resolveTemplateBuffer(templateConfig.filename);
     }
 
     // 1. Fetch all guests for this event
@@ -226,7 +244,8 @@ export class TicketService {
       const renderStart = Date.now();
       const renderedBatch = await this.imageServ.renderBatchTickets(
         batch.map((b) => b.ticketData),
-        1
+        1,
+        templateBuffer || undefined
       );
 
       // ── LIFECYCLE POINT 6: Immediately after rendering ──
@@ -271,6 +290,7 @@ export class TicketService {
         totalTickets: generationTasks.length,
       });
     }
+    templateBuffer = null;
 
     // ── LIFECYCLE POINT 8: After DB insert/batch insert ──
     const dbStart = Date.now();
@@ -297,7 +317,8 @@ export class TicketService {
     eventId: string,
     userId: string,
     count: number,
-    ticketTypeName = 'WORKER'
+    ticketTypeName = 'WORKER',
+    templateId: string = DEFAULT_TEMPLATE_ID
   ) {
     if (count <= 0 || count > 500) {
       throw new ValidationError('Quantity must be between 1 and 500.');
@@ -306,6 +327,19 @@ export class TicketService {
     const event = await this.eventRepo.findByIdAndOwner(eventId, userId);
     if (!event) {
       throw new NotFoundError('Event not found or unauthorized');
+    }
+
+    const templateConfig = getTemplateById(templateId);
+    if (!templateConfig) {
+      throw new ValidationError(`Invalid template ID: ${templateId}`);
+    }
+
+    let templateBuffer: Buffer | null = null;
+    if (templateConfig.id === DEFAULT_TEMPLATE_ID && typeof this.imageServ.getDefaultTemplateBuffer === 'function') {
+      templateBuffer = this.imageServ.getDefaultTemplateBuffer();
+    }
+    if (!templateBuffer && typeof this.imageServ.resolveTemplateBuffer === 'function') {
+      templateBuffer = await this.imageServ.resolveTemplateBuffer(templateConfig.filename);
     }
 
     if (!this.storageServ.isConfigured()) {
@@ -384,7 +418,8 @@ export class TicketService {
       const batch = generationTasks.slice(i, i + BATCH_SIZE);
       const renderedBatch = await this.imageServ.renderBatchTickets(
         batch.map((b) => b.ticketData),
-        1
+        1,
+        templateBuffer || undefined
       );
 
       await Promise.all(
@@ -413,6 +448,7 @@ export class TicketService {
       // Release batch references to keep memory usage bounded
       renderedBatch.length = 0;
     }
+    templateBuffer = null;
 
     const createdTickets = await this.ticketRepo.createMany(ticketsToInsert);
 

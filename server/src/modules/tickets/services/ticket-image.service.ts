@@ -9,6 +9,7 @@ import fs from 'fs';
 import config from '../../../config/env';
 import { AppError } from '../../../middlewares/error.middleware';
 import { logMemory } from '../../../utils/memory-logger';
+import { getTemplateById, DEFAULT_TEMPLATE_ID, TicketTemplate } from '../ticket-templates';
 
 // Disable libvips operation & buffer caching to prevent RSS retention across tickets in memory-constrained environments (Render 512MB)
 sharp.cache(false);
@@ -71,6 +72,65 @@ export class TicketImageService {
         }
       }
     }
+  }
+
+  /**
+   * Returns the default (standard) template buffer loaded at startup.
+   * This is the singleton's own buffer — callers must NOT mutate it.
+   */
+  public getDefaultTemplateBuffer(): Buffer | null {
+    return this.templateBuffer;
+  }
+
+  /**
+   * Resolves and loads a template PNG by filename from known asset directories.
+   * Returns a NEW, request-local Buffer. Never mutates singleton state.
+   *
+   * @param filename - Exact filename from the authoritative template registry
+   * @returns Buffer containing the template PNG
+   * @throws AppError if the template file cannot be found in any candidate path
+   */
+  public async resolveTemplateBuffer(filename: string): Promise<Buffer> {
+    const candidates = [
+      path.resolve(__dirname, '../../../../assets', filename),
+      path.resolve(__dirname, '../../../assets', filename),
+      path.resolve(__dirname, '../../assets', filename),
+      path.resolve(__dirname, '../assets', filename),
+      path.resolve(process.cwd(), 'assets', filename),
+      path.resolve(process.cwd(), 'server', 'assets', filename),
+      path.resolve(process.cwd(), 'dist', 'assets', filename),
+      path.resolve(process.cwd(), 'server', 'dist', 'assets', filename),
+      path.resolve(process.cwd(), '../client', 'assets', filename),
+      path.resolve(process.cwd(), 'client', 'assets', filename),
+    ];
+
+    for (const p of candidates) {
+      if (fs.existsSync(p)) {
+        try {
+          const rawBuf = fs.readFileSync(p);
+          console.log(`[TicketImageService] Resolved template '${filename}' from: ${p}`);
+          const meta = await sharp(rawBuf).metadata();
+          if (meta.width === 1620 && meta.height === 2025) {
+            return rawBuf;
+          }
+          // Normalize in-memory to canonical 1620x2025 canvas dimensions so Sharp composite succeeds
+          const normalized = await sharp(rawBuf)
+            .resize(1620, 2025)
+            .png({ compressionLevel: 6 })
+            .toBuffer();
+          return normalized;
+        } catch (e) {
+          console.warn(`[TicketImageService] Could not load template '${filename}' from:`, p, e);
+        }
+      }
+    }
+
+    throw new AppError(
+      `Selected ticket template '${filename}' is unavailable. The template file could not be found in any known asset directory.`,
+      500,
+      undefined,
+      'TEMPLATE_NOT_FOUND'
+    );
   }
 
   private loadFont() {
@@ -329,13 +389,24 @@ export class TicketImageService {
   /**
    * Batch render multiple tickets with high-speed native sharp rendering.
    * Eliminates browser process crashes and memory exhaustion in cloud containers.
-   * Concurrency is bounded to 2 to operate safely under 512MB RAM.
+   *
+   * @param items - Ticket data items to render
+   * @param batchConcurrency - Max parallel renders per batch (keep at 1 for 512MB containers)
+   * @param externalTemplateBuffer - Optional request-local template buffer. When provided,
+   *   this buffer is used instead of the singleton's default template. This keeps template
+   *   selection request-local and never mutates shared TicketImageService state.
    */
   async renderBatchTickets(
     items: TicketImageData[],
-    batchConcurrency = 2
+    batchConcurrency = 2,
+    externalTemplateBuffer?: Buffer
   ): Promise<Array<{ ticketId: string; pngBuffer: Buffer; fileName: string }>> {
     if (items.length === 0) return [];
+
+    // Use the caller-provided template buffer if present; otherwise fall back to the
+    // singleton's default template loaded at startup. This buffer reference is read-only
+    // and never written back to singleton state.
+    const activeTemplate = externalTemplateBuffer || this.templateBuffer;
 
     const results: Array<{ ticketId: string; pngBuffer: Buffer; fileName: string }> = [];
 
@@ -345,7 +416,7 @@ export class TicketImageService {
         slice.map(async (item) => {
           const fileName = `ticket-${item.ticketId}.png`;
           const svg = this.buildSvg(item);
-          const pngBuffer = await this.svgToPng(svg);
+          const pngBuffer = await this.svgToPngWithTemplate(svg, activeTemplate);
           return {
             ticketId: item.ticketId,
             pngBuffer,
@@ -357,6 +428,69 @@ export class TicketImageService {
     }
 
     return results;
+  }
+
+  /**
+   * Converts SVG overlay to PNG using sharp.composite on the given template buffer.
+   * This is functionally identical to svgToPng() but accepts an explicit template buffer
+   * parameter, keeping template selection request-local.
+   */
+  private async svgToPngWithTemplate(svg: string, templateBuffer: Buffer | null): Promise<Buffer> {
+    try {
+      if (templateBuffer) {
+        logMemory('sharp_composite_before');
+        const pngBuffer = await sharp(templateBuffer)
+          .composite([{ input: Buffer.from(svg) }])
+          .png({ compressionLevel: 6 })
+          .toBuffer();
+        logMemory('sharp_composite_after', { pngSizeKB: Math.round(pngBuffer.length / 1024) });
+        if (isPngBuffer(pngBuffer)) {
+          console.log('[DIAG:RenderPath] Used: sharp.composite (template+overlay)');
+          return pngBuffer;
+        }
+      } else {
+        logMemory('sharp_svg_direct_before');
+        const pngBuffer = await sharp(Buffer.from(svg))
+          .png({ compressionLevel: 6 })
+          .toBuffer();
+        logMemory('sharp_svg_direct_after', { pngSizeKB: Math.round(pngBuffer.length / 1024) });
+        if (isPngBuffer(pngBuffer)) {
+          console.log('[DIAG:RenderPath] Used: sharp.svg_direct (no template)');
+          return pngBuffer;
+        }
+      }
+    } catch (sharpErr: any) {
+      console.error('[CRITICAL:TicketImageService] Sharp SVG conversion FAILED — will fall through to Puppeteer:', sharpErr?.message || sharpErr);
+      logMemory('sharp_failed');
+    }
+
+    // Headless browser fallback (same as svgToPng)
+    console.error('[CRITICAL:PUPPETEER_FALLBACK] Sharp rendering failed. Launching Puppeteer/Chromium fallback — this is likely the OOM cause on 512MB containers!');
+    logMemory('puppeteer_fallback_before');
+
+    const browser = await this.launchBrowser();
+    try {
+      logMemory('puppeteer_browser_launched');
+      const page = await browser.newPage();
+      await page.setViewport({ width: 1620, height: 2025 });
+      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>* { margin: 0; padding: 0; box-sizing: border-box; } body { width: 1620px; height: 2025px; overflow: hidden; background-color: #000; }</style></head><body>${svg}</body></html>`;
+      await page.setContent(html, { waitUntil: 'domcontentloaded' });
+      await page.evaluateHandle('document.fonts.ready');
+      const screenshot = await page.screenshot({ type: 'png', fullPage: true });
+      await page.close();
+      logMemory('puppeteer_screenshot_taken');
+
+      const pngBuffer = Buffer.from(screenshot);
+      if (!isPngBuffer(pngBuffer)) {
+        throw new Error('Puppeteer screenshot failed PNG binary header verification');
+      }
+      return pngBuffer;
+    } finally {
+      try {
+        await browser.close();
+        logMemory('puppeteer_browser_closed');
+      } catch (_) {}
+    }
   }
 }
 

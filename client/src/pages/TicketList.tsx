@@ -19,6 +19,7 @@ import {
   ArrowRight,
   Eye,
 } from 'lucide-react';
+import { TICKET_TEMPLATES, DEFAULT_TEMPLATE_ID } from '../utils/ticketTemplates';
 
 export const TicketList: React.FC = () => {
   const navigate = useNavigate();
@@ -31,8 +32,11 @@ export const TicketList: React.FC = () => {
   const [generatingWorkers, setGeneratingWorkers] = useState(false);
   const [downloadingZip, setDownloadingZip] = useState(false);
   const [downloadingTicketId, setDownloadingTicketId] = useState<string | null>(null);
+  const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(DEFAULT_TEMPLATE_ID);
   const [isWorkerModalOpen, setIsWorkerModalOpen] = useState(false);
   const [workerCount, setWorkerCount] = useState(10);
+  const [workerTemplateId, setWorkerTemplateId] = useState<string>(DEFAULT_TEMPLATE_ID);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [message, setMessage] = useState<string | null>(null);
@@ -238,14 +242,16 @@ export const TicketList: React.FC = () => {
     }
   };
 
-  const handleGenerateTickets = async () => {
+  const handleGenerateTickets = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!currentEvent) return;
 
     try {
       setGenerating(true);
       setError(null);
       setMessage(null);
-      const result = await ticketsApi.generateTickets(currentEvent.id);
+      const result = await ticketsApi.generateTickets(currentEvent.id, selectedTemplateId);
+      setIsGenerateModalOpen(false);
       setMessage(result.message || 'Tickets generated successfully!');
       await fetchTickets();
     } catch (err: any) {
@@ -262,7 +268,12 @@ export const TicketList: React.FC = () => {
     try {
       setGeneratingWorkers(true);
       setError(null);
-      const result = await ticketsApi.generateWorkerTickets(currentEvent.id, workerCount, 'WORKER');
+      const result = await ticketsApi.generateWorkerTickets(
+        currentEvent.id,
+        workerCount,
+        'WORKER',
+        workerTemplateId
+      );
       setIsWorkerModalOpen(false);
       setMessage(result.message || `Successfully generated ${workerCount} worker tickets!`);
       await fetchTickets();
@@ -350,7 +361,7 @@ export const TicketList: React.FC = () => {
           </button>
 
           <button
-            onClick={handleGenerateTickets}
+            onClick={() => setIsGenerateModalOpen(true)}
             disabled={generating}
             className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-brand-600/20 active:scale-95 disabled:opacity-50"
           >
@@ -670,6 +681,26 @@ export const TicketList: React.FC = () => {
                 </p>
               </div>
 
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 mb-1">
+                  Ticket Template
+                </label>
+                <select
+                  value={workerTemplateId}
+                  onChange={(e) => setWorkerTemplateId(e.target.value)}
+                  className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2 text-xs text-zinc-900 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 shadow-sm font-medium"
+                >
+                  {TICKET_TEMPLATES.map((tmpl) => (
+                    <option key={tmpl.id} value={tmpl.id}>
+                      {tmpl.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-zinc-500 mt-1">
+                  Visual layout applied to the generated worker passes.
+                </p>
+              </div>
+
               <div className="pt-2 flex justify-end gap-2">
                 <button
                   type="button"
@@ -684,6 +715,81 @@ export const TicketList: React.FC = () => {
                   className="px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-brand-600/20 disabled:opacity-50"
                 >
                   {generatingWorkers ? 'Generating Passes...' : `Generate ${workerCount} Passes`}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Generate All Tickets Modal with Template Selector */}
+      {isGenerateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white border border-surface-border w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-surface-border pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-brand-50 text-brand-700 rounded-lg border border-brand-200">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <h3 className="text-sm font-bold text-zinc-900">Generate All Tickets</h3>
+              </div>
+              <button
+                onClick={() => setIsGenerateModalOpen(false)}
+                className="text-zinc-400 hover:text-zinc-700 text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleGenerateTickets} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 mb-1">
+                  Ticket Template
+                </label>
+                <select
+                  value={selectedTemplateId}
+                  onChange={(e) => setSelectedTemplateId(e.target.value)}
+                  className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2 text-xs text-zinc-900 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 shadow-sm font-medium"
+                >
+                  {TICKET_TEMPLATES.map((tmpl) => (
+                    <option key={tmpl.id} value={tmpl.id}>
+                      {tmpl.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-zinc-500 mt-1">
+                  Select the visual template applied to newly generated tickets for this event.
+                </p>
+              </div>
+
+              <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-xl text-[11px] text-zinc-600">
+                <span className="font-semibold text-zinc-800">Note:</span> Tickets will be generated for all imported guests who do not yet have a ticket. Existing tickets remain unchanged.
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsGenerateModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold text-zinc-600 hover:text-zinc-900"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={generating}
+                  className="inline-flex items-center gap-2 px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-brand-600/20 disabled:opacity-50"
+                >
+                  {generating ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Generating Tickets...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Generate Tickets</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

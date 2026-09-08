@@ -33,15 +33,23 @@ export interface TicketListResponse {
 }
 
 export const ticketsApi = {
-  async generateTickets(eventId: string) {
-    const res: any = await apiClient.post(`/tickets/events/${eventId}/generate`);
+  async generateTickets(eventId: string, templateId?: string) {
+    const res: any = await apiClient.post(`/tickets/events/${eventId}/generate`, {
+      templateId,
+    });
     return res.data;
   },
 
-  async generateWorkerTickets(eventId: string, count: number, ticketTypeName = 'WORKER') {
+  async generateWorkerTickets(
+    eventId: string,
+    count: number,
+    ticketTypeName = 'WORKER',
+    templateId?: string
+  ) {
     const res: any = await apiClient.post(`/tickets/events/${eventId}/generate-worker`, {
       count,
       ticketTypeName,
+      templateId,
     });
     return res.data;
   },

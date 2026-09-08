@@ -1,6 +1,11 @@
 export interface GenerateWorkerTicketsDTO {
   count: number;
   ticketTypeName?: string;
+  templateId?: string;
+}
+
+export interface GenerateTicketsDTO {
+  templateId?: string;
 }
 
 export interface TicketFilterQuery {
