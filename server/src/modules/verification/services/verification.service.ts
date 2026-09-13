@@ -283,6 +283,7 @@ export class VerificationService {
       ticketId: ticket.id,
       eventId: ticket.eventId,
       verifiedBy: input.verifiedBy || 'Admin Scanner',
+      workerNameAssigned: guest?.name || null,
     });
 
     return {
@@ -489,6 +490,7 @@ export class VerificationService {
       ticketId: ticket.id,
       eventId: ticket.eventId,
       verifiedBy: input.verifiedBy || 'Admin Scanner',
+      workerNameAssigned: guest?.name || null,
     });
 
     return {
