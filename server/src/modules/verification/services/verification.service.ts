@@ -109,7 +109,7 @@ export class VerificationService {
     if (ticket.status === 'USED') {
       const lastCheckin = await this.checkinRepo.getLastCheckinForTicket(ticket.id);
       const timeStr = lastCheckin?.checkedInAt
-        ? new Date(lastCheckin.checkedInAt).toLocaleTimeString()
+        ? new Date(lastCheckin.checkedInAt).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })
         : 'earlier today';
 
       return {
@@ -270,7 +270,7 @@ export class VerificationService {
     if (!updated) {
       const lastCheckin = await this.checkinRepo.getLastCheckinForTicket(ticket.id);
       const timeStr = lastCheckin?.checkedInAt
-        ? new Date(lastCheckin.checkedInAt).toLocaleTimeString()
+        ? new Date(lastCheckin.checkedInAt).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })
         : 'earlier';
       throw new AppError(
         `DOUBLE CHECK-IN PREVENTED: Ticket was already used at ${timeStr}.`,
@@ -369,7 +369,7 @@ export class VerificationService {
     if (ticket.status === 'USED') {
       const lastCheckin = await this.checkinRepo.getLastCheckinForTicket(ticket.id);
       const timeStr = lastCheckin?.checkedInAt
-        ? new Date(lastCheckin.checkedInAt).toLocaleTimeString()
+        ? new Date(lastCheckin.checkedInAt).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })
         : 'earlier today';
 
       return {
@@ -467,7 +467,7 @@ export class VerificationService {
     if (!updated) {
       const lastCheckin = await this.checkinRepo.getLastCheckinForTicket(ticket.id);
       const timeStr = lastCheckin?.checkedInAt
-        ? new Date(lastCheckin.checkedInAt).toLocaleTimeString()
+        ? new Date(lastCheckin.checkedInAt).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })
         : 'earlier';
       return {
         status: 'ALREADY_USED' as VerificationStatus,
