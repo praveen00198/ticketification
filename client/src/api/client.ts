@@ -10,6 +10,11 @@ import axios from 'axios';
  * - 'https://ticketification.onrender.com/api/' -> 'https://ticketification.onrender.com/api'
  */
 function resolveApiBaseUrl(): string {
+  // In development, route through Vite's local proxy to reach the local backend
+  if (import.meta.env.DEV && !import.meta.env.VITE_FORCE_REMOTE_API) {
+    return '/api';
+  }
+
   const envUrl = (import.meta.env.VITE_API_URL || '').trim();
   if (!envUrl) {
     return '/api';

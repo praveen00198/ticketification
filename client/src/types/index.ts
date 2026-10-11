@@ -25,7 +25,13 @@ export interface EventItem {
   organizerName?: string | null;
   logoUrl?: string | null;
   ticketTemplateUrl?: string | null;
-  status: 'UPCOMING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED' | string;
+  status: 'DRAFT' | 'UPCOMING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED' | string;
+  eventType?: string;
+  credentialTerminology?: string;
+  attendanceMode?: string;
+  bannerUrl?: string | null;
+  venueDetails?: any;
+  scheduleDetails?: any;
   createdBy: string;
   createdAt: string;
   updatedAt: string;

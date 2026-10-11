@@ -1,7 +1,8 @@
 import { ticketRepository, TicketRepository } from '../../tickets/repositories/ticket.repository';
 import { checkinRepository, CheckinRepository } from '../repositories/checkin.repository';
 import { guestRepository, GuestRepository } from '../../guests/repositories/guest.repository';
-import { AppError } from '../../../middlewares/error.middleware';
+import { eventRepository, EventRepository } from '../../events/repositories/event.repository';
+import { AppError, NotFoundError } from '../../../middlewares/error.middleware';
 
 export type VerificationStatus =
   | 'VALID'
@@ -41,7 +42,8 @@ export class VerificationService {
   constructor(
     private ticketRepo: TicketRepository = ticketRepository,
     private checkinRepo: CheckinRepository = checkinRepository,
-    private guestRepo: GuestRepository = guestRepository
+    private guestRepo: GuestRepository = guestRepository,
+    private eventRepo: EventRepository = eventRepository
   ) {}
 
   /**
@@ -517,9 +519,13 @@ export class VerificationService {
   }
 
   /**
-   * Get recent check-ins for the scanner live feed.
+   * Get recent check-ins for the scanner live feed, enforcing event ownership.
    */
-  async getRecentCheckins(eventId: string, limit = 20) {
+  async getRecentCheckins(eventId: string, userId: string, limit = 20) {
+    const event = await this.eventRepo.findByIdAndOwner(eventId, userId);
+    if (!event) {
+      throw new NotFoundError('Event not found or unauthorized');
+    }
     return await this.checkinRepo.getRecentCheckins(eventId, limit);
   }
 }

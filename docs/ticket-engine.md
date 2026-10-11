@@ -1,68 +1,64 @@
-# Ticket Engine Specification
+# Credential Engine Specification — Ticketification
 
-## Overview
-The ticket engine generates cryptographically verified QR ticket images for event guests. Each ticket contains an opaque verification token — no personal information is encoded in the QR.
+## 1. Overview & Conceptual Abstraction
+The credential engine generates cryptographically verified visual passes and credentials for event attendees and staff. Internally, all passes are modeled as **Event Credentials**, dynamically labeled according to event type (`Ticket`, `Participant Pass`, `Attendee Pass`, `Badge`).
 
-## Ticket Generation Flow
+---
+
+## 2. Credential Generation Pipeline
 ```
-Guest Record
-  → Generate Verification Token (crypto.randomBytes(32).toString('hex'))
-  → Generate QR Code (URL: https://APP_DOMAIN/verify/<TOKEN>)
-  → Build HTML/CSS Ticket (template + dynamic data overlay)
-  → Render via Puppeteer → PNG (1620×2025px)
-  → Upload to Supabase Storage (tickets/<event-id>/<ticket-uuid>.png)
-  → Store asset_path + asset_url in tickets table
-```
-
-## Verification Token
-- Generated using `crypto.randomBytes(32).toString('hex')` — 64-character hex string
-- Cryptographically secure, non-guessable
-- Unique across entire database (UNIQUE constraint + index)
-- Never reused, never recycled
-
-## QR Code Content
-```
-https://APP_DOMAIN/verify/<64-char-hex-token>
+Attendee / Guest Metadata
+  │
+  ├─► 1. Cryptographic Token Generation (crypto.randomBytes(32).toString('hex'))
+  ├─► 2. Generate QR Code Buffer (URL: https://APP_DOMAIN/verify/<TOKEN>)
+  ├─► 3. Compose SVG Overlay (Template variables + QR + Base64 Devanagari Fonts)
+  ├─► 4. Native Sharp Rasterization (.composite() on pre-loaded template PNG)
+  ├─► 5. Binary Verification: Assert 8-byte PNG signature (0x89504E47)
+  ├─► 6. Upload directly to Supabase Storage: events/{eventId}/credentials/{id}.png
+  └─► 7. Commit metadata record to MongoDB credentials collection
 ```
 
-Never contains: name, phone, email, event data, database IDs.
+---
 
-## Ticket Types & Usage Policy
-| Category | Usage Policy | Check-in Behavior |
-|---|---|---|
-| VIP | SINGLE_USE | One check-in → status becomes USED |
-| GUEST | SINGLE_USE | One check-in → status becomes USED |
-| WORKER | REUSABLE | Multiple check-ins → each recorded, status stays ACTIVE |
+## 3. Opaque Verification Token & QR Specifications
+- **Token**: 64-character hexadecimal string generated via `crypto.randomBytes(32).toString('hex')`.
+- **Entropy**: Cryptographically secure, non-guessable, unique across the platform.
+- **QR Code Content**:
+  ```text
+  https://ticketification.app/verify/<64-char-hex-token>
+  ```
+- **Zero PII Leakage**: The QR code encodes **ZERO** personal data (no names, phones, emails, or internal database IDs).
 
-New types (SPEAKER, MEDIA, VOLUNTEER) can be added via `ticket_types` table without code changes.
+---
 
-## Unassigned Worker Tickets
-- Created with `guest_id = NULL`
-- Ticket image shows "UNASSIGNED" in place of guest name
-- On first scan, scanner prompts for name → creates/updates guest record → links to ticket
-- Subsequent scans show the assigned name
+## 4. Native Sharp Rasterization (Container-Resilient)
+In accordance with ADR-007, ADR-008, and ADR-009:
+- **No Headless Chrome / Puppeteer**: Completely eliminated to avoid 200MB+ memory spikes and missing Linux `.so` library crashes in container environments (Render).
+- **Native Sharp**: High-performance C++ `libvips` bindings generating 1620x2025 genuine PNGs in ~15ms per pass.
+- **Render 512MB RAM Configuration**:
+  - `sharp.cache(false)`: Disables native memory buffer caching.
+  - `sharp.concurrency(1)`: Limits libvips thread pool.
+  - Batch size: 1–2 tickets per batch with immediate buffer dereferencing upon upload.
+- **Bundled Fonts**: Google `NotoSansDevanagari-Bold.ttf` embedded as base64 inside SVG markup for deterministic Hindi text shaping.
 
-## Ticket Regeneration
-- Regenerates the visual image only
-- **Same verification token is preserved** — no duplicate credentials created
-- Use case: template change, branding update, or asset re-rendering
+---
 
-## Sequence Numbers
-Each ticket gets an event-scoped `sequence_number` for deterministic ordering.
-- Query: `SELECT COALESCE(MAX(sequence_number), 0) + 1 FROM tickets WHERE event_id = $1`
-- Unique constraint: `(event_id, sequence_number)`
-
-## Bulk Generation
-- For 1,400+ tickets, generation should not block a single HTTP request indefinitely
-- MVP approach: process in manageable batches with progress tracking
-- No heavyweight job queues (Kafka/BullMQ) needed at this scale
-
-## Image Specifications
+## 5. Image & Format Specifications
 | Property | Value |
 |---|---|
-| Dimensions | 1620 × 2025 px |
-| Format | PNG |
-| Renderer | Puppeteer (headless Chrome) |
-| Fallback | SVG |
-| QR Size | 380 × 380 px |
-| QR Error Correction | High (H) |
+| **Dimensions** | 1620 × 2025 px |
+| **Format** | Genuine PNG Binary (`0x89504E47`) |
+| **Renderer** | Native `sharp` with SVG overlay composition |
+| **Fallback** | **Zero silent fallbacks** (SVG output strictly prohibited) |
+| **QR Dimensions** | 380 × 380 px |
+| **QR Error Correction**| Level H (High 30% recovery) |
+| **Storage Path** | `/events/{eventId}/credentials/{credentialId}.png` |
+
+---
+
+## 6. Asynchronous Background Jobs for Bulk Generation
+Bulk credential generation for 50+ attendees MUST execute via an asynchronous worker queue:
+1. API returns `202 Accepted` with `jobId`.
+2. Worker processes generation in bounded chunks.
+3. Live progress updates recorded in MongoDB (`jobs`).
+4. On completion, generates a presigned download URL for the resulting asset package.

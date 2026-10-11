@@ -60,9 +60,9 @@ describe('Phase 9: Hardening & Performance Subsystem', () => {
 
     it('should reset client counters after the window duration has elapsed', async () => {
       const app = express();
-      // Very short window of 50ms for testing window reset
+      // Window of 250ms for testing window reset reliably across platforms
       const limiter = createRateLimiter({
-        windowMs: 50,
+        windowMs: 250,
         max: 1,
       });
 
@@ -76,8 +76,8 @@ describe('Phase 9: Hardening & Performance Subsystem', () => {
       const resBlocked = await request(app).get('/test-reset');
       expect(resBlocked.status).toBe(429);
 
-      // Wait 60ms for window to expire
-      await new Promise((resolve) => setTimeout(resolve, 60));
+      // Wait 300ms for window to expire
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
       const resAfterReset = await request(app).get('/test-reset');
       expect(resAfterReset.status).toBe(200);

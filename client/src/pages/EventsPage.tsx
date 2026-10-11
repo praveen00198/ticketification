@@ -14,6 +14,7 @@ import {
   AlertCircle,
   Users,
   Settings,
+  Ticket as TicketIcon,
 } from 'lucide-react';
 
 export const EventsPage: React.FC = () => {
@@ -69,7 +70,11 @@ export const EventsPage: React.FC = () => {
 
   const handleDelete = async (eventId: string, eventName: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!window.confirm(`Are you sure you want to delete event "${eventName}"? All associated tickets will be removed.`)) {
+    if (
+      !window.confirm(
+        `Are you sure you want to delete "${eventName}"? All issued tickets and attendee lists associated with this event will be permanently deleted.`
+      )
+    ) {
       return;
     }
 
@@ -84,48 +89,57 @@ export const EventsPage: React.FC = () => {
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-surface-card border border-zinc-800/80 p-6 rounded-2xl shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white border border-stone-200/90 p-6 rounded-2xl shadow-xs">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-brand-500/10 text-brand-400 border border-brand-500/20">
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200/80">
               Event Management
             </span>
           </div>
-          <h1 className="text-2xl font-black text-white tracking-tight">Your Events</h1>
-          <p className="text-xs text-zinc-400 mt-1">
+          <h1 className="text-2xl font-extrabold text-zinc-900 tracking-tight">Your Events</h1>
+          <p className="text-xs text-stone-500 mt-1">
             Manage your event configurations, ticket categories, and guest lists in one place.
           </p>
         </div>
 
-        <button
-          onClick={() => setIsCreateOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-brand-600/20 active:scale-95 self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Create New Event</span>
-        </button>
+        <div className="flex items-center gap-2.5 self-start sm:self-auto">
+          <button
+            onClick={() => navigate('/events/create')}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition-all shadow-xs active:scale-95"
+          >
+            <Sparkles className="w-4 h-4 text-emerald-100" />
+            <span>Create Event (Wizard)</span>
+          </button>
+          <button
+            onClick={() => setIsCreateOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-stone-100 hover:bg-stone-200 text-zinc-700 text-xs font-semibold rounded-xl transition-all border border-stone-200"
+          >
+            <Plus className="w-3.5 h-3.5 text-stone-500" />
+            <span>Quick Add</span>
+          </button>
+        </div>
       </div>
 
       {/* Events Grid */}
       {loading ? (
-        <div className="text-center py-16 text-zinc-500 text-xs font-medium">
+        <div className="text-center py-16 text-stone-400 text-xs font-medium">
           Loading events...
         </div>
       ) : events.length === 0 ? (
-        <div className="text-center py-16 bg-surface-card border border-zinc-800/80 rounded-2xl p-8">
-          <div className="w-12 h-12 bg-zinc-800 text-zinc-400 rounded-full flex items-center justify-center mx-auto mb-3">
+        <div className="text-center py-16 bg-white border border-stone-200/90 rounded-2xl p-8 shadow-xs">
+          <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3 border border-emerald-100">
             <Calendar className="w-6 h-6" />
           </div>
-          <h3 className="text-base font-bold text-white mb-1">No Events Found</h3>
-          <p className="text-xs text-zinc-400 max-w-md mx-auto mb-5">
-            You haven't created any events yet. Get started by creating your first event to import guests and issue tickets.
+          <h3 className="text-base font-bold text-zinc-900 mb-1">No Events Found</h3>
+          <p className="text-xs text-stone-500 max-w-md mx-auto mb-5">
+            You haven't created any events yet. Get started with our event-aware creation wizard to configure your venue, schedule, and credential terminology.
           </p>
           <button
-            onClick={() => setIsCreateOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-lg transition-all"
+            onClick={() => navigate('/events/create')}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition-all shadow-xs"
           >
-            <Plus className="w-4 h-4" />
-            <span>Create First Event</span>
+            <Sparkles className="w-4 h-4 text-emerald-100" />
+            <span>Start Event Creation Wizard</span>
           </button>
         </div>
       ) : (
@@ -136,84 +150,99 @@ export const EventsPage: React.FC = () => {
               <div
                 key={event.id}
                 onClick={() => setCurrentEvent(event)}
-                className={`group relative bg-surface-card border rounded-2xl p-5 transition-all cursor-pointer flex flex-col justify-between ${
+                className={`group relative bg-white border rounded-2xl p-5 transition-all cursor-pointer flex flex-col justify-between shadow-xs ${
                   isSelected
-                    ? 'border-brand-500/60 ring-1 ring-brand-500/40 shadow-lg shadow-brand-500/5 bg-gradient-to-b from-zinc-900 via-zinc-900 to-zinc-950'
-                    : 'border-zinc-800/80 hover:border-zinc-700 hover:bg-zinc-900/60'
+                    ? 'border-emerald-500/80 ring-2 ring-emerald-500/20 shadow-md bg-emerald-50/20'
+                    : 'border-stone-200/90 hover:border-stone-300 hover:shadow-sm'
                 }`}
               >
                 <div>
                   {/* Card Header & Status */}
                   <div className="flex items-start justify-between gap-2 mb-3">
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                        event.status === 'ACTIVE'
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                          : event.status === 'COMPLETED'
-                          ? 'bg-zinc-800 text-zinc-400 border border-zinc-700'
-                          : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                      }`}
-                    >
-                      {event.status}
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                          event.status === 'ACTIVE'
+                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/80'
+                            : event.status === 'DRAFT'
+                            ? 'bg-amber-50 text-amber-800 border border-amber-200/80'
+                            : event.status === 'COMPLETED'
+                            ? 'bg-stone-100 text-stone-600 border border-stone-200'
+                            : 'bg-blue-50 text-blue-800 border border-blue-200/80'
+                        }`}
+                      >
+                        {event.status}
+                      </span>
+                      {event.eventType && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-stone-100 text-stone-600 border border-stone-200/60">
+                          {event.eventType}
+                        </span>
+                      )}
+                    </div>
 
                     {isSelected && (
-                      <span className="flex items-center gap-1 text-[11px] font-bold text-brand-400 bg-brand-500/10 px-2 py-0.5 rounded-full border border-brand-500/20">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                         <span>Active</span>
                       </span>
                     )}
                   </div>
 
                   {/* Event Name */}
-                  <h3 className="text-lg font-bold text-white group-hover:text-brand-300 transition-colors line-clamp-1 mb-2">
+                  <h3 className="text-lg font-bold text-zinc-900 group-hover:text-emerald-700 transition-colors line-clamp-1 mb-2">
                     {event.name}
                   </h3>
 
                   {/* Description */}
                   {event.description && (
-                    <p className="text-xs text-zinc-400 line-clamp-2 mb-4">
+                    <p className="text-xs text-stone-500 line-clamp-2 mb-4">
                       {event.description}
                     </p>
                   )}
 
                   {/* Details */}
-                  <div className="space-y-1.5 text-xs text-zinc-300 mb-5">
+                  <div className="space-y-1.5 text-xs text-stone-600 mb-5">
                     <div className="flex items-center gap-2">
-                      <Calendar className="w-3.5 h-3.5 text-zinc-500" />
+                      <Calendar className="w-3.5 h-3.5 text-stone-400" />
                       <span>{event.date}</span>
                       {event.time && (
-                        <span className="flex items-center gap-1 text-zinc-400">
-                          <Clock className="w-3 h-3 text-zinc-500 ml-1" />
+                        <span className="flex items-center gap-1 text-stone-400">
+                          <Clock className="w-3 h-3 text-stone-400 ml-1" />
                           {event.time}
                         </span>
                       )}
                     </div>
                     {event.venue && (
                       <div className="flex items-center gap-2 line-clamp-1">
-                        <MapPin className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                        <MapPin className="w-3.5 h-3.5 text-stone-400 shrink-0" />
                         <span className="truncate">{event.venue}</span>
                       </div>
                     )}
                     {event.organizerName && (
                       <div className="flex items-center gap-2">
-                        <Users className="w-3.5 h-3.5 text-zinc-500" />
-                        <span className="text-zinc-400">Org: {event.organizerName}</span>
+                        <Users className="w-3.5 h-3.5 text-stone-400" />
+                        <span className="text-stone-500">Org: {event.organizerName}</span>
+                      </div>
+                    )}
+                    {event.credentialTerminology && (
+                      <div className="flex items-center gap-2">
+                        <TicketIcon className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="text-emerald-700 font-medium">{event.credentialTerminology}</span>
                       </div>
                     )}
                   </div>
                 </div>
 
                 {/* Card Actions */}
-                <div className="pt-4 border-t border-zinc-800/80 flex items-center justify-between gap-2">
+                <div className="pt-4 border-t border-stone-100 flex items-center justify-between gap-2">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       navigate(`/events/${event.id}`);
                     }}
-                    className="flex items-center gap-1.5 text-xs font-bold text-zinc-300 hover:text-white hover:bg-zinc-800 px-2.5 py-1.5 rounded-lg transition-colors"
+                    className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700 hover:text-zinc-900 hover:bg-stone-100 px-2.5 py-1.5 rounded-lg transition-colors"
                   >
-                    <Settings className="w-3.5 h-3.5 text-zinc-400" />
+                    <Settings className="w-3.5 h-3.5 text-stone-400" />
                     <span>Manage</span>
                   </button>
 
@@ -221,7 +250,7 @@ export const EventsPage: React.FC = () => {
                     <button
                       onClick={(e) => handleDelete(event.id, event.name, e)}
                       title="Delete Event"
-                      className="p-1.5 text-zinc-500 hover:text-rose-400 hover:bg-rose-950/30 rounded-lg transition-colors"
+                      className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -229,9 +258,9 @@ export const EventsPage: React.FC = () => {
                     <button
                       onClick={() => {
                         setCurrentEvent(event);
-                        navigate('/');
+                        navigate('/dashboard');
                       }}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-brand-600/90 hover:bg-brand-500 text-white text-xs font-bold rounded-lg transition-all"
+                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition-all shadow-2xs"
                     >
                       <span>Select</span>
                       <ArrowRight className="w-3.5 h-3.5" />
@@ -246,18 +275,18 @@ export const EventsPage: React.FC = () => {
 
       {/* Create Event Modal */}
       {isCreateOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="bg-white border border-surface-border w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="p-5 border-b border-surface-border flex items-center justify-between bg-zinc-50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-xs">
+          <div className="bg-white border border-stone-200 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-stone-100 flex items-center justify-between bg-stone-50/60">
               <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-brand-50 text-brand-600 border border-brand-200">
+                <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100">
                   <Sparkles className="w-4 h-4" />
                 </div>
-                <h3 className="text-lg font-bold text-surface-charcoal">Create New Event</h3>
+                <h3 className="text-base font-bold text-zinc-900">Quick Create Event</h3>
               </div>
               <button
                 onClick={() => setIsCreateOpen(false)}
-                className="text-zinc-400 hover:text-zinc-700 text-sm font-bold"
+                className="text-stone-400 hover:text-zinc-700 text-sm font-bold"
               >
                 ✕
               </button>
@@ -282,7 +311,7 @@ export const EventsPage: React.FC = () => {
                   placeholder="e.g. Global Tech Expo 2026"
                   value={formData.name}
                   onChange={handleInputChange}
-                  className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 shadow-sm"
+                  className="w-full bg-white border border-stone-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-stone-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 shadow-2xs"
                 />
               </div>
 
@@ -297,7 +326,7 @@ export const EventsPage: React.FC = () => {
                     required
                     value={formData.date}
                     onChange={handleInputChange}
-                    className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 shadow-sm"
+                    className="w-full bg-white border border-stone-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-stone-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 shadow-2xs"
                   />
                 </div>
 
@@ -310,7 +339,7 @@ export const EventsPage: React.FC = () => {
                     name="time"
                     value={formData.time || ''}
                     onChange={handleInputChange}
-                    className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 shadow-sm"
+                    className="w-full bg-white border border-stone-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-stone-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 shadow-2xs"
                   />
                 </div>
               </div>
@@ -323,24 +352,24 @@ export const EventsPage: React.FC = () => {
                   <input
                     type="text"
                     name="venue"
-                    placeholder="e.g. Convention Hall B"
+                    placeholder="e.g. Main Auditorium / Online"
                     value={formData.venue || ''}
                     onChange={handleInputChange}
-                    className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 shadow-sm"
+                    className="w-full bg-white border border-stone-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-stone-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 shadow-2xs"
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-zinc-700 mb-1">
-                    Organizer Name
+                    Organizer / Host Name
                   </label>
                   <input
                     type="text"
                     name="organizerName"
-                    placeholder="e.g. Tech Events Inc."
+                    placeholder="e.g. ACM Student Chapter"
                     value={formData.organizerName || ''}
                     onChange={handleInputChange}
-                    className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 shadow-sm"
+                    className="w-full bg-white border border-stone-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-stone-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 shadow-2xs"
                   />
                 </div>
               </div>
@@ -352,25 +381,25 @@ export const EventsPage: React.FC = () => {
                 <textarea
                   name="description"
                   rows={3}
-                  placeholder="Brief overview of the event..."
+                  placeholder="Brief overview of event details..."
                   value={formData.description || ''}
                   onChange={handleInputChange}
-                  className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 shadow-sm resize-none"
+                  className="w-full bg-white border border-stone-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-stone-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 shadow-2xs resize-none"
                 />
               </div>
 
-              <div className="pt-2 flex items-center justify-end gap-3">
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
                 <button
                   type="button"
                   onClick={() => setIsCreateOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold text-zinc-600 hover:text-zinc-900"
+                  className="px-4 py-2 text-xs font-semibold text-stone-600 hover:text-zinc-900 hover:bg-stone-100 rounded-xl transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={creating}
-                  className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl transition-all shadow-md disabled:opacity-50"
+                  className="px-5 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-all disabled:opacity-50"
                 >
                   {creating ? 'Creating...' : 'Create Event'}
                 </button>

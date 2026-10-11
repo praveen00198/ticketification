@@ -1,93 +1,34 @@
-# Architecture Overview — QR Ticket Generation & Verification Platform
+# Architecture Overview — Ticketification Platform
 
-## System Design
-The application is structured as a **Modular Monolith** pairing a Node.js/Express TypeScript API with a React 18 / Vite TypeScript SPA. Database is Supabase PostgreSQL accessed via Drizzle ORM. Asset storage is Supabase Storage.
+## 1. System Design & Topography
+Ticketification is structured as a **Modular Monolith** pairing a Node.js/Express TypeScript backend with a React 18 / Vite TypeScript frontend, governed by an **Infrastructure Triad**:
+- **Authentication**: Supabase Auth (cryptographic JWT issuance)
+- **Application Documents & RBAC**: MongoDB (users, events, event memberships, teams, evaluations, credential metadata, jobs, audit logs)
+- **Object Storage**: Supabase Storage (PNG credentials, PDFs, templates, spreadsheets, ZIP archives)
 
 ```mermaid
 flowchart TD
-    Admin[Administrator Browser] --> Client[React SPA / Vite]
-    Client --> API[Express REST API]
-    API --> AuthModule[Auth Module - Supabase Auth]
-    API --> EventModule[Event Module]
-    API --> ImportModule[Smart Import Module]
-    API --> TicketModule[Ticket Engine]
-    API --> VerifyModule[Verification Engine]
-    API --> CheckinModule[Check-in Module]
-    API --> DashModule[Dashboard Module]
+    Client[React SPA / Mobile Scanner] --> API[Express REST API]
+    API --> AuthMW[Supabase JWT Middleware]
+    AuthMW --> RBAC[Authorization Guard - MongoDB]
     
-    TicketModule --> Puppeteer[Puppeteer Image Generator]
-    TicketModule --> QrGen[qrcode Library]
-    TicketModule --> Storage[Supabase Storage]
+    RBAC --> EventMod[Event & Lifecycle Module]
+    RBAC --> MemberMod[Team & Staff Membership Module]
+    RBAC --> EvalMod[Evaluation & Scoring Module]
+    RBAC --> CredMod[Credential & Template Engine]
+    RBAC --> CheckinMod[Atomic Check-In & Scanner Engine]
+    RBAC --> JobMod[Asynchronous Worker Queue]
     
-    AuthModule --> DB[(Supabase PostgreSQL)]
-    EventModule --> DB
-    ImportModule --> DB
-    TicketModule --> DB
-    VerifyModule --> DB
-    CheckinModule --> DB
-    DashModule --> DB
+    CredMod --> SharpEngine[Native Sharp Rasterizer]
+    CredMod --> SupaStorage[Supabase Storage]
+    JobMod --> SupaStorage
+    
+    EventMod --> MongoDB[(MongoDB Application DB)]
+    MemberMod --> MongoDB
+    EvalMod --> MongoDB
+    CredMod --> MongoDB
+    CheckinMod --> MongoDB
+    JobMod --> MongoDB
 ```
 
-## Backend Module Structure
-```
-server/src/
-├── config/
-│   ├── env.ts              # Environment configuration
-│   └── supabase.ts         # Supabase client initialization
-├── db/
-│   ├── schema/             # Drizzle ORM schema definitions
-│   │   ├── users.ts
-│   │   ├── events.ts
-│   │   ├── ticket-types.ts
-│   │   ├── guests.ts
-│   │   ├── tickets.ts
-│   │   ├── ticket-checkins.ts
-│   │   ├── guest-imports.ts
-│   │   └── index.ts
-│   ├── migrations/         # Drizzle migration files
-│   └── index.ts            # Drizzle db instance
-├── middlewares/
-│   ├── auth.middleware.ts   # Supabase JWT validation
-│   ├── error.middleware.ts  # Centralized error handler
-│   └── upload.middleware.ts # File upload validation
-├── modules/
-│   ├── auth/
-│   ├── users/
-│   ├── events/
-│   ├── guests/
-│   ├── guest-import/
-│   ├── tickets/
-│   ├── ticket-generation/
-│   ├── verification/
-│   ├── checkins/
-│   └── dashboard/
-├── utils/
-├── app.ts
-└── server.ts
-```
-
-## Request Flow
-```
-HTTP Request
-  → Express Router
-    → Auth Middleware (Supabase JWT validation)
-      → Controller (parse request, validate input)
-        → Service (business logic, orchestration)
-          → Repository (Drizzle ORM queries with explicit ORDER BY)
-            → Supabase PostgreSQL
-```
-
-## Security Model
-- **Authentication**: Supabase Auth (email/password, JWT tokens)
-- **Authorization**: Server-side ownership checks on every resource access
-- **Data Isolation**: User A cannot access User B's events, guests, tickets, or check-ins
-- **QR Security**: Opaque verification tokens (crypto.randomBytes), no PII in QR payload
-- **Check-in Atomicity**: PostgreSQL conditional UPDATE prevents race conditions
-- **Storage Security**: Event-scoped paths, controlled access
-
-## ORM: Drizzle
-- TypeScript-native schema definitions
-- SQL-like query builder (readable, explicit)
-- Type-safe queries with inference
-- Migration generation from schema changes
-- No runtime overhead or code generation step
+For complete architecture specifications, see [ARCHITECTURE.md](file:///c:/Users/Aman/OneDrive/Desktop/Ticket/ARCHITECTURE.md).

@@ -12,12 +12,22 @@ import {
   Calendar,
   ChevronDown,
   Plus,
+  Building2,
+  Wallet,
+  Compass,
 } from 'lucide-react';
 import { ChangePasswordModal } from '../auth/ChangePasswordModal';
 import { useEvent } from '../../context/EventContext';
 
 interface HeaderProps {
-  user: { name: string; email: string } | null;
+  user: {
+    id?: string;
+    name: string;
+    email: string;
+    role?: string;
+    isOnboarded?: boolean;
+    organizationName?: string;
+  } | null;
   onLogout: () => void;
 }
 
@@ -31,7 +41,9 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   const navItems = [
+    { label: 'Explore', path: '/explore', icon: Compass },
     { label: 'Dashboard', path: '/', icon: LayoutDashboard },
+    { label: 'My Wallet', path: '/wallet', icon: Wallet },
     { label: 'Events', path: '/events', icon: Calendar },
     { label: 'Import Guests', path: '/import', icon: FileSpreadsheet },
     { label: 'View Tickets', path: '/tickets', icon: Ticket },
@@ -142,6 +154,28 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
 
           {/* Action Button & Admin Info */}
           <div className="flex items-center gap-3">
+            {user && !user.isOnboarded && (
+              <button
+                onClick={() => navigate('/onboarding')}
+                className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-emerald-300 bg-emerald-950/60 border border-emerald-800/80 rounded hover:bg-emerald-900/60 transition-colors"
+                title="Initialize Organizer Workspace"
+              >
+                <Building2 className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Set up Organizer</span>
+              </button>
+            )}
+
+            {user && user.isOnboarded && (
+              <button
+                onClick={() => navigate('/events/create')}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-300 bg-emerald-950/60 border border-emerald-800/80 rounded-md hover:bg-emerald-900/60 transition-colors"
+                title="Create a new event"
+              >
+                <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Create Event</span>
+              </button>
+            )}
+
             <button
               onClick={() => navigate('/scan')}
               className="bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-all shadow-sm flex items-center gap-1.5 border border-brand-500/30 active:scale-95"
@@ -154,20 +188,39 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
             {user && (
               <div className="hidden sm:flex items-center gap-2 pl-3 border-l border-zinc-800">
                 <div className="hidden lg:block text-right">
-                  <div className="text-xs font-semibold text-zinc-200">{user.name}</div>
-                  <div className="text-[10px] text-zinc-400">Administrator</div>
+                  <div className="text-xs font-semibold text-zinc-200">
+                    {user.organizationName || user.name}
+                  </div>
+                  <div className="text-[10px] text-zinc-400">
+                    {user.role === 'SUPER_ADMIN'
+                      ? 'Super Admin'
+                      : user.role === 'ADMIN'
+                      ? 'Platform Admin'
+                      : user.isOnboarded
+                      ? 'Organizer Workspace'
+                      : 'Organizer'}
+                  </div>
                 </div>
+
+                <button
+                  onClick={() => navigate(user.isOnboarded ? '/settings/profile' : '/onboarding')}
+                  title={user.isOnboarded ? 'Organizer Settings' : 'Set up Organizer'}
+                  className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition-colors"
+                >
+                  <Building2 className="w-4 h-4" />
+                </button>
+
                 <button
                   onClick={() => setIsChangePasswordOpen(true)}
                   title="Change Password"
-                  className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-md transition-colors"
+                  className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition-colors"
                 >
                   <KeyRound className="w-4 h-4" />
                 </button>
                 <button
                   onClick={onLogout}
                   title="Logout"
-                  className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-md transition-colors"
+                  className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition-colors"
                 >
                   <LogOut className="w-4 h-4" />
                 </button>
@@ -212,7 +265,9 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
               <div className="pt-2 mt-2 border-t border-zinc-800 flex items-center justify-between">
                 <div>
                   <div className="text-xs font-semibold text-zinc-200">{user.name}</div>
-                  <div className="text-[10px] text-zinc-400">{user.email}</div>
+                  <div className="text-[10px] text-zinc-400">
+                    {user.role === 'SUPER_ADMIN' ? 'Super Admin' : user.role === 'ADMIN' ? 'Platform Admin' : 'Organizer'} &bull; {user.email}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button

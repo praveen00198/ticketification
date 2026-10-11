@@ -1,81 +1,69 @@
-# Verification & Check-in Rules
+# Verification & Check-in Rules — Ticketification
 
-## Verification Flow
+## 1. Scanner Authorization & Security
+- **Explicit Scanner Permission**: Only authenticated users with an active membership in `event_members` granting `SCAN_CREDENTIALS` can execute check-in operations.
+- **Event Scoping**: The scanner operates strictly within its active event context. Any scanned token belonging to a different event immediately returns `WRONG_EVENT`.
+- **Zero Information Leaks**: Verification responses never expose database IDs, internal tokens, or raw PII. Only minimal presentation fields (Attendee Name, Credential Type, Status) are returned.
+
+---
+
+## 2. High-Throughput Verification Flow
 ```
 Scanner sends: { token, eventId }
-  → Lookup ticket by verification_token
-  → If not found → INVALID
-  → If found, check ticket.event_id === eventId → else WRONG_EVENT
-  → Check ticket.status:
-      CANCELLED → CANCELLED
-      USED (single-use) → ALREADY_USED
-      ACTIVE:
-        → If usage_policy === REUSABLE:
-            → If guest_id is NULL → UNASSIGNED_WORKER
-            → Else → VALID_WORKER
-        → If usage_policy === SINGLE_USE → VALID
+  │
+  ├─► 1. Verify Scanner Authorization (event_members: SCAN_CREDENTIALS)
+  ├─► 2. Lookup Credential by verification_token
+  ├─► 3. If not found ➔ INVALID
+  ├─► 4. If credential.eventId !== eventId ➔ WRONG_EVENT
+  ├─► 5. If credential.status === 'CANCELLED' ➔ CANCELLED
+  ├─► 6. If credential.status === 'CHECKED_IN' (Single-use) ➔ ALREADY_CHECKED_IN
+  ├─► 7. If credential.status === 'ACTIVE':
+          ├─► If usagePolicy === 'REUSABLE':
+          │     ├─► If attendeeId is NULL ➔ UNASSIGNED_WORKER (Prompt name)
+          │     └─► Else ➔ VALID_WORKER (Check in & append log)
+          └─► If usagePolicy === 'SINGLE_USE' ➔ VALID (Execute atomic check-in)
 ```
 
-## Verification Response Types
-| Status | Meaning | Action |
-|---|---|---|
-| `VALID` | Active single-use ticket, ready for check-in | Show guest info + [CHECK IN] button |
-| `ALREADY_USED` | Single-use ticket already checked in | Show previous check-in time |
-| `INVALID` | Token not found in database | Show error |
-| `CANCELLED` | Ticket has been cancelled | Show cancelled status |
-| `WRONG_EVENT` | Ticket belongs to a different event | Show event mismatch warning |
-| `VALID_WORKER` | Active reusable worker ticket with assigned name | Show worker info + [CHECK IN] button |
-| `UNASSIGNED_WORKER` | Active reusable worker ticket, no name assigned | Show [ASSIGN NAME] → then [CHECK IN] |
+---
 
-## Check-in Rules
+## 3. Concurrency Control & Atomic Single-Use Check-In
+To guarantee that two scanners scanning the same credential simultaneously can never both check in the pass:
 
-### Single-Use (VIP, GUEST)
+### Target MongoDB Atomic Update
+```typescript
+const updated = await db.collection('credentials').findOneAndUpdate(
+  { verificationToken: token, status: 'ACTIVE' },
+  { $set: { status: 'CHECKED_IN', checkedInAt: new Date() } },
+  { returnDocument: 'after' }
+);
+
+if (!updated) {
+  // Pass was already used by another scanner or cancelled
+  const existing = await db.collection('credentials').findOne({ verificationToken: token });
+  return { status: 'ALREADY_CHECKED_IN', checkedInAt: existing.checkedInAt };
+}
+
+// Exactly one winner succeeds
+await db.collection('credential_checkins').insertOne({
+  credentialId: updated._id,
+  eventId: updated.eventId,
+  scannedBy: req.user.id,
+  scannedAt: new Date()
+});
+return { status: 'SUCCESS', credential: updated };
+```
+
+### Legacy PostgreSQL Equivalent
 ```sql
--- Atomic conditional update — exactly one concurrent request succeeds
 UPDATE tickets
-SET status = 'USED', updated_at = now()
+SET status = 'USED', updated_at = NOW()
 WHERE id = $1 AND status = 'ACTIVE'
 RETURNING *;
--- If 0 rows affected → ticket was already used by another scanner
-```
-Then insert check-in record:
-```sql
-INSERT INTO ticket_checkins (ticket_id, event_id, verified_by)
-VALUES ($1, $2, $3);
 ```
 
-### Reusable (WORKER)
-```sql
--- Do NOT mutate ticket status
--- Only create a check-in record
-INSERT INTO ticket_checkins (ticket_id, event_id, verified_by)
-VALUES ($1, $2, $3);
-```
-Ticket remains `ACTIVE` after every check-in.
+---
 
-### Worker Name Assignment
-```sql
--- Create or update guest record
-INSERT INTO guests (event_id, name, category)
-VALUES ($1, $2, 'WORKER')
-RETURNING id;
-
--- Link to ticket
-UPDATE tickets SET guest_id = $1 WHERE id = $2;
-```
-Once assigned, name persists. Future scans show the assigned name.
-
-## Scanner Security
-- Scanner operates within a selected event context
-- `ticket.event_id` must match the scanner's active event
-- Frontend must not trust client-side ticket data — all validation server-side
-- No database IDs, internal architecture, or secrets in verification responses
-- Only expose: guest name, category, status, check-in time (for ALREADY_USED)
-
-## Race Condition Prevention
-Two scanners scanning the same VIP ticket simultaneously:
-```
-Scanner A → UPDATE ... WHERE status='ACTIVE' → 1 row affected → SUCCESS
-Scanner B → UPDATE ... WHERE status='ACTIVE' → 0 rows affected → ALREADY_USED
-```
-This is guaranteed by PostgreSQL row-level locking during UPDATE.
+## 4. Reusable Staff / Worker Pass Workflow
+1. Reusable credentials maintain `status = 'ACTIVE'` across check-ins.
+2. Every scan appends an entry to the check-in history collection (`credential_checkins`).
+3. **Unassigned Worker Pass**: On the first scan, if no attendee name is assigned, the scanner UI prompts the operator for a staff name. The name is saved and the first check-in is recorded in a single atomic transaction. Subsequent scans display the assigned name.

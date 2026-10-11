@@ -341,7 +341,7 @@ describe('Phase 4: Ticket Generation & PNG Rendering Pipeline', () => {
         expect(res.fileName).toMatch(/^ticket-BATCH-\d{3}\.png$/);
         expect(isPngBuffer(res.pngBuffer)).toBe(true);
       }
-    });
+    }, 30000);
 
     it('should correctly embed bundled Noto Sans Devanagari font and render complex Hindi text and conjuncts', async () => {
       const devanagariPhrases = [

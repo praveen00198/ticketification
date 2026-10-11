@@ -1,4 +1,4 @@
-export { users } from './users';
+export { users, PlatformRole } from './users';
 export { events } from './events';
 export { ticketTypes } from './ticket-types';
 export { guests } from './guests';

@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { verificationService } from '../services/verification.service';
 import { AuthenticatedRequest } from '../../../middlewares/auth.middleware';
-import { AppError } from '../../../middlewares/error.middleware';
+import { AppError, AuthenticationError } from '../../../middlewares/error.middleware';
 import {
   validateVerificationToken,
   validateOptionalEventId,
@@ -74,6 +74,10 @@ export class VerificationController {
 
   async getRecentCheckins(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
+      if (!req.user) {
+        throw new AuthenticationError();
+      }
+
       const eventId = req.params.eventId as string;
       const limit = parseInt(req.query.limit as string, 10) || 20;
 
@@ -81,7 +85,7 @@ export class VerificationController {
         throw new AppError('Event ID is required', 400);
       }
 
-      const checkins = await verificationService.getRecentCheckins(eventId, limit);
+      const checkins = await verificationService.getRecentCheckins(eventId, req.user.id, limit);
       res.json({
         success: true,
         data: checkins,

@@ -41,7 +41,8 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setLoading(true);
       setError(null);
       const data = await eventsApi.getEvents();
-      setEvents(data);
+      const eventsList = Array.isArray(data) ? data : ((data as any)?.events || []);
+      setEvents(eventsList);
 
       const savedId = localStorage.getItem('selected_event_id');
       if (savedId) {

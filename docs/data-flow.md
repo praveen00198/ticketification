@@ -1,99 +1,78 @@
-# Data Flow Specifications
+# Data Flow Specifications — Ticketification
 
-## 1. Registration & Authentication Flow
+## 1. Authentication & Zero-Trust Authorization Flow
 ```mermaid
 flowchart TD
-    A[User] --> B[Register Form]
-    B --> C[POST /api/auth/register]
-    C --> D[Supabase Auth - Create User]
-    D --> E[Create Profile in users table]
-    E --> F[Return JWT + User Profile]
-    F --> G[Store Token - LocalStorage]
-    G --> H[Dashboard]
+    A[User Browser] -->|Email + Password| B[Supabase Auth]
+    B -->|Signed JWT Access Token| A
+    A -->|API Request with Bearer Token| C[Backend Auth Middleware]
+    C -->|Verify Token Signature & Expiry| B
+    C -->|Retrieve Application User| D[(MongoDB users)]
+    D -->|Check Platform Role: USER / ADMIN / SUPER_ADMIN| E{Platform Admin Route?}
+    E -->|Yes| F[Verify Platform Role == ADMIN/SUPER_ADMIN]
+    E -->|No: Event Route| G[Query event_members for eventId + userId]
+    G -->|Validate Active Membership & Permission| H[Execute Domain Service]
 ```
 
-## 2. Event Creation Flow
-```mermaid
-flowchart TD
-    A[Dashboard] --> B[Create Event Form]
-    B --> C[POST /api/events]
-    C --> D[Validate Input]
-    D --> E[Insert into events table]
-    E --> F[Create Default Ticket Types - VIP, GUEST, WORKER]
-    F --> G[Return Event Details]
-```
+---
 
-## 3. Smart Guest Import Flow
+## 2. Event Creation & Ingestion Modes Flow
 ```mermaid
 flowchart TD
-    A[Upload Excel] --> B[POST /upload]
-    B --> C[Analyze Spreadsheet]
-    C --> D[Detect Headers + Sample Data]
-    D --> E[POST /analyze]
-    E --> F[Show Column Mapping UI]
-    F --> G[User Maps Columns + Sets Required Fields]
-    G --> H[POST /validate]
-    H --> I[Validation Engine]
-    I --> J[Show Validation Report]
-    J --> K{User Decision}
-    K -->|Import Valid| L[POST /confirm]
-    K -->|Fix Excel| M[Re-upload]
-    L --> N[Create Guest Records in Transaction]
-    N --> O[Create Import Audit Record]
-```
-
-## 4. Ticket Generation Flow
-```mermaid
-flowchart TD
-    A[Select Guests / Category] --> B[POST /tickets/generate]
-    B --> C[For Each Guest]
-    C --> D[Generate Verification Token - crypto.randomBytes]
-    D --> E[Generate QR Code - URL with Token]
-    E --> F[Build HTML Ticket - Template + Dynamic Data]
-    F --> G[Render PNG via Puppeteer - 1620x2025]
-    G --> H[Upload to Supabase Storage]
-    H --> I[Store asset_path in tickets table]
-    I --> J[Next Guest]
-    J --> C
-    J --> K[Return Generation Summary]
-```
-
-## 5. Event-Day QR Scanner Check-in Flow
-```mermaid
-flowchart TD
-    A[Admin Login] --> B[Select Event]
-    B --> C[Open Scanner]
-    C --> D[Scan QR Code - html5-qrcode]
-    D --> E[Extract Verification Token from URL]
-    E --> F[POST /api/verification/scan]
-    F --> G[Lookup Token in PostgreSQL]
-    G --> H{Ticket Found?}
-    H -->|No| I[INVALID]
-    H -->|Yes| J{Event Match?}
-    J -->|No| K[WRONG_EVENT]
-    J -->|Yes| L{Status Check}
-    L -->|CANCELLED| M[CANCELLED]
-    L -->|USED + SINGLE_USE| N[ALREADY_USED]
-    L -->|ACTIVE + SINGLE_USE| O[VALID - Show CHECK IN]
-    L -->|ACTIVE + REUSABLE + No Guest| P[UNASSIGNED_WORKER]
-    L -->|ACTIVE + REUSABLE + Has Guest| Q[VALID_WORKER - Show CHECK IN]
+    Host[Host Browser] -->|Create Event| Form[Event Creation Wizard]
+    Form -->|1. Select Event Type| Type[Concert / Hackathon / Workshop / etc.]
+    Type -->|2. Select Credential Term| Term[Ticket / Participant Pass / Badge]
+    Term -->|3. Select Ingestion Mode| Mode{Ingestion Mode}
     
-    O --> R[POST /check-in - Atomic UPDATE]
-    Q --> S[POST /check-in - INSERT checkin record]
-    P --> T[Assign Name Form]
-    T --> U[POST /assign-worker]
-    U --> S
+    Mode -->|Mode A: Native Registration| RegConfig[Configure Registration Form]
+    RegConfig --> PaidCheck{Paid or Free?}
+    PaidCheck -->|Free| RegFree[Capacity & Waitlist Setup]
+    PaidCheck -->|Paid| RegPaid[Payment Gateway Webhook Setup]
+    
+    Mode -->|Mode B: Existing Attendee Data| ImportFlow[Presigned S3/Storage Upload]
+    ImportFlow --> ParseWorker[Background Import Worker]
+    ParseWorker --> MapCol[Dynamic Header Mapping & Validation]
 ```
 
-## 6. Worker Assignment Flow
+---
+
+## 3. Asynchronous Bulk Credential Generation Flow
 ```mermaid
 flowchart TD
-    A[Scan Unassigned Worker QR] --> B[UNASSIGNED_WORKER Response]
-    B --> C[Show Assign Name Input]
-    C --> D[Admin Enters Name]
-    D --> E[POST /assign-worker]
-    E --> F[Create/Update Guest Record]
-    F --> G[Link Guest to Ticket]
-    G --> H[Record Check-in]
-    H --> I[Future Scans Show Assigned Name]
+    Host[Host] -->|Trigger Bulk Generation| API[POST /api/jobs/bulk-generate]
+    API -->|Create Job: PENDING| DB[(MongoDB jobs)]
+    API -->|Immediate 202 Accepted { jobId }| Host
+    
+    Worker[Background Worker] -->|Poll / Dequeue Job| DB
+    Worker -->|Mark Job: PROCESSING| DB
+    Worker -->|Loop in Bounded Batches of 2| Batch[Batch Generator]
+    
+    Batch -->|Generate QR Buffer| QR[qrcode Library]
+    Batch -->|Rasterize Overlay on Template| Sharp[Sharp Engine: cache=false, conc=1]
+    Sharp -->|Verify 8-byte PNG Header 0x89504E47| PNG[Authentic PNG Binary]
+    PNG -->|Direct Upload| Storage[Supabase Storage]
+    Storage -->|Write Metadata| CredDB[(MongoDB credentials)]
+    
+    Worker -->|Update Progress %| DB
+    Worker -->|On 100% Mark COMPLETED| DB
+    Host -->|Poll Job Status| API
+```
+
+---
+
+## 4. High-Throughput QR Verification & Atomic Check-In Flow
+```mermaid
+flowchart TD
+    Scanner[Mobile Scanner Camera] -->|Capture QR Code| Token[Extract 64-char Opaque Token]
+    Token -->|POST /api/verify/scan| API[Verification Controller]
+    API -->|Validate Scanner Permission: SCAN_CREDENTIALS| Authz[RBAC Engine]
+    
+    Authz -->|Atomic Conditional Update| DB[(MongoDB credentials)]
+    Note over DB: findOneAndUpdate({ verificationToken: token, status: "ACTIVE" }, { $set: { status: "CHECKED_IN", checkedInAt: now } })
+    
+    DB -->|Winner: Status was ACTIVE| Win[Record Check-in Audit Entry]
+    Win -->|200 OK SUCCESS| Scanner
+    
+    DB -->|Loser: Status was already CHECKED_IN| Loss[Fetch Previous Check-in Timestamp]
+    Loss -->|409 Conflict ALREADY_CHECKED_IN| Scanner
 ```

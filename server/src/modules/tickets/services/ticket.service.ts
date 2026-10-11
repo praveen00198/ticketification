@@ -518,6 +518,28 @@ export class TicketService {
   }
 
   /**
+   * Get a single ticket by ID or verification token, verifying event ownership.
+   */
+  async getTicketByIdForOwner(idOrToken: string, userId: string) {
+    const rawRecord: any = await this.getTicketById(idOrToken);
+    if (!rawRecord) {
+      throw new NotFoundError('Ticket not found');
+    }
+
+    const ticket = rawRecord.ticket || rawRecord;
+    let event = rawRecord.event;
+    if (!event && ticket.eventId) {
+      event = await this.eventRepo.findByIdAndOwner(ticket.eventId, userId);
+    }
+
+    if (!event || event.createdBy !== userId) {
+      throw new NotFoundError('Ticket not found or unauthorized');
+    }
+
+    return rawRecord;
+  }
+
+  /**
    * Download a single ticket asset as a genuine PNG buffer with canonical filename.
    * Directly reuses existing stored PNG asset; zero on-demand ticket regeneration.
    */

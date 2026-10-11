@@ -270,6 +270,325 @@ export class SupabaseStorageService {
       };
     }
   }
+
+  /**
+   * Constructs the canonical storage path for host assets: hosts/{userId}/assets/{filename}
+   */
+  public buildHostAssetStoragePath(userId: string, filename: string): string {
+    const cleanUserId = (userId || '').trim().replace(/^\/+|\/+$/g, '');
+    const cleanFilename = (filename || '').trim().replace(/^\/+|\/+$/g, '');
+    return `hosts/${cleanUserId}/assets/${cleanFilename}`;
+  }
+
+  /**
+   * Upload an organizer asset (e.g. logo or banner) to Supabase Storage.
+   */
+  async uploadHostAsset(
+    userId: string,
+    fileData: Buffer,
+    filename: string,
+    mimeType: string
+  ): Promise<{ publicUrl: string; storagePath: string }> {
+    if (!this.client) {
+      throw new StorageError(
+        'Supabase Storage is not configured. SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.'
+      );
+    }
+
+    const allowedMimeTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/svg+xml'];
+    if (!allowedMimeTypes.includes(mimeType.toLowerCase())) {
+      throw new StorageError(`Unsupported asset type: ${mimeType}. Allowed: PNG, JPEG, WEBP, SVG`);
+    }
+
+    if (fileData.length > 2 * 1024 * 1024) {
+      throw new StorageError('Asset size exceeds the 2MB limit.');
+    }
+
+    await this.ensureBucket();
+
+    const ext = filename.split('.').pop() || 'png';
+    const sanitizedExt = ext.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'png';
+    const safeFilename = `logo-${Date.now()}.${sanitizedExt}`;
+    const storagePath = this.buildHostAssetStoragePath(userId, safeFilename);
+
+    const { error: uploadError } = await this.client.storage
+      .from(this.bucket)
+      .upload(storagePath, fileData, {
+        contentType: mimeType,
+        upsert: true,
+      });
+
+    if (uploadError) {
+      throw new StorageError(`Failed to upload host asset to Supabase Storage: ${uploadError.message}`);
+    }
+
+    const { data: urlData } = this.client.storage.from(this.bucket).getPublicUrl(storagePath);
+    return {
+      publicUrl: urlData.publicUrl,
+      storagePath,
+    };
+  }
+
+  /**
+   * Constructs the canonical storage path for event banners: events/banners/{userId}/{filename}
+   */
+  public buildEventBannerStoragePath(userId: string, filename: string): string {
+    const cleanUserId = (userId || '').trim().replace(/^\/+|\/+$/g, '');
+    const cleanFilename = (filename || '').trim().replace(/^\/+|\/+$/g, '');
+    return `events/banners/${cleanUserId}/${cleanFilename}`;
+  }
+
+  /**
+   * Upload an event banner asset to Supabase Storage.
+   */
+  async uploadEventBanner(
+    userId: string,
+    fileData: Buffer,
+    filename: string,
+    mimeType: string
+  ): Promise<{ publicUrl: string; storagePath: string }> {
+    if (!this.client) {
+      throw new StorageError(
+        'Supabase Storage is not configured. SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.'
+      );
+    }
+
+    const allowedMimeTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+    if (!allowedMimeTypes.includes(mimeType.toLowerCase())) {
+      throw new StorageError(`Unsupported banner image type: ${mimeType}. Allowed: PNG, JPEG, WEBP`);
+    }
+
+    if (fileData.length > 5 * 1024 * 1024) {
+      throw new StorageError('Banner image size exceeds the 5MB limit.');
+    }
+
+    await this.ensureBucket();
+
+    const ext = filename.split('.').pop() || 'png';
+    const sanitizedExt = ext.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'png';
+    const safeFilename = `banner-${Date.now()}.${sanitizedExt}`;
+    const storagePath = this.buildEventBannerStoragePath(userId, safeFilename);
+
+    const { error: uploadError } = await this.client.storage
+      .from(this.bucket)
+      .upload(storagePath, fileData, {
+        contentType: mimeType,
+        upsert: true,
+      });
+
+    if (uploadError) {
+      throw new StorageError(`Failed to upload event banner to Supabase Storage: ${uploadError.message}`);
+    }
+
+    const { data: urlData } = this.client.storage.from(this.bucket).getPublicUrl(storagePath);
+    return {
+      publicUrl: urlData.publicUrl,
+      storagePath,
+    };
+  }
+
+  /**
+   * Remove a host asset by storage path.
+   */
+  async removeHostAsset(storagePath: string): Promise<void> {
+    if (!this.client || !storagePath) return;
+    try {
+      await this.client.storage.from(this.bucket).remove([storagePath]);
+    } catch (err: any) {
+      console.warn('[SupabaseStorageService] Could not remove old host asset:', err.message);
+    }
+  }
+
+  /**
+   * Upload an official verification document (PDF, PNG, JPEG, WEBP) for an event.
+   * Path: events/{eventId}/verification/{timestamp}_{filename}
+   */
+  async uploadVerificationDocument(
+    eventId: string,
+    fileData: Buffer,
+    filename: string,
+    mimeType: string
+  ): Promise<{ publicUrl: string; storagePath: string }> {
+    if (!this.client) {
+      throw new StorageError(
+        'Supabase Storage is not configured. SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.'
+      );
+    }
+
+    const allowedMimeTypes = [
+      'application/pdf',
+      'image/png',
+      'image/jpeg',
+      'image/jpg',
+      'image/webp',
+    ];
+
+    if (!allowedMimeTypes.includes(mimeType.toLowerCase())) {
+      throw new StorageError(
+        `Unsupported document type: ${mimeType}. Allowed: PDF, PNG, JPEG, WEBP`
+      );
+    }
+
+    if (fileData.length > 10 * 1024 * 1024) {
+      throw new StorageError('Verification document size exceeds the 10MB limit.');
+    }
+
+    await this.ensureBucket();
+
+    const sanitizedBase = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const safeFilename = `${Date.now()}_${sanitizedBase}`;
+    const storagePath = `events/${eventId}/verification/${safeFilename}`;
+
+    const { error: uploadError } = await this.client.storage
+      .from(this.bucket)
+      .upload(storagePath, fileData, {
+        contentType: mimeType,
+        upsert: true,
+      });
+
+    if (uploadError) {
+      throw new StorageError(
+        `Failed to upload verification document to Supabase Storage: ${uploadError.message}`
+      );
+    }
+
+    const { data: urlData } = this.client.storage.from(this.bucket).getPublicUrl(storagePath);
+    return {
+      publicUrl: urlData.publicUrl,
+      storagePath,
+    };
+  }
+
+  /**
+   * Upload an export file (ZIP, XLSX, CSV) to Supabase Storage: events/{eventId}/exports/{filename}
+   */
+  async uploadExportFile(
+    eventId: string,
+    fileData: Buffer,
+    filename: string,
+    mimeType: string
+  ): Promise<{ storagePath: string; publicUrl?: string; signedUrl?: string }> {
+    if (!this.client) {
+      throw new StorageError('Supabase Storage is not configured.');
+    }
+
+    await this.ensureBucket();
+    const sanitizedBase = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const storagePath = `events/${eventId}/exports/${sanitizedBase}`;
+
+    const { error: uploadError } = await this.client.storage
+      .from(this.bucket)
+      .upload(storagePath, fileData, {
+        contentType: mimeType,
+        upsert: true,
+      });
+
+    if (uploadError) {
+      throw new StorageError(`Failed to upload export file to Supabase Storage: ${uploadError.message}`);
+    }
+
+    // Generate signed download URL valid for 24 hours (86400s)
+    let signedUrl: string | undefined;
+    const { data: signedData, error: signedErr } = await this.client.storage
+      .from(this.bucket)
+      .createSignedUrl(storagePath, 86400);
+
+    if (!signedErr && signedData?.signedUrl) {
+      signedUrl = signedData.signedUrl;
+    }
+
+    const { data: urlData } = this.client.storage.from(this.bucket).getPublicUrl(storagePath);
+
+    return {
+      storagePath,
+      publicUrl: urlData?.publicUrl,
+      signedUrl: signedUrl || urlData?.publicUrl,
+    };
+  }
+
+  /**
+   * Create a presigned download URL for a stored asset.
+   */
+  async createPresignedDownloadUrl(storagePath: string, expiresInSeconds = 86400): Promise<string> {
+    if (!this.client) {
+      throw new StorageError('Supabase Storage is not configured.');
+    }
+    const cleanPath = storagePath.replace(/^\/+/, '');
+    const { data, error } = await this.client.storage
+      .from(this.bucket)
+      .createSignedUrl(cleanPath, expiresInSeconds);
+
+    if (error || !data?.signedUrl) {
+      const { data: pubData } = this.client.storage.from(this.bucket).getPublicUrl(cleanPath);
+      return pubData?.publicUrl || '';
+    }
+    return data.signedUrl;
+  }
+
+  /**
+   * Lists files in a given storage folder prefix.
+   */
+  async listFolder(
+    folderPath: string,
+    options?: { limit?: number; offset?: number }
+  ): Promise<Array<{ name: string; id?: string; sizeBytes: number; createdAt: string; storagePath: string }>> {
+    if (!this.client) return [];
+    await this.ensureBucket();
+    const cleanFolder = (folderPath || '').trim().replace(/^\/+|\/+$/g, '');
+    try {
+      const { data, error } = await this.client.storage
+        .from(this.bucket)
+        .list(cleanFolder, {
+          limit: options?.limit || 1000,
+          offset: options?.offset || 0,
+          sortBy: { column: 'created_at', order: 'desc' },
+        });
+
+      if (error || !data) {
+        return [];
+      }
+
+      return data
+        .filter((item: any) => item.name && item.name !== '.emptyFolderPlaceholder')
+        .map((item: any) => {
+          const sizeBytes = item.metadata?.size || item.size || 0;
+          return {
+            name: item.name,
+            id: item.id,
+            sizeBytes,
+            createdAt: item.created_at || item.updated_at || new Date().toISOString(),
+            storagePath: cleanFolder ? `${cleanFolder}/${item.name}` : item.name,
+          };
+        });
+    } catch (err: any) {
+      console.warn(`[SupabaseStorageService] listFolder error for (${folderPath}):`, err?.message);
+      return [];
+    }
+  }
+
+  /**
+   * Deletes one or more files from Supabase Storage by paths.
+   */
+  async deleteFiles(storagePaths: string[]): Promise<{ deletedCount: number; errors?: string[] }> {
+    if (!this.client || !storagePaths.length) {
+      return { deletedCount: 0 };
+    }
+    await this.ensureBucket();
+    const cleanPaths = storagePaths.map((p) => (p || '').trim().replace(/^\/+/, '')).filter(Boolean);
+    if (!cleanPaths.length) return { deletedCount: 0 };
+
+    try {
+      const { data, error } = await this.client.storage.from(this.bucket).remove(cleanPaths);
+      if (error) {
+        console.warn('[SupabaseStorageService] deleteFiles error:', error.message);
+        return { deletedCount: 0, errors: [error.message] };
+      }
+      return { deletedCount: Array.isArray(data) ? data.length : cleanPaths.length };
+    } catch (err: any) {
+      console.warn('[SupabaseStorageService] deleteFiles exception:', err?.message);
+      return { deletedCount: 0, errors: [err?.message] };
+    }
+  }
 }
 
 export const supabaseStorageService = new SupabaseStorageService();

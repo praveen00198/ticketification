@@ -6,6 +6,12 @@ import ticketRoutes from './modules/tickets/routes/ticket.routes';
 import verificationRoutes from './modules/verification/routes/verification.routes';
 import dashboardRoutes from './modules/dashboard/routes/dashboard.routes';
 import eventRoutes from './modules/events/routes/event.routes';
+import { adminVerificationRouter } from './modules/events/routes/event-verification.routes';
+import { adminLifecycleRouter } from './modules/events/routes/event-lifecycle.routes';
+import hostRoutes from './modules/host/host.routes';
+import { publicCredentialRouter } from './modules/events/routes/event-credential.routes';
+import attendeeRoutes from './modules/events/routes/attendee.routes';
+import { publicEventRouter } from './modules/events/routes/public-event.routes';
 import { ticketService } from './modules/tickets/services/ticket.service';
 import { errorHandler } from './middlewares/error.middleware';
 import config from './config/env';
@@ -75,6 +81,12 @@ app.use('/api/guests', guestRoutes);
 app.use('/api/verify', verificationRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/host', hostRoutes);
+app.use('/api/admin/verifications', adminVerificationRouter);
+app.use('/api/admin/events', adminLifecycleRouter);
+app.use('/api/credentials', publicCredentialRouter);
+app.use('/api/attendee', attendeeRoutes);
+app.use('/api/public', publicEventRouter);
 
 // Health check endpoint
 app.get('/api/health', (_req, res) => {

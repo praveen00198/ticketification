@@ -1,52 +1,78 @@
-# PHASES.md — Rebuild & Implementation Phases
+# PHASES.md — Platform Roadmap & Implementation Phases
 
-## Phase Overview & Governance
-The rebuild of Ticketification progresses through 11 disciplined, verifiable phases (Phase 0 through Phase 10).
+## 1. Engineering Governance & Phase Gate Policy
 
 > [!IMPORTANT]
-> **Phase Gate Policy**:
-> A phase is NOT complete simply because the code compiles.
-> A phase is complete ONLY when:
-> 1. Implementation is finished.
-> 2. Unit and integration tests pass.
-> 3. Security checks pass.
-> 4. Existing functionality remains intact without regressions.
-> 5. Documentation is updated.
-> 6. Manual and automated verification succeed.
+> **Strict Phase Gate Policy**:
+> A phase is NOT complete simply because code compiles or tests run. A phase is complete ONLY when:
+> 1. Implementation satisfies all functional requirements in `PRD.md`.
+> 2. Strict layered architecture is maintained (`Route` ➔ `Controller` ➔ `Validation` ➔ `Service` ➔ `Repository` ➔ `Database/Storage`).
+> 3. Automated unit and integration tests pass cleanly (`npm test`).
+> 4. Type checking and production builds pass on both server and client (`npm run build`).
+> 5. Security boundaries and zero-trust event scoping are verified.
+> 6. Architectural documentation (`ARCHITECTURE.md`, `DECISION.md`, `MEMORY.md`) is kept up to date.
 > 
-> **Only ONE phase may be actively implemented at a time.**
+> **Only ONE phase may be actively implemented at a time.** No feature jumping.
 
 ---
 
-## Phase Matrix
+## 2. 22-Phase Master Roadmap
 
-| Phase | Name | Focus | Phase Gate Verification Criteria |
+| Phase | Phase Name | Focus & Deliverables | Phase Status |
 |---|---|---|---|
-| **Phase 0** | **Audit & Governance** | Audit repository, establish rules, documentation, agent skills, and architecture. | Complete audit report, all 9 docs created, 7 skills created, Phase 1 plan approved. |
-| **Phase 1** | **Foundation & Auth** | Clean layered module structure, auth middleware, env validation, user profile sync. | Auth registration, login, token refresh, and strict 401/403 authorization checks pass. |
-| **Phase 2** | **Events & Guest Management** | Event CRUD, ownership verification, guest CRUD, ticket types seeding. | Event scoping tests pass; cross-user event access strictly blocked. |
-| **Phase 3** | **Excel Import Workflow** | Multi-step import: upload, header detection, column mapping, validation preview, batch commit. | Flexible Excel parsing without hardcoded column names; optional phone/email tested. |
-| **Phase 4** | **Ticket Generation & PNG Rendering** | High-performance Puppeteer rendering, real PNG binary verification, crypto token QR. | Rendered output passes `isPngBuffer()`; zero SVG output; Ticket ID not printed on image. |
-| **Phase 5** | **Supabase Storage Integration** | Dedicated storage provider, bucket validation, path hierarchy, public CDN links. | Verified upload to `ticket-images` bucket; zero fallback to local filesystem on failure. |
-| **Phase 6** | **Ticket Downloads & Bulk Export** | Individual download and streaming bulk ZIP of existing PNG assets. | ZIP contains ONLY genuine PNGs; existing assets reused; zero on-demand regenerations. |
-| **Phase 7** | **QR Verification & Atomic Check-In** | Scanner API, atomic conditional SQL update, event scoping enforcement. | Simulated concurrent scans verify race-condition prevention; double check-in blocked. |
-| **Phase 8** | **Worker Reusable Workflow** | Unassigned worker passes, first-scan name prompt, atomic name save + check-in, repeat scans. | Worker first scan assigns name and checks in atomically; subsequent scans succeed. |
-| **Phase 9** | **Hardening & Performance** | Rate limiting, input validation schemas, database indexing, memory optimization. | High-volume batch operations benchmarked; security penetration audit passes. |
-| **Phase 10** | **QA & Production Readiness** | End-to-end user journey tests, mobile browser verification, final polish. | Full end-to-end regression suite green; mobile camera test confirmed; deploy ready. |
+| **Phase 0** | **Existing System Audit & Documentation Reconciliation** | Full repository audit, documentation alignment with Event Operating + Credential Platform vision, identifying security vulnerabilities, and establishing engineering invariants. | **COMPLETED** |
+| **Phase 1** | **Authentication + Authorization Security Remediation** | Fix critical auth flaw (eliminate automatic `ADMIN` elevation). Implement zero-trust authorization middleware, platform roles (`USER`, `ADMIN`, `SUPER_ADMIN`), remediate ticket & recent check-in IDORs, and verify regression tests. | **COMPLETED** |
+| **Phase 2** | **MongoDB Application Identity Architecture** | Establish MongoDB schemas for global users (`users`), connection pooling, repositories, and dual-database coexistence while preserving legacy data. | **COMPLETED** |
+| **Phase 3** | **Host Identity + Onboarding** | Host registration flow, profile setup, institution linking, and host workspace initialization. | **COMPLETED** |
+| **Phase 4** | **Event Creation Engine** | Event creation wizard with event-type awareness (13 types), custom credential taxonomy, venue setup (physical/online/hybrid), UTC schedule with IANA timezone, and dual data modes. | **COMPLETED** |
+| **Phase 5** | **Event Verification** | Institutional email + OTP verification, document upload, and risk-based review workflow (Low / Medium / High tiers). | **COMPLETED** |
+| **Phase 6** | **Event Lifecycle Engine** | Strict lifecycle transitions (`DRAFT` → `SUBMITTED` → `APPROVED` → `PUBLISHED` → `EVENT_LIVE` → `COMPLETED` → `ARCHIVED`) and suspension circuit breakers. | **COMPLETED** |
+| **Phase 7** | **Event Membership + RBAC** | `event_members` collection, secure token invitations, and event-scoped role binding (`HOST`, `COORDINATOR`, `VOLUNTEER`, `MENTOR`, `EVALUATOR`). | **COMPLETED** |
+| **Phase 8** | **Volunteer + Coordinator Management** | Delegated volunteer management, task assignments, and selective scanning permission toggles. | **COMPLETED** |
+| **Phase 9** | **Mentor + Evaluator System** | Restricted workspaces for mentors and judges, blind review isolation, and team assignments. | **COMPLETED** |
+| **Phase 10** | **Team Management** | Event-scoped team registration, member management, project metadata, and submission repositories for hackathons. | **COMPLETED** |
+| **Phase 11** | **Evaluation & Scoring Engine** | Configurable weighted judging rubrics, scoring workflows (`OPEN`, `CLOSED`, `FINALIZED`), and leaderboard ranking. | **COMPLETED** |
+| **Phase 12** | **Credential Architecture** | Generic credential abstraction, MongoDB credential models, sequence numbers, and opaque 64-char QR tokens. | **COMPLETED** |
+| **Phase 13** | **Credential Templates** | Reusable templates in Supabase Storage, dynamic field binding (`{{name}}`, `{{qr}}`, etc.), and Sharp rendering presets. | **COMPLETED** |
+| **Phase 14** | **QR Verification + Atomic Check-in** | Single-step atomic gate check-in, race-condition proof concurrent scan resolution, and reusable worker pass flows. | **COMPLETED** |
+| **Phase 15** | **Import + Bulk Credential Generation Jobs** | Presigned direct spreadsheet uploads, asynchronous background worker queues, chunked generation, and progress tracking. | **COMPLETED** |
+| **Phase 16** | **Export Jobs** | Asynchronous ZIP archive compilation directly from Supabase Storage assets, presigned download URLs, and memory bounding. | **COMPLETED** |
+| **Phase 17** | **Storage + Performance Optimization** | Render 512MB RAM optimizations, native Sharp tuning, Devanagari font embedding, and storage quota governance. | **COMPLETED** |
+| **Phase 18** | **Security + Audit + Reliability** | Distributed token-bucket rate limiting, immutable audit logging, abuse reporting, and automated penetration checks. | **COMPLETED** |
+| **Phase 19** | **Context-Aware Host Dashboard** | Adaptive operational console tailored dynamically to event type (Hackathon vs. Workshop vs. Concert tools). | **COMPLETED** |
+| **Phase 20** | **Attendee Self-Service Platform** | Attendee portal, personal credential wallet, team formation, and self-service registration checkout. | **COMPLETED** |
+| **Phase 21** | **Interactive Public Platform** | Public event discovery, organizer profiles, event landing pages, and public reporting channels. | **COMPLETED** |
 
 ---
 
-## Current Status
-- **Current Active Phase**: **ALL PHASES (Phase 0 through Phase 10) COMPLETED**
-- **Phase 0 Status**: COMPLETED (Audit & Governance)
-- **Phase 1 Status**: COMPLETED (Build: Pass, Tests: 33/33 Pass, Layering: Enforced)
-- **Phase 2 Status**: COMPLETED (Build: Pass, Tests: 54/54 Pass, Zero-Trust IDOR Enforced)
-- **Phase 3 Status**: COMPLETED (Build: Pass, Tests: 62/62 Pass, Persistent Staging & Dynamic Mapping Enforced)
-- **Phase 4 Status**: COMPLETED (Build: Pass, Tests: 74/74 Pass, Real PNG Binary & Zero SVG Enforced)
-- **Phase 5 Status**: COMPLETED (Build: Pass, Tests: 83/83 Pass, Canonical Hierarchy & Zero Local Fallback Enforced)
-- **Phase 6 Status**: COMPLETED (Build: Pass, Tests: 88/88 Pass across 8 test suites, Zero On-Demand Regeneration Enforced)
-- **Phase 7 Status**: COMPLETED (Build: Pass, Tests: 93/93 Pass across 9 test suites, Atomic Conditional SQL & Race-Condition Proof Check-In Enforced)
-- **Phase 8 Status**: COMPLETED (Build: Pass, Tests: 97/97 Pass across 10 test suites, First-Scan Atomic Name Assignment & Multi-Entry Reusable Flow Enforced)
-- **Phase 9 Status**: COMPLETED (Build: Pass, Tests: 101/101 Pass across 11 test suites, In-Memory Sliding-Window Rate Limiting & Composite DB Indexing Enforced)
-- **Phase 10 Status**: COMPLETED (Build: Pass, Tests: 107/107 Pass across 12 test suites, E2E Contract & Mobile Camera Verification Enforced)
-- **System Status**: **PRODUCTION READY — All 11 Phases Rebuilt and Verified.**
+## 3. Current Project State
+
+```
+Current Status:
+├── Phase 0: Existing System Audit & Documentation Reconciliation ➔ COMPLETED
+├── Phase 1: Authentication + Authorization Foundation ➔ COMPLETED
+├── Phase 2: MongoDB Application Identity Architecture ➔ COMPLETED
+├── Phase 3: Host Identity + Onboarding ➔ COMPLETED
+├── Phase 4: Event Creation Engine ➔ COMPLETED
+├── Phase 5: Event Verification & Risk Engine ➔ COMPLETED
+├── Phase 6: Event Lifecycle Engine ➔ COMPLETED
+├── Phase 7: Event Membership + RBAC ➔ COMPLETED
+├── Phase 8: Volunteer + Coordinator Management ➔ COMPLETED
+├── Phase 9: Mentor + Evaluator System ➔ COMPLETED
+├── Phase 10: Team Management ➔ COMPLETED
+├── Phase 11: Evaluation & Scoring Engine ➔ COMPLETED
+├── Phase 12: Credential Architecture ➔ COMPLETED
+├── Phase 13: Credential Templates & Sharp Rendering Engine ➔ COMPLETED
+├── Phase 14: QR Verification + Atomic Check-in ➔ COMPLETED
+├── Phase 15: Import + Bulk Credential Generation Jobs ➔ COMPLETED
+├── Phase 16: Export Jobs ➔ COMPLETED
+├── Phase 17: Storage + Performance Optimization ➔ COMPLETED
+├── Phase 18: Security + Audit + Reliability ➔ COMPLETED
+├── Phase 19: Context-Aware Host Dashboard ➔ COMPLETED
+├── Phase 20: Attendee Self-Service Platform ➔ COMPLETED
+└── Phase 21: Interactive Public Platform ➔ COMPLETED (ROADMAP 100% COMPLETE)
+```
+
+> [!CAUTION]
+> **No Premature Feature Implementation**:
+> Feature code for Phase 1 and beyond must NOT be implemented until explicitly directed by the user. The current phase is strictly Phase 0 Audit & Reconciliation.

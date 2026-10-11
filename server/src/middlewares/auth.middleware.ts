@@ -1,18 +1,21 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabaseAdmin } from '../config/supabase';
 import { userRepository } from '../modules/auth/repositories/user.repository';
+import config from '../config/env';
+import { PlatformRole } from '../db/schema';
 import { AuthenticationError, AppError } from './error.middleware';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
     email: string;
-    role: string;
+    role: PlatformRole;
   };
 }
 
 /**
  * Validates Supabase JWT Bearer token from the Authorization header.
+ * Resolves user platform role from trusted server database, never client metadata.
  * Attaches user information to req.user upon successful verification.
  */
 export async function authMiddleware(
@@ -32,10 +35,29 @@ export async function authMiddleware(
     return next(new AuthenticationError('Authentication required. Bearer token is empty.'));
   }
 
+  // 1. Try local JWT token verification first (works with MongoDB local auth)
+  try {
+    const { verifyJwtToken } = await import('../utils/local-auth');
+    const localPayload = verifyJwtToken(token);
+    if (localPayload && localPayload.id) {
+      const { UserModel } = await import('../db/mongo/models/user.model');
+      const mongoUser = await UserModel.findOne({ supabaseUserId: localPayload.id }).exec();
+      if (mongoUser && mongoUser.status !== 'SUSPENDED') {
+        req.user = {
+          id: mongoUser.supabaseUserId,
+          email: mongoUser.email,
+          role: mongoUser.platformRole,
+        };
+        return next();
+      }
+    }
+  } catch (err) {
+    // Fall through to Supabase verification
+  }
+
+  // 2. Fall back to Supabase verification if configured
   if (!supabaseAdmin) {
-    return next(
-      new AppError('Authentication service is unavailable. Check server environment.', 503)
-    );
+    return next(new AuthenticationError('Invalid or expired authentication token.'));
   }
 
   try {
@@ -48,26 +70,44 @@ export async function authMiddleware(
       return next(new AuthenticationError('Invalid or expired authentication token.'));
     }
 
+    const email = (user.email || '').toLowerCase();
+    const isApprovedAdmin = config.env.initialAdminEmails.includes(email);
+
+    // Resolve application platform role from trusted server database record
+    let userRole: PlatformRole = 'USER';
+    try {
+      let dbUser = await userRepository.findById(user.id);
+      if (!dbUser) {
+        const initialRole: PlatformRole = isApprovedAdmin ? 'ADMIN' : 'USER';
+        dbUser = await userRepository.upsert({
+          id: user.id,
+          name: user.user_metadata?.name || email.split('@')[0] || 'User',
+          email,
+          role: initialRole,
+        });
+      } else if (isApprovedAdmin && dbUser.role === 'USER') {
+        dbUser = await userRepository.updateRole(user.id, 'ADMIN');
+      }
+
+      if (dbUser && (dbUser.role === 'ADMIN' || dbUser.role === 'SUPER_ADMIN' || dbUser.role === 'USER')) {
+        userRole = dbUser.role as PlatformRole;
+      }
+    } catch (syncErr) {
+      console.warn('[authMiddleware] Profile lookup/sync warning:', syncErr);
+      userRole = isApprovedAdmin ? 'ADMIN' : 'USER';
+    }
+
     req.user = {
       id: user.id,
-      email: user.email || '',
-      role: user.user_metadata?.role || 'ADMIN',
+      email,
+      role: userRole,
     };
-
-    // Ensure user record exists in public.users to satisfy database foreign keys
-    try {
-      await userRepository.upsert({
-        id: user.id,
-        name: user.user_metadata?.name || user.email?.split('@')[0] || 'Admin',
-        email: user.email || '',
-        role: user.user_metadata?.role || 'ADMIN',
-      });
-    } catch (syncErr) {
-      console.warn('[authMiddleware] Profile sync note:', syncErr);
-    }
 
     next();
   } catch (err: any) {
     return next(new AuthenticationError('Authentication failed. Please sign in again.'));
   }
 }
+
+export const authenticateUser = authMiddleware;
+export default authMiddleware;

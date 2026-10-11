@@ -16,10 +16,13 @@ export interface EnvConfig {
   supabaseBucket: string;
   // Database (direct PostgreSQL connection for Drizzle)
   databaseUrl: string;
+  // MongoDB Connection URI for Target Architecture
+  mongoUri: string;
   // Application
   appUrl: string;
   uploadDir: string;
   puppeteerHeadless: boolean;
+  initialAdminEmails: string[];
 }
 
 function validateAndLoadEnv(): EnvConfig {
@@ -53,10 +56,15 @@ function validateAndLoadEnv(): EnvConfig {
     supabaseBucket: process.env.SUPABASE_STORAGE_BUCKET || process.env.SUPABASE_BUCKET || 'ticket-images',
     // Database
     databaseUrl,
+    mongoUri: process.env.MONGODB_URI || '',
     // Application
     appUrl: process.env.APP_URL || 'http://localhost:5173',
     uploadDir: process.env.UPLOAD_DIR || 'uploads',
     puppeteerHeadless: process.env.PUPPETEER_HEADLESS !== 'false',
+    initialAdminEmails: (process.env.INITIAL_ADMIN_EMAILS || process.env.ADMIN_EMAILS || '')
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean),
   };
 }
 

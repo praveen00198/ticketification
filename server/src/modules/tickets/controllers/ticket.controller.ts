@@ -75,16 +75,10 @@ export class TicketController {
 
   async getTicketById(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const ticketId = validateTicketIdParam(req.params.id);
-      const ticket = await ticketService.getTicketById(ticketId);
+      if (!req.user) throw new AuthenticationError();
 
-      if (!ticket) {
-        res.status(404).json({
-          success: false,
-          error: { code: 'NOT_FOUND', message: 'Ticket not found' },
-        });
-        return;
-      }
+      const ticketId = validateTicketIdParam(req.params.id);
+      const ticket = await ticketService.getTicketByIdForOwner(ticketId, req.user.id);
 
       res.status(200).json({ success: true, data: ticket });
     } catch (err) {

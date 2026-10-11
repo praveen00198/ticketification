@@ -25,6 +25,7 @@ console.log(`[DIAG] platform=${process.platform} arch=${process.arch}`);
 
 import app from './app';
 import config from './config/env';
+import { connectMongoDB, disconnectMongoDB } from './db/mongodb';
 
 // Safe Storage diagnostic logging (zero secrets/tokens logged)
 console.log(`[DIAG:Storage] ${JSON.stringify({
@@ -37,6 +38,14 @@ console.log(`[DIAG:Storage] ${JSON.stringify({
 
 
 async function startServer() {
+  if (config.env.mongoUri) {
+    try {
+      await connectMongoDB();
+    } catch (err: any) {
+      console.warn('⚠️ [MongoDB] Startup connection warning:', err.message);
+    }
+  }
+
   const PORT = config.env.port;
   app.listen(PORT, () => {
     console.log(`[Server] Operational console API listening on http://localhost:${PORT}`);
@@ -61,15 +70,17 @@ process.on('unhandledRejection', (reason: any) => {
 });
 
 // ── LIFECYCLE POINT 13: Before process shutdown ──
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   logMemory('sigterm_shutdown');
   console.log('[Server] SIGTERM received, shutting down...');
+  await disconnectMongoDB();
   process.exit(0);
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   logMemory('sigint_shutdown');
   console.log('[Server] SIGINT received, shutting down...');
+  await disconnectMongoDB();
   process.exit(0);
 });
 

@@ -1,82 +1,176 @@
-# MEMORY.md — Operational Knowledge & Audit Discoveries
+# MEMORY.md — Operational Knowledge & Architecture Truths
 
-## 1. Context & Architectural Memory
-This file records critical discoveries, anti-patterns, and institutional knowledge identified during the Phase 0 codebase audit. Future engineering work must consult this memory before designing or modifying components.
+## 1. Permanent Architectural Truths
+This file serves as the permanent institutional memory for Ticketification. All engineering agents and human contributors must adhere to these established truths:
+
+1. **Product Purpose**: Ticketification is an **Event Operating + Credential + Access Platform**, NOT merely a single-use ticket generator.
+2. **Current Product Priority**: The **Host Layer** is the active primary product focus (Phases 1–19).
+3. **Attendee Platform**: The **Attendee Layer** is designed into the architecture but deferred to Phase 20.
+4. **Public Platform**: The **Public Layer** remains functional and simple for now; interactive public features belong to Phase 21.
+5. **One Global User Identity**: Every human has exactly one global user account. Roles (Host, Coordinator, Volunteer, Mentor, Evaluator, Attendee) are **event-scoped relationships** in `event_members`, NOT separate identity tables.
+6. **Platform Roles vs. Event Roles**: Platform roles (`USER`, `ADMIN`, `SUPER_ADMIN`) are global and distinct from event roles (`HOST`, `COORDINATOR`, `VOLUNTEER`, `MENTOR`, `EVALUATOR`).
+7. **Infrastructure Triad**:
+   - **Supabase Auth** = Authentication (*"Who are you?"*).
+   - **MongoDB** = Application profiles, authorization, events, teams, evaluations, credential metadata, and audit logs (*"What can you do?"*).
+   - **Supabase Storage** = Binary files (PNG passes, PDFs, templates, spreadsheets, ZIP archives).
+8. **Zero Binaries in Database**: MongoDB MUST NEVER store image binaries, base64 strings, or large files.
+9. **Backend is the Sole Security Boundary**: Frontend route guards and `localStorage` states are UX conveniences only. The backend validates authorization on every request.
+10. **Modular Monolith**: The architecture is a Modular Monolith. No microservices unless explicitly justified by scale.
+11. **Heavy Work Belongs in Background Jobs**: Bulk generation (1,000–20,000 tickets), large imports, and ZIP exports must execute asynchronously via background workers.
+12. **Generic Credential Abstraction**: Internally, all passes are treated as "Event Credentials". The user-facing term adapts dynamically by event type (Ticket, Participant Pass, Attendee Pass, Badge).
+13. **Opaque QR Tokens**: QR codes encode ONLY a 64-character verification URL. Zero attendee PII is ever encoded in QR codes.
+14. **Atomic Concurrency Control**: Check-ins must use conditional atomic updates to eliminate race conditions between simultaneous scans.
+15. **Paid Events Require Verification**: Paid events cannot collect payments without risk-based review and platform verification. Webhook confirmation must be signature-verified and idempotent.
+16. **Existing Code Preservation**: Treat existing code as `LEGACY / UNTRUSTED IMPLEMENTATION`. Audit working components before replacing them.
 
 ---
 
-## 2. Critical Bugs & Regressions Discovered in Legacy Code
+## 2. Hard-Won Production Lessons & Anti-Patterns
 
-### 2.1 The SVG vs. PNG Silent Fallback Trap
-- **Issue**: In `server/src/modules/tickets/services/ticket.service.ts` (lines 144–146), ticket generation generated SVG markup and uploaded `.svg` files to Supabase Storage.
-- **Consequence**: When users clicked download, the frontend attempted to dynamically convert the SVG to a PNG blob client-side using an HTML5 `<canvas>`. When that failed, it opened the raw SVG in a new tab.
-- **Root Cause**: The generation pipeline lacked a headless rasterization step before storage upload.
-- **Invariant**: Generated tickets MUST be converted to genuine PNG binaries (header `0x89504E47`) on the backend via Puppeteer *before* uploading to Supabase Storage. The storage bucket must contain only `.png` assets.
+### 2.1 The SVG vs. Real PNG Binary Trap
+- **Lesson**: Legacy code generated SVG markup and renamed files to `.png` or relied on client-side canvas conversions.
+- **Invariant**: All rendered credentials MUST be genuine PNG binaries (verified by checking the 8-byte PNG header `0x89504E47`) on the backend before storage upload. Zero SVG storage.
 
-### 2.2 Re-Rendering During Bulk ZIP Downloads
-- **Issue**: In `streamTicketsZip`, the legacy code attempted to detect if a file was SVG and launched a Puppeteer browser instance *during the ZIP export stream* to rasterize on the fly.
-- **Consequence**: For events with 1,000+ tickets, launching Puppeteer during export caused massive memory spikes, CPU throttling, and connection timeouts.
-- **Invariant**: Bulk download MUST strictly stream *pre-existing* PNG assets from Supabase Storage. Never regenerate tickets during export.
+### 2.2 Memory Optimization on Render 512MB RAM Containers
+- **Lesson**: Render Linux containers were terminated by the OOM killer (`Ran out of memory (used over 512MB)`) during bulk generation.
+- **Root Causes**:
+  1. Default `sharp.cache(true)` retained decompressed image buffers in native C++ memory across operations.
+  2. The 1620x2025 background image was base64-encoded into the SVG markup, forcing librsvg to decode a 13.1 MB RGBA buffer per ticket.
+  3. Concurrent worker threads (`BATCH_SIZE = 5`) caused native RSS spikes past 378MB.
+- **Required Invariants**:
+  1. Always configure `sharp.cache(false)` and `sharp.concurrency(1)`.
+  2. Pre-load the background image buffer once and composite the SVG overlay via Sharp native bindings (`.composite([{ input: overlaySvg }])`).
+  3. Bounded batch concurrency (1–2 tickets per batch) with immediate dereferencing of image buffers upon storage upload.
+  4. RSS must remain stably under 200MB.
 
-### 2.3 Non-PNG Files Stuffed into Download ZIPs
-- **Issue**: The ZIP streaming utility was appending `tickets-manifest.csv` and `export-summary.txt` into the archive, and in failure cases appended raw SVG buffers with `.png` extensions.
-- **Invariant**: Bulk ZIP export archives must contain ONLY valid PNG ticket files. Zero SVGs, zero text manifests.
+### 2.3 Devanagari / Hindi Complex Script Font Bundling
+- **Lesson**: Devanagari text (e.g. `|| श्री गणेशाय नमः ||`, guest names in Hindi) rendered with broken glyphs and disconnected matras in minimal Linux containers.
+- **Root Cause**: Offline server rasterization (librsvg / Pango) cannot fetch online `@import` web fonts, and minimal Linux containers lack Indic fonts in `/usr/share/fonts`.
+- **Resolution & Invariant**: Always bundle Google `NotoSansDevanagari-Bold.ttf` in `assets/fonts/` and embed the font as base64 inside `@font-face` within the SVG markup. Pango and HarfBuzz resolve complex conjuncts and matra positioning flawlessly in memory.
 
-### 2.4 Duplicate Route Mount in Express `app.ts`
-- **Issue**: In `server/src/app.ts`:
-  ```ts
-  app.use('/api/tickets', verificationRoutes);
-  app.use('/api/tickets', ticketRoutes);
-  ```
-  `/api/tickets` was mounted twice, causing route collisions and unpredictable handler execution between verification endpoints and ticket management endpoints.
+### 2.4 Duplicate Route Mount Bug in Express `app.ts`
+- **Lesson**: Mounting `/api/tickets` twice for different route files caused handler collisions.
 - **Invariant**: Strict route namespace separation:
-  - `/api/verification` ➔ Verification routes (`/scan-and-checkin`, `/recent`)
-  - `/api/tickets` ➔ Ticket management routes (`/events/:eventId`, `/generate`, `/export-zip`)
+  - `/api/verification` ➔ Scanner and check-in endpoints
+  - `/api/tickets` ➔ Credential management endpoints
+  - `/api/events` ➔ Event management endpoints
 
-### 2.5 Direct Database Queries Inside Service Layer
-- **Issue**: In `server/src/modules/verification/services/verification.service.ts` (lines 482–489), `db.update(tickets)` was called directly inside the service method, completely bypassing the repository layer.
-- **Invariant**: All database operations must be isolated in repositories. Services coordinate business workflows and call repository methods.
+### 2.5 In-Memory Rate Limiting Bottleneck
+- **Lesson**: The legacy sliding-window rate limiter used an in-memory `Map<string, ClientRecord>()`. This does not scale across multiple cluster instances or server restarts.
+- **Target Invariant**: Adopt distributed/shared token-bucket rate limiting (e.g. Redis or persistent token storage) with endpoint-aware thresholds.
 
-### 2.6 In-Memory Map in Multi-Step Excel Import
-- **Issue**: In `server/src/modules/guests/services/guest-import.service.ts` (line 64), uploaded file rows were stored in an in-memory `Map<string, ...>` between the upload step and commit step. If the server restarted or scaled horizontally, the upload session was lost.
-- **Invariant**: Import session state and parsed rows must be tracked via the `guest_imports` database table, enabling stateless, resumable import workflows.
+### 2.6 Preserved Canonical Visual Assets
+- **Asset**: `server/assets/ticket_template.png` (289 KB) is the canonical visual template. Do not delete or overwrite it.
+- **Asset**: `server/assets/fonts/NotoSansDevanagari-Bold.ttf` is the canonical Indic font. Do not delete it.
 
-### 2.7 Service Role Key Fallback Security Risk
-- **Issue**: In `server/src/config/env.ts` (line 47), `supabaseServiceRoleKey` fell back to `SUPABASE_ANON_KEY` if the service role key was missing.
-- **Consequence**: Bypassing missing credentials resulted in silent permission failures in backend storage operations without explicit error messages.
-- **Invariant**: If `SUPABASE_SERVICE_ROLE_KEY` is missing in the environment, the server must fail fast with an explicit configuration error.
+### 2.7 Blind Review & Mentor/Evaluator Workspace Isolation (Phase 9)
+- **Lesson**: Hackathons and competitions risk score contamination and bias if judges or mentors can access unassigned tracks or observe competing judge scorecards before rubric lock.
+- **Invariant**:
+  1. Mentors and evaluators access event workspace exclusively via `/api/events/:eventId/assignments/my-assignments`, returning strictly rows where `memberId == callerMemberId`.
+  2. Competing scores, unassigned tracks, and confidential team metadata remain completely masked at both repository and service layers.
+  3. All assignments enforce compound uniqueness `{ eventId: 1, memberId: 1, targetName: 1 }`.
 
-### 2.8 The Puppeteer / Chromium Container Failure on Render
-- **Issue**: On Render's Linux container environment, ticket generation failed with HTTP 500 (`Error: Could not find Chrome` / missing `/opt/render/.cache/puppeteer` / missing Linux `.so` libraries).
-- **Consequence**: When users clicked "Generate All Tickets", the backend attempted to launch Puppeteer, which crashed and returned a generic 500 error to the frontend.
-- **Root Cause**: Minimal Linux containers do not retain Puppeteer browser cache paths or provide desktop GUI shared libraries (`libnss3`, `libatk`, etc.).
-- **Resolution**: Replaced browser-dependent rendering with native server-side `sharp` rasterization. Sharp uses pre-compiled static native binaries with zero external shared library dependencies, generating 1620x2025 genuine PNG binaries (`0x89504E47`) in ~15ms with 100% container resilience.
-- **Invariant**: Backend ticket generation must NOT rely on external browser processes in cloud containers. All image rasterization must use self-contained native engines with standard PNG header verification.
+### 2.8 Event Team Roster Bounds & Hackathon Lifecycle (Phase 10)
+- **Lesson**: Unbounded team sizes create unfair competitive advantages in hackathons, while unvalidated team name duplicates disrupt booth and evaluation scoring.
+- **Invariant**:
+  1. Teams enforce compound unique index `{ eventId: 1, teamName: 1 }`.
+  2. Maximum roster capacity is strictly bounded (6 members max).
+  3. Duplicate member emails within a team roster are rejected at the service layer.
+  4. Team leaders cannot be removed from their own team roster.
+  5. Status updates to `SUBMITTED` record an immutable `submittedAt` timestamp for project lock deadlines.
 
-### 2.9 Devanagari / Hindi Complex Script Font Bundling
-- **Issue**: Devanagari text (e.g. `|| श्री गणेशाय नमः ||`, guest names in Hindi) was rendering with broken/corrupted glyphs and disjoined matras in generated PNG tickets.
-- **Root Cause**: Server-side rasterization (`librsvg` / Pango) runs offline and does not fetch external CSS `@import` web fonts. Minimal Linux container hosts (Render) have no Indic fonts installed in `/usr/share/fonts`.
-- **Resolution**: Bundled official Google `NotoSansDevanagari-Bold.ttf` inside `assets/fonts/` and embedded the font binary as base64 within `@font-face` inside the SVG markup. Pango and HarfBuzz read the embedded OpenType tables directly from memory, performing flawless Devanagari text shaping, conjunct resolution (`श्री`, `प्र`, `क्ष`, `त्र`), and matra positioning across all operating systems.
-- **Invariant**: Any custom or complex script font required by ticket templates MUST be bundled in `assets/fonts/` and embedded directly into the SVG to guarantee deterministic rendering independent of OS system fonts.
+### 2.9 Scoring Isolation, Rubric Phases & Leaderboard Sealing (Phase 11)
+- **Lesson**: Live leaderboards leak competitive advantage and induce scoring collusion among judges if visible before all evaluations are finalized. In addition, unweighted scoring fails to capture diverse criterion importance.
+- **Invariant**:
+  1. Scorecard submissions enforce compound uniqueness `{ eventId: 1, teamId: 1, evaluatorMemberId: 1 }` — exactly one scorecard per evaluator per team.
+  2. Weighted scores are calculated deterministically: `sum((score / maxScore) * weight)` with a precision of 2 decimal places.
+  3. Rubric scoring follows strict phase transitions: `OPEN` (accepts scorecards) ➔ `CLOSED` (freezes scoring) ➔ `FINALIZED` (seals results and opens public leaderboard).
+  4. Leaderboard is completely masked to evaluators and participants until the rubric scoring status is `FINALIZED`. Hosts and Coordinators retain live administrative preview.
+  5. Lucide icons in React do not support the `title` attribute directly; wrap icons in `<span title="...">` or parent `<button title="...">` to prevent TypeScript TS2322 errors.
 
-### 2.10 Memory Optimization for Render 512MB RAM Containers
-- **Issue**: Under bulk ticket generation on Render, the backend process was terminated by the Linux OOM killer with `"Ran out of memory (used over 512MB) while running your code."`
-- **Root Cause**:
-  1. Default `sharp.cache(true)` retained decompressed image buffers and intermediate surfaces in native C++ memory across operations. Because this was outside V8 heap, Node GC did not trigger, causing RSS to continuously climb past 512MB.
-  2. The 1620x2025 background PNG was base64-encoded into the SVG markup (~373KB base64 string), forcing `librsvg` to decode a 13.1 MB RGBA buffer per ticket alongside Cairo surfaces (~40MB RAM per ticket).
-  3. `BATCH_SIZE = 5` in `Promise.all` allocated 5 × ~40MB = ~200MB of native RAM simultaneously, causing peak RSS spikes to 378MB+ for just 20 tickets.
-- **Resolution**:
-  1. Disabled libvips caching via `sharp.cache(false)` and constrained thread pool via `sharp.concurrency(1)` to eliminate native buffer accumulation.
-  2. Pre-loaded `templateBuffer` once at startup and used Sharp's native `.composite([{ input: overlaySvg }])`, dropping the SVG payload from ~950KB to ~280KB and eliminating nested PNG decoding inside librsvg.
-  3. Bounded batch concurrency to `BATCH_SIZE = 2` and explicitly dereferenced PNG buffers immediately upon Supabase Storage upload.
-- **Invariant**: On memory-constrained container environments (<= 512MB RAM), image processing concurrency must remain tightly bounded (<= 2), native buffer caching disabled, and raw image buffers dereferenced immediately upon storage upload. Peak RSS must remain <= 200MB regardless of event size.
+### 2.10 Generic Credential Abstraction & Atomic Sequencing (Phase 12)
+- **Lesson**: Supporting diverse event archetypes (Conferences, Hackathons, Concerts, Festivals) without creating fragmented schemas requires an extensible generic pass model, gap-free monotonic sequence allocation, and zero-PII token lookups.
+- **Invariant**:
+  1. Monotonic sequence numbering per event uses dedicated atomic counters in `event_sequence_counters` via `findOneAndUpdate({ eventId }, { $inc: { lastSequenceNumber: 1 } }, { new: true, upsert: true })`.
+  2. Formatting follows `<PREFIX>-00001` where `<PREFIX>` is derived from event credential terminology (e.g. `TIC`, `BDG`, `PASS`, `WRK`).
+  3. Verification tokens are cryptographically secure 64-character hex strings generated via `crypto.randomBytes(32).toString('hex')`.
+  4. Public token verification lookup (`/api/credentials/verify-token/:token`) sanitizes all sensitive PII (attendee email, phone number, and internal system IDs are never returned to public scanners or users).
+  5. Check-in operations enforce atomic updates (`findOneAndUpdate` with `{ status: 'ACTIVE' }`) and support `SINGLE_USE`, `REUSABLE`, `MULTI_DAY`, and `WORKER_UNASSIGNED` policies.
 
----
+### 2.11 Visual Credential Templates & Native Sharp Rasterization (Phase 13)
+- **Lesson**: High-resolution image generation (badges, passes, tickets) on cloud containers with 512MB RAM constraints (Render) easily causes out-of-memory crashes if memory bounding is not strictly enforced. In addition, SVG overlays that use network `@import` fonts freeze libvips indefinitely in containerized or offline environments.
+- **Invariant**:
+  1. Always configure `sharp.cache(false)` and `sharp.concurrency(1)` to bound Sharp's thread pool and internal buffer allocation.
+  2. SVGs used for Sharp text overlays must never contain remote `@import url(...)` declarations; all fonts must resolve locally via Fontconfig (`assets/fonts/`).
+  3. All generated PNG outputs must be validated by inspecting the first 4 bytes for magic numbers `0x89504E47` (`\x89PNG`).
+  4. Global presets (`CONFERENCE_BADGE`, `CONCERT_TICKET`, `HACKATHON_PASS`, `WORKER_PASS`) are immutable system templates; events clone presets into event-scoped copies with `{ eventId }` before modifying coordinates or styles.
+  5. Jest tests invoking native C++ Sharp operations on high-resolution buffers (1620x2025) require `jest.setTimeout(30000)` on cold start, and `ts-jest` config must use `isolatedModules: true` to avoid whole-program AST compilation delays.
+
+### 2.12 High-Throughput Atomic Check-in & Scanner Concurrency (Phase 14)
+- **Lesson**: Day-of-event check-in gates experience sudden surges in scan concurrency. If check-in status validation relies on `find()` followed by `save()`, concurrent scans on the same pass at different entrance turnstiles will both succeed, allowing duplicate admissions.
+- **Invariant**:
+  1. For `SINGLE_USE` passes, admission must execute via a single conditional atomic update: `findOneAndUpdate({ _id, eventId, status: 'ACTIVE', usagePolicy: 'SINGLE_USE' }, { $set: { status: 'CHECKED_IN', firstCheckedInAt: now, lastCheckedInAt: now }, $inc: { checkInCount: 1 } })`.
+  2. If the atomic update returns `null`, the scan is a duplicate; refetch and return `ALREADY_CHECKED_IN` with the prior timestamp.
+  3. Every check-in attempt (whether successful, duplicate, revoked, or expired) must emit an immutable audit document to `event_credential_checkins` for audit compliance and velocity telemetry.
+### 2.13 Asynchronous Job Processing & Memory-Bounded Queues (Phase 15)
+- **Lesson**: Parsing multi-megabyte attendee spreadsheets and rasterizing thousands of credential passes inside synchronous HTTP requests leads to connection timeouts (Render 30s limit), thread contention, and container OOM crashes.
+- **Invariant**:
+  1. Operations generating or processing 50+ records must execute asynchronously via `event_jobs` queue engine and return `HTTP 202 Accepted` immediately with a `jobId`.
+  2. Spreadsheet parsing (`.xlsx`, `.xls`, `.csv`) must use two-pass header detection (exact normalized match followed by synonym inclusion) while tracking claimed headers to prevent cross-column attribute collision (e.g. `Contact Email` must not be claimed by `Phone`).
+  3. Contiguous sequence numbering across batch insertions must be atomically pre-allocated using `allocateSequenceBlock(eventId, count)` via MongoDB `findOneAndUpdate({ eventId }, { $inc: { lastSequenceNumber: count } })`.
+  4. Sharp batch rasterization must be executed in bounded chunks of 2 with `sharp.concurrency(1)` and `sharp.cache(false)` to prevent Render 512MB RAM exhaustion.
+  5. Only Hosts and Coordinators verified via MongoDB `event_members` can enqueue or cancel background jobs; unauthorized staff or external attendees are rejected with HTTP 403 Forbidden.
+
+### 2.14 Streaming ZIP Archive Packaging & Presigned URL Exports (Phase 16)
+- **Lesson**: Compiling archives of hundreds or thousands of high-resolution credential passes within Node.js process heap memory easily triggers heap allocation failure (`JavaScript heap out of memory`) on 512MB RAM containers. Proxying large file downloads through Express endpoints blocks event loop workers and exhausts server bandwidth.
+- **Invariant**:
+  1. Compiling ZIP archives must use streaming pipelines (`archiver` piped through stream chunks) rather than buffering the entire archive in Node memory.
+  2. Finished archives and export spreadsheets must be written directly to Supabase Storage under `events/${eventId}/exports/`.
+  3. Clients download export files via direct 24-hour presigned URLs issued by object storage (`supabaseStorageService.createPresignedDownloadUrl`), completely bypassing Node memory.
+  4. Roster exports must query all matching event credentials via `findAllForExport(eventId, filters)` rather than paginated endpoints that arbitrarily cap output size.
+
+### 2.15 Storage Quota Governance, Render 512MB Bounding, & Indic Typography (Phase 17)
+- **Lesson**: Unmanaged export archives and heavy image buffers can silently breach cloud storage tier limits, while complex Indic fonts (Devanagari/Hindi) render as broken tofu glyphs on containerized Linux servers without embedded font definitions.
+- **Invariant**:
+  1. Always bundle and embed Google `NotoSansDevanagari-Bold.ttf` as base64 inside SVG templates via `@font-face` within `EventCredentialRenderingService` to guarantee deterministic complex script conjunct and matra rendering across all environments without network dependencies.
+  2. Maintain `sharp.cache(false)` and `sharp.concurrency(1)` across all credential image rasterization pipelines to prevent libvips buffer retention outside V8 heap.
+  3. Use `MemoryBudgetGovernor` to monitor process RSS against a 400MB threshold and proactively throttle execution if memory spikes.
+  4. Enforce event storage quota governance (default 1024MB per event) before queuing bulk renders or exports, and provide an automated/on-demand stale export cleanup mechanism (`cleanupStaleExports`) to purge temporary archives older than 24 hours.
+
+### 2.16 Immutable Audit Ledgers & Distributed Rate Limiting (Phase 18)
+- **Lesson**: High-privilege actions (inviting/removing staff, revoking passes, purging storage) require tamper-proof accountability that cannot be altered or deleted. Additionally, unthrottled endpoints leave the system exposed to export flooding and scraping attacks.
+- **Invariant**:
+  1. Audit entries in `audit_logs` must be strictly append-only; Mongoose pre-hooks on `updateOne`, `updateMany`, `findOneAndUpdate`, `deleteOne`, `deleteMany`, and `findOneAndDelete` must throw invariant violation errors.
+  2. Support both MongoDB ObjectIds and external/Supabase string identifiers (UUIDs) for `actorId` and `eventId` to prevent BSON casting failures in hybrid identity environments.
+  3. All audit queries (`GET /api/events/:eventId/audit-logs`) must enforce Zero-Trust RBAC (accessible only to Hosts/Admins) and filter strictly by `{ eventId }` to eliminate cross-event IDOR leaks.
+  4. Protect sensitive endpoints with endpoint-aware token-bucket rate limiters (`exportRateLimiter` at 10 req/min, `auditLogRateLimiter` at 60 req/min, `scannerRateLimiter` at 120 req/min).
+
+### 2.17 Adaptive Event-Type UX & Aggregated Telemetry Pipelines (Phase 19)
+- **Lesson**: A multi-event operating system serving hackathons, concerts, conferences, and workshops cannot force a single monolithic dashboard view. Displaying judging rubrics and team management cards on a Concert or Workshop page creates cognitive overload. Furthermore, issuing 6 independent network roundtrips from the host client on initial load degrades time-to-interactive.
+- **Invariant**:
+  1. Use parallelized server aggregation (`Promise.allSettled`) via `EventDashboardService` to bundle credentials, gate velocity (15m window), staff breakdown, team cohorts, storage metrics, and recent audit activity in a single `GET /api/events/:eventId/dashboard-summary` endpoint.
+  2. Server must authoritatively derive event features (`deriveFeatures`) based on `eventType` (`hasCompetition`, `hasWorkshops`, `hasSeating`, `hasCheckinVelocity`, `hasBulkExports`) so clients do not duplicate ad-hoc business logic across components.
+  3. UI consoles must be structured around contextual, tabbed workspaces (`Overview`, `Credentials & Access`, `Staff & Volunteers`, `Competition & Tracks`, `Gate & Check-in`, `Audit Trail`) rather than vertical card stacks.
+  4. Conditionally render specialized workspaces: "Competition & Tracks" must only appear when `features.hasCompetition` is true (`HACKATHON`, `COMPETITION`, `COLLEGE_FEST`), keeping single-session and performance events focused.
+  5. Schema models without continuous active database connections during unit tests must define `bufferCommands: false` to avoid silent Mongoose buffer deadlocks.
+
+### 2.18 Attendee Self-Registration, Idempotent Credential Provisioning & Wallet Isolation (Phase 20)
+- **Lesson**: Letting attendees self-register introduces concurrency and duplicate generation risks. If a user double-clicks registration or retries after network hiccups, issuing multiple credentials creates orphan passes and breaks sequence allocation. Additionally, cancellation must cascade down to revoke gate access.
+- **Invariant**:
+  1. Enforce unique registration compound index on `{ eventId: 1, userId: 1 }` in `event_registrations`. Repeated registration calls must be strictly idempotent and return the existing active registration and linked credential.
+  2. Validate event lifecycle state prior to registration: events in `DRAFT`, `SUSPENDED`, `CANCELLED`, or `ARCHIVED` reject registration with HTTP 400.
+  3. Enforce event capacity ceilings against active registrations (`status: 'CONFIRMED'`) before provisioning sequence numbers.
+  4. Cascading Revocation: When an attendee cancels their registration, the linked `EventCredential` must be atomically updated to `REVOKED`, ensuring entrance turnstiles reject check-in attempts.
+  5. The attendee wallet (`/wallet`) must aggregate both native self-registrations and organizer-imported credentials matching the authenticated user's email, ensuring a comprehensive cross-event pass hub.
+
+### 2.19 Public Catalog Isolation, Zero-Trust Discovery & Abuse Governance (Phase 21)
+- **Lesson**: Exposing public endpoints without strict lifecycle constraints risks leaking confidential draft events, suspended organizations, or personal organizer details. Furthermore, public abuse reporting channels must protect against missing email or empty payloads while providing platform admins with immutable audit records.
+- **Invariant**:
+  1. Public queries (`MongoEventRepository.findPublicEvents` and `findPublicById`) must strictly filter for `status: { $in: ['PUBLISHED', 'REGISTRATION_OPEN', 'EVENT_LIVE'] }`. Any event in `DRAFT`, `SUBMITTED`, `UNDER_REVIEW`, `SUSPENDED`, or `CANCELLED` must return 404 to avoid leaking draft event metadata (IDOR prevention).
+  2. Sanitized Host Profiles: Public host endpoints must never leak phone numbers, password hashes, or internal database tokens. Only verified public brand fields (`organizationName`, `institutionType`, `institutionName`, `bio`, `website`, `logoUrl`, `hostVerificationStatus`) may be exposed.
+  3. Public Abuse Reporting: `EventReportModel` validates minimum description length (10 chars), category enum, and valid email format. Submissions automatically log immutable entries into `audit_logs` (`EVENT_REPORTED`) for platform oversight.
+  4. Test Timeouts under High Concurrency: Long rasterization operations in unit tests under heavy CPU load must explicitly configure timeout boundaries (e.g. 30,000ms) to prevent false-positive failures during full multi-suite regression runs.
 
 
-## 3. Data Preservation Reminders
-- The PostgreSQL database hosted on Supabase contains live event and guest schemas.
-- `drizzle-kit push --force` or raw `DROP TABLE` is strictly prohibited.
-- Preserved asset: `server/assets/ticket_template.png` (289 KB) is the canonical visual template. Do not replace or delete it.
 
 

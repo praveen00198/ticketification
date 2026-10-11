@@ -93,3 +93,15 @@ export const scannerRateLimiter = createRateLimiter({
   max: 180, // 180 scans per minute per scanner IP (3 scans/sec max)
   message: 'Scanner scan limit exceeded. Please wait a moment before scanning again.',
 });
+
+export const exportRateLimiter = createRateLimiter({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10, // 10 export triggers per minute
+  message: 'Export generation rate limit reached. Please wait before enqueuing additional export jobs.',
+});
+
+export const auditLogRateLimiter = createRateLimiter({
+  windowMs: 60 * 1000, // 1 minute
+  max: 60, // 60 queries per minute
+  message: 'Audit log query limit exceeded. Please wait a moment before refreshing.',
+});
