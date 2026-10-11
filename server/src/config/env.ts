@@ -22,6 +22,8 @@ export interface EnvConfig {
   jwtSecret: string;
   // Local Auth Enabled flag
   enableLocalAuth: boolean;
+  // CORS Trusted Origins
+  corsOrigins: string[];
   // Application
   appUrl: string;
   uploadDir: string;
@@ -46,33 +48,67 @@ function validateAndLoadEnv(): EnvConfig {
   const rawJwtSecret = process.env.JWT_SECRET || '';
   const jwtSecret = isProduction ? rawJwtSecret : (rawJwtSecret || 'Ticketification_Default_Secret_2026');
 
-  // Local authentication is enabled by default in development/test or if Supabase is unconfigured,
-  // but in production it requires explicit opt-in via ENABLE_LOCAL_AUTH=true.
-  const enableLocalAuth =
-    process.env.ENABLE_LOCAL_AUTH === 'true' ||
-    (!isProduction && process.env.ENABLE_LOCAL_AUTH !== 'false') ||
-    (!supabaseUrl && !supabaseServiceRoleKey);
+  // In production, local authentication is STRICTLY opt-in via ENABLE_LOCAL_AUTH=true.
+  // Missing Supabase configuration NEVER implicitly enables local authentication in production.
+  // In development and test environments, local auth is enabled by default unless explicitly disabled.
+  const enableLocalAuth = isProduction
+    ? process.env.ENABLE_LOCAL_AUTH === 'true'
+    : process.env.ENABLE_LOCAL_AUTH !== 'false';
+
+  // Parse and validate explicit trusted frontend CORS origins
+  const rawCorsOrigins = [
+    process.env.APP_URL,
+    process.env.FRONTEND_URL,
+    process.env.CORS_ORIGIN,
+    ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : []),
+  ]
+    .filter(Boolean)
+    .map((o) => (o as string).trim().replace(/\/+$/, ''))
+    .filter((o) => o.length > 0);
+
+  const corsOrigins = Array.from(new Set(rawCorsOrigins));
 
   if (isProduction) {
     const missing: string[] = [];
+
+    // 1. Mandatory Application Database
     if (!mongoUri) {
       missing.push('MONGODB_URI (mandatory application database connection)');
     }
-    if (!jwtSecret || jwtSecret === 'Ticketification_Default_Secret_2026' || jwtSecret.length < 32) {
-      missing.push('JWT_SECRET (secure production secret with at least 32 characters required)');
+
+    // 2. Strict Authentication Provider Configuration
+    if (enableLocalAuth) {
+      if (!jwtSecret || jwtSecret === 'Ticketification_Default_Secret_2026' || jwtSecret.length < 32) {
+        missing.push('JWT_SECRET (secure production secret with at least 32 characters required when ENABLE_LOCAL_AUTH=true)');
+      }
+    } else {
+      if (!supabaseUrl) {
+        missing.push('SUPABASE_URL (required authentication provider in production when local auth is disabled)');
+      }
+      if (!supabaseServiceRoleKey) {
+        missing.push('SUPABASE_SERVICE_ROLE_KEY (required production service role key when local auth is disabled)');
+      }
     }
+
+    // 3. Mandatory Explicit CORS Origins for Browser Frontend
+    if (corsOrigins.length === 0) {
+      missing.push('CORS configuration: At least one explicit trusted frontend origin must be configured via APP_URL, FRONTEND_URL, or ALLOWED_ORIGINS in production.');
+    }
+    if (corsOrigins.some((o) => o === '*')) {
+      missing.push('CORS configuration: Wildcard origin "*" is strictly prohibited with credentialed requests in production.');
+    }
+    const invalidOrigins = corsOrigins.filter((o) => !/^https?:\/\//i.test(o));
+    if (invalidOrigins.length > 0) {
+      missing.push(`CORS configuration: Configured origins must include protocol (e.g. https://...): ${invalidOrigins.join(', ')}`);
+    }
+
     if (!databaseUrl) {
       console.warn('ℹ️ [Env] DATABASE_URL is not set. PostgreSQL/Drizzle features will operate in standby mode.');
     }
-    if (!supabaseUrl) {
-      console.warn('⚠️ [Env] SUPABASE_URL is missing in production environment. Storage features will run in standby mode.');
-    }
-    if (!supabaseServiceRoleKey) {
-      console.warn('⚠️ [Env] SUPABASE_SERVICE_ROLE_KEY is missing in production environment.');
-    }
+
     if (missing.length > 0) {
       throw new Error(
-        `[Configuration Error] Critical production environment configuration is missing:\n- ${missing.join('\n- ')}`
+        `[Configuration Error] Critical production environment configuration is missing or invalid:\n- ${missing.join('\n- ')}`
       );
     }
   }
@@ -92,6 +128,7 @@ function validateAndLoadEnv(): EnvConfig {
     // JWT
     jwtSecret,
     enableLocalAuth,
+    corsOrigins,
     // Application
     appUrl: process.env.APP_URL || 'http://localhost:5173',
     uploadDir: process.env.UPLOAD_DIR || 'uploads',

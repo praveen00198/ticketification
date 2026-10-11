@@ -31,7 +31,9 @@ export class AuthService {
   async register(input: RegisterInput): Promise<AuthResponse> {
     const { name, email, password } = input;
     const normalizedEmail = email.trim().toLowerCase();
-    const assignedRole: PlatformRole = this.isApprovedAdmin(normalizedEmail) ? 'ADMIN' : 'USER';
+    // Baseline role for registration is strictly USER.
+    // Administrator privileges must be provisioned through explicit server-controlled bootstrap.
+    const assignedRole: PlatformRole = 'USER';
 
     // 1. If Supabase Auth is configured, use Supabase
     if (supabaseAdmin) {
@@ -174,12 +176,13 @@ export class AuthService {
       try {
         let dbUser = await this.userRepo.findById(data.user.id);
         if (!dbUser) {
-          const initialRole: PlatformRole = this.isApprovedAdmin(normalizedEmail) ? 'ADMIN' : 'USER';
+          // Missing application profile created on login defaults strictly to USER.
+          // Administrator privileges must be provisioned via explicit server-controlled bootstrap.
           dbUser = await this.userRepo.upsert({
             id: data.user.id,
             name: profileName,
             email: normalizedEmail,
-            role: initialRole,
+            role: 'USER',
           });
         }
 

@@ -29,16 +29,6 @@ app.disable('x-powered-by');
 // Enforce standard OWASP security headers on all responses
 app.use(securityHeadersMiddleware);
 
-// Parse explicit trusted origins from configuration
-const rawConfiguredOrigins = [
-  config.env.appUrl,
-  process.env.FRONTEND_URL,
-  process.env.CORS_ORIGIN,
-  ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : []),
-]
-  .filter(Boolean)
-  .map((o) => (o as string).trim().replace(/\/+$/, ''));
-
 // Standard development origins
 const devOrigins = [
   'http://localhost:5173',
@@ -49,14 +39,14 @@ const devOrigins = [
 
 const trustedOrigins = Array.from(
   new Set([
-    ...rawConfiguredOrigins,
+    ...config.env.corsOrigins,
     ...(!config.env.isProduction ? devOrigins : []),
   ])
 ).filter((o) => o !== '*'); // Disallow wildcard with credentials: true
 
 if (config.env.isProduction && trustedOrigins.length === 0) {
-  console.warn(
-    '⚠️ [CORS Warning] No explicit trusted origins configured in production. Set APP_URL, FRONTEND_URL, or ALLOWED_ORIGINS.'
+  throw new Error(
+    '[FATAL: CORS Configuration] At least one explicit trusted frontend origin must be configured in production via APP_URL, FRONTEND_URL, or ALLOWED_ORIGINS.'
   );
 }
 

@@ -56,6 +56,19 @@ async function startServer() {
     process.exit(1);
   }
 
+  // Controlled server-level platform administrator provisioning from allowlist
+  if (config.env.initialAdminEmails.length > 0) {
+    try {
+      const { adminBootstrapService } = await import('./modules/auth/services/admin-bootstrap.service');
+      await adminBootstrapService.bootstrapAllAllowlistedAdmins();
+    } catch (bootstrapErr: any) {
+      console.error(`❌ [AdminBootstrap] Controlled administrator provisioning failed: ${bootstrapErr.message}`);
+      if (config.env.isProduction) {
+        process.exit(1);
+      }
+    }
+  }
+
   const PORT = config.env.port;
   serverInstance = app.listen(PORT, () => {
     console.log(`[Server] Operational console API listening on http://localhost:${PORT}`);

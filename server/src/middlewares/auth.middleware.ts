@@ -99,12 +99,13 @@ export async function authMiddleware(
         const { mongoUserRepository } = await import('../modules/auth/repositories/mongo-user.repository');
         let mongoUser = await mongoUserRepository.findBySupabaseId(user.id);
         if (!mongoUser) {
-          const initialRole: PlatformRole = isApprovedAdmin ? 'ADMIN' : 'USER';
+          // Missing application profiles default strictly to USER.
+          // Administrator privileges can only be provisioned via explicit server-controlled workflows.
           mongoUser = await mongoUserRepository.create({
             supabaseUserId: user.id,
             email,
             name: user.user_metadata?.name || email.split('@')[0] || 'User',
-            platformRole: initialRole,
+            platformRole: 'USER',
             status: 'ACTIVE',
           });
         }
@@ -119,12 +120,11 @@ export async function authMiddleware(
         // Fall back to PostgreSQL when MongoDB is not connected
         let dbUser = await userRepository.findById(user.id);
         if (!dbUser) {
-          const initialRole: PlatformRole = isApprovedAdmin ? 'ADMIN' : 'USER';
           dbUser = await userRepository.upsert({
             id: user.id,
             name: user.user_metadata?.name || email.split('@')[0] || 'User',
             email,
-            role: initialRole,
+            role: 'USER',
           });
         }
         if (!dbUser) {

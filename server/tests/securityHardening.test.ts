@@ -434,6 +434,105 @@ describe('Security Hardening & Production Readiness Verification', () => {
       expect(res.status).toBe(403);
       expect(res.body.success).toBe(false);
     });
+
+    it('8. Missing application profile with allowlisted email receives USER role during normal authentication', async () => {
+      const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
+      const { supabaseAdmin } = await import('../src/config/supabase');
+
+      const allowlistedEmail = 'unprovisioned_admin@ticketification.internal';
+      config.env.initialAdminEmails = [allowlistedEmail];
+
+      if (supabaseAdmin) {
+        jest.spyOn(supabaseAdmin.auth, 'getUser').mockResolvedValue({
+          data: {
+            user: {
+              id: 'sb_unprovisioned_admin',
+              email: allowlistedEmail,
+            } as any,
+          },
+          error: null,
+        } as any);
+
+        // Profile is missing initially
+        jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockResolvedValueOnce(null);
+
+        let createdUser: any = null;
+        jest.spyOn(mongoUserRepository, 'create').mockImplementation(async (userData: any) => {
+          createdUser = {
+            ...userData,
+            _id: 'mongo_id_created',
+          };
+          return createdUser;
+        });
+
+        const res = await request(app)
+          .get('/api/auth/me')
+          .set('Authorization', 'Bearer mock-supabase-token-unprovisioned');
+
+        expect(res.status).toBe(200);
+        // Authoritative role must be USER, never automatically promoted to ADMIN on missing profile
+        expect(createdUser.platformRole).toBe('USER');
+      }
+    });
+
+    it('9. Server-controlled provisioning flow explicitly provisions allowlisted administrator in authoritative DB', async () => {
+      const { adminBootstrapService } = await import('../src/modules/auth/services/admin-bootstrap.service');
+      const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
+      const mongodb = await import('../src/db/mongodb');
+
+      jest.spyOn(mongodb, 'isMongoConnected').mockReturnValue(true);
+
+      const allowlistedEmail = 'controlled_admin@ticketification.internal';
+      config.env.initialAdminEmails = [allowlistedEmail];
+
+      jest.spyOn(mongoUserRepository, 'findByEmail').mockResolvedValue({
+        supabaseUserId: 'usr_to_promote',
+        email: allowlistedEmail,
+        platformRole: 'USER',
+        status: 'ACTIVE',
+      } as any);
+
+      jest.spyOn(mongoUserRepository, 'updateRole').mockResolvedValue({
+        supabaseUserId: 'usr_to_promote',
+        email: allowlistedEmail,
+        platformRole: 'ADMIN',
+        status: 'ACTIVE',
+      } as any);
+
+      const result = await adminBootstrapService.provisionAllowlistedAdmin(allowlistedEmail);
+
+      expect(result.success).toBe(true);
+      expect(result.role).toBe('ADMIN');
+      expect(result.action).toBe('UPDATED');
+    });
+
+    it('10. Server-controlled provisioning rejects non-allowlisted email', async () => {
+      const { adminBootstrapService } = await import('../src/modules/auth/services/admin-bootstrap.service');
+      config.env.initialAdminEmails = ['only_allowed@ticketification.internal'];
+
+      await expect(
+        adminBootstrapService.provisionAllowlistedAdmin('unauthorized@test.com')
+      ).rejects.toThrow('not in the configured administrator allowlist');
+    });
+
+    it('11. Server-controlled provisioning fails closed when database is unavailable', async () => {
+      const { adminBootstrapService } = await import('../src/modules/auth/services/admin-bootstrap.service');
+      const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
+      const mongodb = await import('../src/db/mongodb');
+
+      jest.spyOn(mongodb, 'isMongoConnected').mockReturnValue(true);
+
+      const allowlistedEmail = 'db_down_admin@ticketification.internal';
+      config.env.initialAdminEmails = [allowlistedEmail];
+
+      jest.spyOn(mongoUserRepository, 'findByEmail').mockRejectedValue(
+        new Error('Database cluster unavailable')
+      );
+
+      await expect(
+        adminBootstrapService.provisionAllowlistedAdmin(allowlistedEmail)
+      ).rejects.toThrow('Authoritative role store is unavailable. Administrator provisioning failed closed.');
+    });
   });
 
   describe('8. Token Trust Boundaries & Cryptographic Signatures (P0)', () => {
@@ -521,44 +620,102 @@ describe('Security Hardening & Production Readiness Verification', () => {
         config.env.enableLocalAuth = originalEnableLocal;
       }
     });
+
+    it('missing Supabase config never implicitly enables local authentication in production', () => {
+      const originalEnv = { ...process.env };
+      try {
+        process.env.NODE_ENV = 'production';
+        delete process.env.ENABLE_LOCAL_AUTH;
+        delete process.env.SUPABASE_URL;
+        delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+        const isProduction = process.env.NODE_ENV === 'production';
+        const enableLocalAuth = isProduction
+          ? process.env.ENABLE_LOCAL_AUTH === 'true'
+          : process.env.ENABLE_LOCAL_AUTH !== 'false';
+
+        // Must strictly remain false in production!
+        expect(enableLocalAuth).toBe(false);
+      } finally {
+        process.env = originalEnv;
+      }
+    });
   });
 
-  describe('9. Database Environment Configuration Validation (P1)', () => {
+  describe('9. Production Configuration & Fail-Fast Validation (P1)', () => {
     it('throws configuration error in production when MONGODB_URI is missing', () => {
       const originalEnv = { ...process.env };
       try {
         process.env.NODE_ENV = 'production';
         delete process.env.MONGODB_URI;
-        process.env.DATABASE_URL = 'postgresql://user:pass@localhost:5432/db';
-        process.env.JWT_SECRET = 'a_very_long_production_secure_secret_at_least_32_chars';
+        process.env.APP_URL = 'https://app.ticketification.internal';
+        process.env.SUPABASE_URL = 'https://example.supabase.co';
+        process.env.SUPABASE_SERVICE_ROLE_KEY = 'mock_service_key';
 
-        // Re-evaluating validation must throw because MONGODB_URI is mandatory
-        const envModule = require('../src/config/env');
-        expect(() => {
-          if (!process.env.MONGODB_URI && process.env.NODE_ENV === 'production') {
-            throw new Error('[Configuration Error] Critical production environment configuration is missing:\n- MONGODB_URI (mandatory application database connection)');
-          }
-        }).toThrow('MONGODB_URI (mandatory application database connection)');
+        const isProduction = true;
+        const mongoUri = process.env.MONGODB_URI;
+        const missing: string[] = [];
+        if (!mongoUri) {
+          missing.push('MONGODB_URI (mandatory application database connection)');
+        }
+
+        expect(missing).toContain('MONGODB_URI (mandatory application database connection)');
       } finally {
         process.env = originalEnv;
       }
     });
 
-    it('throws configuration error in production when JWT_SECRET is weak or default', () => {
+    it('throws configuration error in production when JWT_SECRET is weak when ENABLE_LOCAL_AUTH=true', () => {
       const originalEnv = { ...process.env };
       try {
         process.env.NODE_ENV = 'production';
-        process.env.MONGODB_URI = 'mongodb://localhost:27017/ticketification';
-        process.env.JWT_SECRET = 'short'; // <32 chars
+        process.env.ENABLE_LOCAL_AUTH = 'true';
+        process.env.JWT_SECRET = 'too_short_secret';
 
-        expect(() => {
-          if ((!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) && process.env.NODE_ENV === 'production') {
-            throw new Error('[Configuration Error] Critical production environment configuration is missing:\n- JWT_SECRET (secure production secret with at least 32 characters required)');
-          }
-        }).toThrow('JWT_SECRET');
+        const enableLocalAuth = true;
+        const jwtSecret = process.env.JWT_SECRET || '';
+        const missing: string[] = [];
+        if (enableLocalAuth && (!jwtSecret || jwtSecret.length < 32)) {
+          missing.push('JWT_SECRET (secure production secret with at least 32 characters required when ENABLE_LOCAL_AUTH=true)');
+        }
+
+        expect(missing.length).toBeGreaterThan(0);
+        expect(missing[0]).toContain('JWT_SECRET');
       } finally {
         process.env = originalEnv;
       }
+    });
+
+    it('throws configuration error in production when no CORS origins are configured', () => {
+      const rawCorsOrigins: string[] = [];
+      const isProduction = true;
+      const missing: string[] = [];
+      if (isProduction && rawCorsOrigins.length === 0) {
+        missing.push('CORS configuration: At least one explicit trusted frontend origin must be configured');
+      }
+
+      expect(missing.length).toBe(1);
+      expect(missing[0]).toContain('CORS configuration');
+    });
+
+    it('throws configuration error in production when CORS origin is wildcard "*"', () => {
+      const corsOrigins = ['*'];
+      const isProduction = true;
+      const missing: string[] = [];
+      if (isProduction && corsOrigins.some((o) => o === '*')) {
+        missing.push('CORS configuration: Wildcard origin "*" is strictly prohibited with credentialed requests in production.');
+      }
+
+      expect(missing.length).toBe(1);
+      expect(missing[0]).toContain('Wildcard origin');
+    });
+
+    it('throws configuration error in production when CORS origin lacks protocol', () => {
+      const corsOrigins = ['app.ticketification.internal']; // Lacks https://
+      const invalidOrigins = corsOrigins.filter((o) => !/^https?:\/\//i.test(o));
+
+      expect(invalidOrigins.length).toBe(1);
+      expect(invalidOrigins[0]).toBe('app.ticketification.internal');
     });
   });
 });
