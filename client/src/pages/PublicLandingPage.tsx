@@ -160,6 +160,7 @@ export const PublicLandingPage: React.FC<PublicLandingPageProps> = ({
   };
 
   const activeCred = CREDENTIAL_PREVIEWS[activeCredIndex];
+  const featuredEvent = events && events.length > 0 ? events[0] : null;
 
   return (
     <div className="min-h-screen bg-[#FAFAF9] text-[#111827] font-sans selection:bg-emerald-100 selection:text-emerald-900 relative overflow-hidden">
@@ -389,28 +390,42 @@ export const PublicLandingPage: React.FC<PublicLandingPageProps> = ({
             </div>
           </div>
 
-          {/* Right Column: Hero Visual Pass Card Mockup */}
+          {/* Right Column: Hero Visual Pass Card */}
           <div className="lg:col-span-5 relative flex justify-center lg:justify-end">
             <div className="relative z-10 w-full max-w-sm bg-white rounded-2xl border border-stone-200/90 shadow-xl shadow-stone-900/5 overflow-hidden transition-all">
               {/* Header */}
               <div className="p-4 pb-2 flex items-center justify-between border-b border-stone-100">
                 <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
-                  Verified Event
+                  {featuredEvent ? 'Featured Gathering' : 'Sample Gathering Preview'}
                 </span>
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Live Registration
+                  {featuredEvent ? 'Live Registration' : 'Template Preview'}
                 </span>
               </div>
 
               {/* Banner Graphic */}
               <div className="p-4 pb-3">
-                <div className="w-full h-32 rounded-xl overflow-hidden relative shadow-inner bg-gradient-to-r from-emerald-600 via-teal-600 to-stone-800 flex items-center justify-center p-4">
-                  <div className="text-center text-white space-y-1">
-                    <p className="text-[10px] uppercase font-bold tracking-widest text-emerald-200">Flagship Gathering</p>
-                    <p className="text-base font-extrabold tracking-tight">AI & Cloud Builders 2026</p>
+                {featuredEvent?.bannerUrl ? (
+                  <div className="w-full h-32 rounded-xl overflow-hidden relative shadow-inner bg-stone-100">
+                    <img
+                      src={featuredEvent.bannerUrl}
+                      alt={featuredEvent.name}
+                      className="w-full h-full object-cover"
+                    />
                   </div>
-                </div>
+                ) : (
+                  <div className="w-full h-32 rounded-xl overflow-hidden relative shadow-inner bg-gradient-to-r from-emerald-600 via-teal-600 to-stone-800 flex items-center justify-center p-4">
+                    <div className="text-center text-white space-y-1">
+                      <p className="text-[10px] uppercase font-bold tracking-widest text-emerald-200">
+                        {featuredEvent ? featuredEvent.eventType.replace('_', ' ') : 'Illustrative Showcase'}
+                      </p>
+                      <p className="text-base font-extrabold tracking-tight line-clamp-1">
+                        {featuredEvent ? featuredEvent.name : 'AI & Cloud Builders 2026'}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Event Details */}
@@ -418,23 +433,23 @@ export const PublicLandingPage: React.FC<PublicLandingPageProps> = ({
                 <div className="space-y-1 text-xs text-stone-600">
                   <div className="flex items-center gap-1.5">
                     <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <span>Convention Center · San Francisco, CA</span>
+                    <span>{featuredEvent ? venueLabel(featuredEvent) : 'Convention Center · San Francisco, CA'}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <span>Oct 2–4, 2026 · 09:00 AM PST</span>
+                    <span>{featuredEvent ? formatDate(featuredEvent.schedule?.startAt) : 'Oct 2–4, 2026 · 09:00 AM PST'}</span>
                   </div>
                 </div>
 
                 <div className="pt-2 border-t border-stone-100 flex items-center justify-between">
                   <span className="inline-flex items-center text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200/50">
-                    Free Attendee Pass
+                    {featuredEvent ? `${featuredEvent.credentialTerminology || 'Pass'}` : 'Illustrative Pass'}
                   </span>
                   <button
-                    onClick={() => navigate('/explore')}
+                    onClick={() => featuredEvent ? navigate(`/events/${featuredEvent.id}/public`) : navigate('/explore')}
                     className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1"
                   >
-                    View Details
+                    {featuredEvent ? 'View Event' : 'Explore Catalog'}
                     <ArrowRight className="w-3 h-3" />
                   </button>
                 </div>
@@ -739,16 +754,21 @@ export const PublicLandingPage: React.FC<PublicLandingPageProps> = ({
               <span className="text-[#10B981]">Rendered On-The-Fly.</span>
             </h2>
             <p className="text-sm text-stone-600 leading-relaxed">
-              Every pass is rendered on-the-fly with single-use cryptographic tokens. High-precision Sharp rasterization prevents ticket counterfeiting and screenshot reuse.
+              The interactive preview below demonstrates how the server-side Sharp rasterization engine renders tamper-proof visual credentials with single-use cryptographic QR tokens.
             </p>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center max-w-5xl mx-auto">
             {/* Left: Select Archetype (5 cols) */}
             <div className="lg:col-span-5 space-y-3">
-              <p className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-2">
-                Select Credential Archetype
-              </p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-bold uppercase tracking-wider text-stone-500">
+                  Template Archetypes
+                </p>
+                <span className="text-[10px] font-semibold text-stone-400 bg-stone-100 px-2 py-0.5 rounded">
+                  Illustrative Previews
+                </span>
+              </div>
 
               {CREDENTIAL_PREVIEWS.map((item, idx) => {
                 const isActive = activeCredIndex === idx;
@@ -804,16 +824,21 @@ export const PublicLandingPage: React.FC<PublicLandingPageProps> = ({
                       Ticketification
                     </span>
                   </div>
-                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase shadow-sm ${activeCred.badgeColor}`}>
-                    {activeCred.badgeText}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-amber-50 text-amber-800 border border-amber-200">
+                      SAMPLE PREVIEW
+                    </span>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase shadow-sm ${activeCred.badgeColor}`}>
+                      {activeCred.badgeText}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Attendee Info */}
                 <div className="px-6 pt-4 pb-3 space-y-1">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
-                      EVENT ADMISSION PASS
+                      ILLUSTRATIVE CREDENTIAL MOCKUP
                     </span>
                     <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 font-mono">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, CheckCircle2, AlertCircle, Loader2, Sparkles, Ticket, ShieldCheck, LogIn, UserPlus } from 'lucide-react';
 import { attendeeApi, RegisterEventDTO } from '../../api/attendee';
+import { getStoredAuthToken } from '../../api/client';
 import { useNavigate } from 'react-router-dom';
 
 interface EventRegistrationModalProps {
@@ -23,7 +24,7 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
   onSuccess,
 }) => {
   const navigate = useNavigate();
-  const token = localStorage.getItem('admin_token');
+  const token = getStoredAuthToken();
 
   const [formData, setFormData] = useState<RegisterEventDTO>({
     phone: '',

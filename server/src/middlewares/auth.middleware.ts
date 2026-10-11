@@ -40,9 +40,12 @@ export async function authMiddleware(
     const { verifyJwtToken } = await import('../utils/local-auth');
     const localPayload = verifyJwtToken(token);
     if (localPayload && localPayload.id) {
-      const { UserModel } = await import('../db/mongo/models/user.model');
-      const mongoUser = await UserModel.findOne({ supabaseUserId: localPayload.id }).exec();
-      if (mongoUser && mongoUser.status !== 'SUSPENDED') {
+      const { mongoUserRepository } = await import('../modules/auth/repositories/mongo-user.repository');
+      const mongoUser = await mongoUserRepository.findBySupabaseId(localPayload.id);
+      if (mongoUser) {
+        if (mongoUser.status === 'SUSPENDED') {
+          return next(new AuthenticationError('Account is suspended. Please contact platform administrators.'));
+        }
         req.user = {
           id: mongoUser.supabaseUserId,
           email: mongoUser.email,

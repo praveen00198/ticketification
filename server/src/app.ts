@@ -19,6 +19,7 @@ import sharp from 'sharp';
 import { logMemory } from './utils/memory-logger';
 
 import { securityHeadersMiddleware } from './middlewares/security-headers.middleware';
+import { authMiddleware, AuthenticatedRequest } from './middlewares/auth.middleware';
 
 const app = express();
 
@@ -28,28 +29,61 @@ app.disable('x-powered-by');
 // Enforce standard OWASP security headers on all responses
 app.use(securityHeadersMiddleware);
 
-const allowedOrigins = [
+// Parse explicit trusted origins from configuration
+const rawConfiguredOrigins = [
   config.env.appUrl,
+  process.env.FRONTEND_URL,
+  process.env.CORS_ORIGIN,
+  ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : []),
+]
+  .filter(Boolean)
+  .map((o) => (o as string).trim().replace(/\/+$/, ''));
+
+// Standard development origins
+const devOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
-  process.env.CORS_ORIGIN,
-].filter(Boolean) as string[];
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000',
+];
+
+const trustedOrigins = Array.from(
+  new Set([
+    ...rawConfiguredOrigins,
+    ...(!config.env.isProduction ? devOrigins : []),
+  ])
+).filter((o) => o !== '*'); // Disallow wildcard with credentials: true
+
+if (config.env.isProduction && trustedOrigins.length === 0) {
+  console.warn(
+    '⚠️ [CORS Warning] No explicit trusted origins configured in production. Set APP_URL, FRONTEND_URL, or ALLOWED_ORIGINS.'
+  );
+}
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (e.g. native apps, curl, or server-to-server health checks)
+      // Allow requests with no origin (e.g. mobile apps, curl, or server-to-server health checks)
       if (!origin) return callback(null, true);
 
-      const isAllowed =
-        allowedOrigins.includes(origin) ||
-        origin.endsWith('.vercel.app') ||
-        process.env.CORS_ORIGIN === '*' ||
-        !config.env.isProduction;
+      const normalizedOrigin = origin.replace(/\/+$/, '');
 
-      if (isAllowed) {
+      // In non-production, permit localhost and configured dev origins
+      if (!config.env.isProduction) {
+        if (
+          trustedOrigins.includes(normalizedOrigin) ||
+          normalizedOrigin.startsWith('http://localhost:') ||
+          normalizedOrigin.startsWith('http://127.0.0.1:')
+        ) {
+          return callback(null, true);
+        }
+      }
+
+      // In production, strictly match against explicit trusted origins
+      if (trustedOrigins.includes(normalizedOrigin)) {
         return callback(null, true);
       }
+
       return callback(new Error('Blocked by CORS policy: Origin not allowed'));
     },
     credentials: true,
@@ -99,38 +133,41 @@ app.use('/api/credentials', publicCredentialRouter);
 app.use('/api/attendee', attendeeRoutes);
 app.use('/api/public', publicEventRouter);
 
-// Health check endpoint
+// Minimal public health check endpoint for load balancers & uptime monitors
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'OK', system: 'QR Ticket Generation System', timestamp: new Date().toISOString() });
+  res.json({ status: 'OK', system: 'Ticketification API', timestamp: new Date().toISOString() });
 });
 
-// Memory diagnostics endpoint (production-safe)
-app.get('/api/health/memory', (_req, res) => {
+// Protected diagnostic endpoint (strictly accessible to authorized platform administrators)
+app.get('/api/health/memory', authMiddleware, (req: AuthenticatedRequest, res) => {
+  if (!req.user || (req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN')) {
+    res.status(403).json({
+      success: false,
+      error: {
+        code: 'FORBIDDEN',
+        message: 'Administrative authorization required for internal system diagnostics.',
+      },
+    });
+    return;
+  }
+
   const mem = process.memoryUsage();
   const toMB = (bytes: number) => (bytes / 1024 / 1024).toFixed(1);
   logMemory('health_check_endpoint');
+
   res.json({
+    status: 'OK',
     memory: {
       rss: `${toMB(mem.rss)}MB`,
       heapUsed: `${toMB(mem.heapUsed)}MB`,
       heapTotal: `${toMB(mem.heapTotal)}MB`,
-      external: `${toMB(mem.external)}MB`,
-      arrayBuffers: `${toMB(mem.arrayBuffers)}MB`,
       rssRaw: mem.rss,
       heapUsedRaw: mem.heapUsed,
     },
     sharp: {
-      cache: sharp.cache(),
       concurrency: sharp.concurrency(),
-      versions: sharp.versions,
     },
-    process: {
-      pid: process.pid,
-      uptime: `${(process.uptime() / 60).toFixed(1)} minutes`,
-      nodeVersion: process.version,
-      platform: process.platform,
-      arch: process.arch,
-    },
+    uptime: `${(process.uptime() / 60).toFixed(1)} minutes`,
     timestamp: new Date().toISOString(),
   });
 });

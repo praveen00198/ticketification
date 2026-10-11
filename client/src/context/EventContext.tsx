@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { EventItem } from '../types';
 import { eventsApi } from '../api/events';
+import { getStoredAuthToken } from '../api/client';
 
 interface EventContextType {
   events: EventItem[];
@@ -68,7 +69,7 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem('admin_token');
+    const token = getStoredAuthToken();
     if (token) {
       refreshEvents();
     } else {

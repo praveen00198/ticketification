@@ -108,4 +108,140 @@ describe('Security Hardening & Production Readiness Verification', () => {
       }
     });
   });
+
+  describe('4. Diagnostic Endpoints & Internal Telemetry Protection', () => {
+    it('public GET /api/health returns minimal status without leaking internal metrics', async () => {
+      const res = await request(app).get('/api/health');
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('OK');
+      expect(res.body.timestamp).toBeDefined();
+      expect(res.body.memory).toBeUndefined();
+      expect(res.body.process).toBeUndefined();
+    });
+
+    it('rejects unauthenticated access to /api/health/memory with 401', async () => {
+      const res = await request(app).get('/api/health/memory');
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('rejects non-admin authenticated users from /api/health/memory with 403', async () => {
+      const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
+      const { createJwtToken } = await import('../src/utils/local-auth');
+
+      jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockResolvedValue({
+        supabaseUserId: 'usr_regular_diag_test',
+        email: 'regular_diag@test.com',
+        name: 'Regular User',
+        platformRole: 'USER',
+        status: 'ACTIVE',
+      } as any);
+
+      const token = createJwtToken({
+        id: 'usr_regular_diag_test',
+        email: 'regular_diag@test.com',
+        role: 'USER',
+      });
+
+      const res = await request(app)
+        .get('/api/health/memory')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(403);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('allows platform administrators to inspect /api/health/memory', async () => {
+      const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
+      const { createJwtToken } = await import('../src/utils/local-auth');
+
+      jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockResolvedValue({
+        supabaseUserId: 'usr_admin_diag_test',
+        email: 'admin_diag@test.com',
+        name: 'Admin User',
+        platformRole: 'ADMIN',
+        status: 'ACTIVE',
+      } as any);
+
+      const token = createJwtToken({
+        id: 'usr_admin_diag_test',
+        email: 'admin_diag@test.com',
+        role: 'ADMIN',
+      });
+
+      const res = await request(app)
+        .get('/api/health/memory')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('OK');
+      expect(res.body.memory).toBeDefined();
+      expect(res.body.memory.rss).toBeDefined();
+      expect(res.body.sharp).toBeDefined();
+      expect(res.body.process).toBeUndefined();
+    });
+  });
+
+  describe('5. Production CORS Invariants', () => {
+    it('blocks untrusted origins including arbitrary .vercel.app preview URLs in production', async () => {
+      const originalIsProd = config.env.isProduction;
+      try {
+        config.env.isProduction = true;
+
+        const res = await request(app)
+          .get('/api/health')
+          .set('Origin', 'https://malicious-attacker-preview.vercel.app');
+
+        expect(res.headers['access-control-allow-origin']).toBeUndefined();
+      } finally {
+        config.env.isProduction = originalIsProd;
+      }
+    });
+
+    it('permits configured trusted appUrl origin in production', async () => {
+      const originalIsProd = config.env.isProduction;
+      try {
+        config.env.isProduction = true;
+
+        const res = await request(app)
+          .get('/api/health')
+          .set('Origin', config.env.appUrl);
+
+        expect(res.headers['access-control-allow-origin']).toBe(config.env.appUrl);
+        expect(res.headers['access-control-allow-credentials']).toBe('true');
+      } finally {
+        config.env.isProduction = originalIsProd;
+      }
+    });
+  });
+
+  describe('6. Suspended Account Access Rejection', () => {
+    it('rejects authentication token if user status is SUSPENDED', async () => {
+      const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
+      const { createJwtToken } = await import('../src/utils/local-auth');
+
+      jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockResolvedValue({
+        supabaseUserId: 'usr_suspended_test',
+        email: 'suspended_user@test.com',
+        name: 'Suspended User',
+        platformRole: 'USER',
+        status: 'SUSPENDED',
+      } as any);
+
+      const token = createJwtToken({
+        id: 'usr_suspended_test',
+        email: 'suspended_user@test.com',
+        role: 'USER',
+      });
+
+      const res = await request(app)
+        .get('/api/auth/me')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.message).toContain('Account is suspended');
+    });
+  });
 });

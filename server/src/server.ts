@@ -44,8 +44,16 @@ async function startServer() {
     try {
       await connectMongoDB();
     } catch (err: any) {
-      console.warn('⚠️ [MongoDB] Startup connection warning:', err.message);
+      if (config.env.isProduction) {
+        console.error(`[FATAL] Mandatory production MongoDB connection failed: ${err.message}`);
+        process.exit(1);
+      } else {
+        console.warn('⚠️ [MongoDB] Development connection standby / warning:', err.message);
+      }
     }
+  } else if (config.env.isProduction) {
+    console.error('[FATAL] MONGODB_URI is mandatory for production operation.');
+    process.exit(1);
   }
 
   const PORT = config.env.port;

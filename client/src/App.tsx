@@ -2,7 +2,7 @@ import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { Layout } from './components/layout/Layout';
 import { EventProvider } from './context/EventContext';
-import { apiClient } from './api/client';
+import { apiClient, getStoredAuthToken, setStoredAuthToken, clearStoredAuthToken } from './api/client';
 import { HostProfileData } from './api/host';
 
 // ─── Eagerly loaded (critical path — needed immediately on first paint) ───────
@@ -40,7 +40,7 @@ const PageLoader: React.FC = () => (
 
 const AppContent: React.FC = () => {
   const navigate = useNavigate();
-  const [token, setToken] = useState<string | null>(localStorage.getItem('admin_token'));
+  const [token, setToken] = useState<string | null>(getStoredAuthToken());
   const [user, setUser] = useState<{
     id?: string;
     name: string;
@@ -73,13 +73,13 @@ const AppContent: React.FC = () => {
   }, [token]);
 
   const handleLoginSuccess = (newToken: string, userData: { id?: string; name: string; email: string; role?: string; eventName?: string }) => {
-    localStorage.setItem('admin_token', newToken);
+    setStoredAuthToken(newToken);
     setToken(newToken);
     setUser(userData);
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('admin_token');
+    clearStoredAuthToken();
     localStorage.removeItem('selected_event_id');
     setToken(null);
     setUser(null);

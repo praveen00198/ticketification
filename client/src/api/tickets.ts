@@ -1,4 +1,4 @@
-import { apiClient, API_BASE_URL } from './client';
+import { apiClient, API_BASE_URL, getStoredAuthToken } from './client';
 
 export interface TicketListItem {
   id: string;
@@ -70,7 +70,7 @@ export const ticketsApi = {
   },
 
   async downloadTicketsZip(eventId: string): Promise<Blob> {
-    const token = localStorage.getItem('admin_token');
+    const token = getStoredAuthToken();
     const url = `${API_BASE_URL}/tickets/events/${eventId}/export-zip`;
     const res = await fetch(url, {
       method: 'GET',

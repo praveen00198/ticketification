@@ -29,17 +29,28 @@ export function verifyPassword(password: string, stored: string): boolean {
   }
 }
 
+function getEffectiveSecret(customSecret?: string): string {
+  if (customSecret) return customSecret;
+  if (config.env.jwtSecret) return config.env.jwtSecret;
+  if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
+  if (config.env.isProduction) {
+    throw new Error('[Security Invariant] JWT_SECRET must be configured in production environment.');
+  }
+  return 'Ticketification_Default_Secret_2026';
+}
+
 /**
  * Creates a signed HS256 JWT token using Node.js native HMAC.
  */
 export function createJwtToken(
   payload: Record<string, any>,
-  secret: string = config.env.jwtSecret || process.env.JWT_SECRET || 'Ticketification_Default_Secret_2026'
+  secret?: string
 ): string {
+  const signingSecret = getEffectiveSecret(secret);
   const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
   const exp = Math.floor(Date.now() / 1000) + 86400 * 7; // 7 days expiration
   const body = Buffer.from(JSON.stringify({ ...payload, exp, iat: Math.floor(Date.now() / 1000) })).toString('base64url');
-  const signature = crypto.createHmac('sha256', secret).update(`${header}.${body}`).digest('base64url');
+  const signature = crypto.createHmac('sha256', signingSecret).update(`${header}.${body}`).digest('base64url');
   return `${header}.${body}.${signature}`;
 }
 
@@ -49,13 +60,14 @@ export function createJwtToken(
  */
 export function verifyJwtToken(
   token: string,
-  secret: string = config.env.jwtSecret || process.env.JWT_SECRET || 'Ticketification_Default_Secret_2026'
+  secret?: string
 ): Record<string, any> | null {
   try {
+    const signingSecret = getEffectiveSecret(secret);
     const parts = token.split('.');
     if (parts.length !== 3) return null;
     const [header, body, signature] = parts;
-    const expectedSig = crypto.createHmac('sha256', secret).update(`${header}.${body}`).digest('base64url');
+    const expectedSig = crypto.createHmac('sha256', signingSecret).update(`${header}.${body}`).digest('base64url');
     
     const sigBuf = Buffer.from(signature);
     const expBuf = Buffer.from(expectedSig);

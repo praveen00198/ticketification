@@ -41,8 +41,27 @@ export const apiClient = axios.create({
   },
 });
 
+/**
+ * Global authentication token helpers.
+ * Reads canonical 'ticketification_token' with seamless backward-compatible fallback to legacy 'admin_token'.
+ */
+export function getStoredAuthToken(): string | null {
+  return localStorage.getItem('ticketification_token') || localStorage.getItem('admin_token');
+}
+
+export function setStoredAuthToken(token: string): void {
+  localStorage.setItem('ticketification_token', token);
+  // Maintain backward compatibility for legacy callers
+  localStorage.setItem('admin_token', token);
+}
+
+export function clearStoredAuthToken(): void {
+  localStorage.removeItem('ticketification_token');
+  localStorage.removeItem('admin_token');
+}
+
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('admin_token');
+  const token = getStoredAuthToken();
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -54,7 +73,7 @@ apiClient.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       // Cleanly evict expired authentication token from browser storage
-      localStorage.removeItem('admin_token');
+      clearStoredAuthToken();
     }
 
     let message = error.response?.data?.error?.message;
