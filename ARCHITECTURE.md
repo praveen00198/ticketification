@@ -63,7 +63,86 @@ flowchart TD
 
 ---
 
-## 2. Infrastructure Separation of Concerns
+## 2. Layered Backend Architecture & Separation of Responsibilities
+
+Ticketification enforces a strict four-layer architecture across all backend modules to maintain modularity, testability, and clear separation of concerns.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            PRESENTATION LAYER                               │
+│  - Express Route Declarations & Route Middleware Composition                 │
+│  - Controllers: Request parsing, DTO binding, HTTP Status/JSON Mapping      │
+│  - Request Validators: Boundary schema checks (Zod / Express Validator)     │
+│  * Invariant: Zero business logic; zero direct database queries              │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │ calls
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        APPLICATION & BUSINESS LAYER                         │
+│  - Domain Services: Business rules, state machine transitions, transactions  │
+│  - Authorization Evaluation: Server-side zero-trust permission guards       │
+│  - Shared Workflows: Reusable by HTTP handlers, background workers & jobs   │
+│  * Invariant: Never depends on Express req/res; no direct Mongoose queries   │
+└──────────────────┬──────────────────────────────────────┬───────────────────┘
+                   │ queries                              │ delegates
+                   ▼                                      ▼
+┌──────────────────────────────────────┐  ┌───────────────────────────────────┐
+│          DATA ACCESS LAYER           │  │       INFRASTRUCTURE LAYER        │
+│  - Domain Repositories               │  │  - Database Connections (Mongo,   │
+│  - Encapsulates Mongoose/Drizzle ORM │  │    PostgreSQL / Drizzle)          │
+│  - Enforces explicit sort/pagination │  │  - Supabase Storage & Auth SDK    │
+│  - Query projections & index hints   │  │  - Sharp Native Rasterization     │
+│  * Invariant: Pure data persistence  │  │  - OWASP Headers & Rate Limiting  │
+└──────────────────────────────────────┘  └───────────────────────────────────┘
+```
+
+### 2.1 The Four Backend Layers
+
+1. **Presentation Layer (`src/modules/*/routes/`, `src/modules/*/controllers/`)**:
+   - **Routes**: Expose HTTP endpoints, bind path parameters, and compose auth and role middleware guards.
+   - **Controllers**: Responsible strictly for receiving HTTP requests, extracting path/query/body parameters, delegating execution to the appropriate domain service, and returning structured JSON responses with standard HTTP status codes (`200 OK`, `201 Created`, `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`, `409 Conflict`).
+   - **Boundary Invariant**: Controllers MUST NOT contain business rules, database queries, or direct storage interactions.
+
+2. **Application & Business Service Layer (`src/modules/*/services/`)**:
+   - **Services**: Orchestrate domain workflows, enforce invariants (e.g., event status transitions, capacity limits, single-use check-in status checks, user onboarding gates), and execute multi-entity operations.
+   - **Decoupled Architecture**: Domain services never receive or reference Express `Request` or `Response` objects. They accept typed arguments and return domain entity DTOs or throw standard domain errors (`ValidationError`, `NotFoundError`, `AuthenticationError`, `AuthorizationError`, `ConflictError`).
+   - **Reusable Across Entry Points**: Workflows are shared between HTTP controllers and background queue workers without logic duplication.
+
+3. **Data Access Layer (`src/modules/*/repositories/`)**:
+   - **Repositories**: Own all persistence interactions and database query syntax. All Mongoose models (`UserModel`, `EventModel`, `EventRegistrationModel`, `EventJobModel`) and Drizzle schemas are strictly encapsulated within their respective repository implementations.
+   - **Sorting & Pagination Invariant**: Every collection query returning multiple records enforces an explicit, deterministic sort order (e.g. `{ createdAt: -1 }`, `{ sequenceNumber: 1 }`).
+   - **Isolation**: Domain services interact only with repository interfaces (`mongoUserRepository`, `mongoEventRepository`, `mongoEventRegistrationRepository`, `mongoEventJobRepository`, `ticketRepository`), completely abstracting database-specific query operators (`$set`, `$inc`, `findOneAndUpdate`).
+
+4. **Infrastructure Layer (`src/db/`, `src/middlewares/`, `src/utils/`, external SDKs)**:
+   - Encapsulates third-party and platform dependencies: MongoDB connection pooling (`db/mongodb.ts`), PostgreSQL Drizzle client (`db/index.ts`), Supabase Storage (`supabase-storage.service.ts`), Sharp rasterization engine, OWASP security headers (`security-headers.middleware.ts`), and sliding-window rate limiting (`rate-limit.middleware.ts`).
+   - Keeps provider-specific details and secrets isolated from business models.
+
+### 2.2 Business Domain Boundaries
+
+Backend capabilities are organized cleanly by business domain:
+- **`auth`**: Identity resolution, local password hashing (`bcrypt`), Supabase JWT verification, session tokens, and authentication middleware.
+- **`users`**: User profiles, workspace statuses, and organizer onboarding credentials.
+- **`events`**: Event lifecycle management, 13 event types, venue configurations, registration workflows, public event catalog, and storage governance.
+- **`guests`**: Attendee lists, bulk Excel/CSV parsing and validation, guest persistence.
+- **`tickets` / Credentials**: Credential abstraction, SVG template overlay binding, QR code generation, Sharp PNG rasterization, and Supabase Storage asset synchronization.
+- **`verification`**: Zero-PII 64-character token lookup, atomic single-use check-in status transitions (`findOneAndUpdate`), and gate volunteer scan audit logs.
+- **`dashboard` / `host`**: Aggregated event statistics, active attendees, check-in velocity, and organizer workspace analytics.
+
+### 2.3 Strict Dependency Direction Rules
+
+```
+Routes ──► Controllers ──► Application Services ──► Repositories ──► Database (MongoDB / PG)
+                               │
+                               └──► Infrastructure (Storage, Sharp, Mailer)
+```
+- **Downward Dependency Flow**: Higher layers may depend on lower layers, but lower layers NEVER depend on higher layers.
+- **No Controller Leakage**: Controllers cannot bypass services to query repositories or databases directly.
+- **No Service Leakage**: Services cannot inspect Express request headers, cookies, or response writers.
+- **No Persistence in Domain Logic**: Services cannot execute inline `Model.find()`, `Model.create()`, or `Model.updateOne()`. All persistence calls go through repositories.
+
+---
+
+## 3. Infrastructure Separation of Concerns
 
 The architecture strictly delineates responsibility across three dedicated providers:
 
@@ -93,7 +172,7 @@ The architecture strictly delineates responsibility across three dedicated provi
 
 ---
 
-## 3. Authentication vs. Authorization Flow
+## 4. Authentication vs. Authorization Flow
 
 ### 3.1 The Authentication Security Boundary
 Authentication confirms identity (*"Who is this user?"*). Authorization governs access (*"Is this user allowed to perform this operation on this resource?"*). 
@@ -152,7 +231,7 @@ sequenceDiagram
 
 ---
 
-## 4. Identity & Relationship Models (Target MongoDB Schemas)
+## 5. Identity & Relationship Models (Target MongoDB Schemas)
 
 ### 4.1 Global User Model (`users`)
 ```typescript
@@ -372,7 +451,7 @@ interface EvaluationDocument {
 
 ---
 
-## 5. Storage Hierarchy & Direct Upload Architecture
+## 6. Storage Hierarchy & Direct Upload Architecture
 
 All binary data is stored in **Supabase Storage**. The backend avoids acting as a bandwidth proxy for large files:
 
@@ -417,7 +496,7 @@ sequenceDiagram
 
 ---
 
-## 6. High-Performance QR Verification & Atomic Check-In
+## 7. High-Performance QR Verification & Atomic Check-In
 
 ### 6.1 QR Code Token Specification
 - The QR code contains ONLY a secure verification URL:
@@ -456,7 +535,7 @@ sequenceDiagram
 
 ---
 
-## 7. Asynchronous Background Job & Worker Architecture
+## 8. Asynchronous Background Job & Worker Architecture
 
 Any operation processing more than 50 records MUST execute asynchronously:
 
@@ -483,7 +562,7 @@ Any operation processing more than 50 records MUST execute asynchronously:
 
 ---
 
-## 8. Distributed Rate Limiting & Abuse Prevention
+## 9. Distributed Rate Limiting & Abuse Prevention
 
 The platform transitions from an in-memory `Map` to distributed, token-bucket rate limiting:
 
@@ -497,7 +576,7 @@ The platform transitions from an in-memory `Map` to distributed, token-bucket ra
 
 ---
 
-## 9. Migration & Evolutionary Strategy
+## 10. Migration & Evolutionary Strategy
 
 The codebase currently runs on a legacy PostgreSQL (Supabase) + Drizzle ORM implementation. The target architecture establishes **MongoDB for application entities and RBAC**, while preserving Supabase Auth and Supabase Storage.
 

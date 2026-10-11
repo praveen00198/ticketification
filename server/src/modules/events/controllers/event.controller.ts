@@ -228,7 +228,7 @@ export class EventController {
         success: true,
         message: 'Event banner uploaded successfully.',
         data: {
-          bannerUrl: result.publicUrl,
+          bannerUrl: result.bannerUrl,
           storagePath: result.storagePath,
         },
       });
