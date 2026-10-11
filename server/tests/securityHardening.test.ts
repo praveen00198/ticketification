@@ -475,7 +475,116 @@ describe('Security Hardening & Production Readiness Verification', () => {
       }
     });
 
-    it('9. Server-controlled provisioning flow explicitly provisions allowlisted administrator in authoritative DB', async () => {
+    it('9. /auth/me returns ADMIN role for legitimately provisioned administrator', async () => {
+      const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
+      const { createJwtToken } = await import('../src/utils/local-auth');
+
+      jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockResolvedValue({
+        supabaseUserId: 'usr_legit_admin_profile',
+        email: 'legit_admin@test.com',
+        name: 'Legit Admin',
+        platformRole: 'ADMIN',
+        status: 'ACTIVE',
+      } as any);
+
+      const token = createJwtToken({
+        id: 'usr_legit_admin_profile',
+        email: 'legit_admin@test.com',
+        role: 'ADMIN',
+      });
+
+      const res = await request(app)
+        .get('/api/auth/me')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.role).toBe('ADMIN');
+      expect(res.body.data.id).toBe('usr_legit_admin_profile');
+    });
+
+    it('10. /auth/me strictly returns USER role when application profile is missing even if email is allowlisted', async () => {
+      const { authService } = await import('../src/modules/auth/services/auth.service');
+      const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
+      const { supabaseAdmin } = await import('../src/config/supabase');
+
+      const allowlistedEmail = 'allowlisted_no_profile@ticketification.internal';
+      config.env.initialAdminEmails = [allowlistedEmail];
+
+      // Missing from MongoDB
+      jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockResolvedValue(null);
+      jest.spyOn(mongoUserRepository, 'findByEmail').mockResolvedValue(null);
+
+      if (supabaseAdmin) {
+        jest.spyOn(supabaseAdmin.auth.admin, 'getUserById').mockResolvedValue({
+          data: {
+            user: {
+              id: 'sb_allowlisted_missing_profile',
+              email: allowlistedEmail,
+              user_metadata: { name: 'Allowlisted User' },
+            } as any,
+          },
+          error: null,
+        } as any);
+
+        const result = await authService.getMe('sb_allowlisted_missing_profile');
+        // Must be USER, never elevated to ADMIN solely because email is in allowlist!
+        expect(result.role).toBe('USER');
+        expect(result.email).toBe(allowlistedEmail);
+      }
+    });
+
+    it('11. /auth/me fails closed with 500 when authoritative role store is unavailable', async () => {
+      const { authService } = await import('../src/modules/auth/services/auth.service');
+      const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
+
+      jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockRejectedValue(
+        new Error('Database network timeout')
+      );
+
+      await expect(authService.getMe('usr_any_id')).rejects.toThrow(
+        'Unable to verify user profile due to database error.'
+      );
+    });
+
+    it('12. /auth/me rejects suspended user with 401 AuthenticationError', async () => {
+      const { authService } = await import('../src/modules/auth/services/auth.service');
+      const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
+
+      jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockResolvedValue({
+        supabaseUserId: 'usr_suspended_direct',
+        email: 'suspended_direct@test.com',
+        name: 'Suspended User',
+        platformRole: 'ADMIN',
+        status: 'SUSPENDED',
+      } as any);
+
+      await expect(authService.getMe('usr_suspended_direct')).rejects.toThrow(
+        'Account is suspended. Please contact platform administrators.'
+      );
+    });
+
+    it('13. /auth/me throws 404 NotFoundError when user identity does not exist', async () => {
+      const { authService } = await import('../src/modules/auth/services/auth.service');
+      const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
+      const { supabaseAdmin } = await import('../src/config/supabase');
+
+      jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockResolvedValue(null);
+      jest.spyOn(mongoUserRepository, 'findByEmail').mockResolvedValue(null);
+
+      if (supabaseAdmin) {
+        jest.spyOn(supabaseAdmin.auth.admin, 'getUserById').mockResolvedValue({
+          data: { user: null },
+          error: { message: 'User not found' } as any,
+        } as any);
+      }
+
+      await expect(authService.getMe('usr_nonexistent')).rejects.toThrow(
+        'User profile not found.'
+      );
+    });
+
+    it('14. Server-controlled provisioning flow explicitly provisions allowlisted administrator in authoritative DB', async () => {
       const { adminBootstrapService } = await import('../src/modules/auth/services/admin-bootstrap.service');
       const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
       const mongodb = await import('../src/db/mongodb');
@@ -506,7 +615,122 @@ describe('Security Hardening & Production Readiness Verification', () => {
       expect(result.action).toBe('UPDATED');
     });
 
-    it('10. Server-controlled provisioning rejects non-allowlisted email', async () => {
+    it('15. Server-controlled provisioning binds to verified identity from trusted auth provider', async () => {
+      const { adminBootstrapService } = await import('../src/modules/auth/services/admin-bootstrap.service');
+      const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
+      const supabaseConfig = await import('../src/config/supabase');
+      const mongodb = await import('../src/db/mongodb');
+
+      jest.spyOn(mongodb, 'isMongoConnected').mockReturnValue(true);
+
+      const allowlistedEmail = 'provider_admin@ticketification.internal';
+      config.env.initialAdminEmails = [allowlistedEmail];
+
+      // Missing from MongoDB
+      jest.spyOn(mongoUserRepository, 'findByEmail').mockResolvedValue(null);
+
+      // Present in trusted Supabase Auth provider with verified UUID
+      const trustedProviderId = 'sb_verified_uuid_12345';
+      const originalAdmin = supabaseConfig.supabaseAdmin;
+      (supabaseConfig as any).supabaseAdmin = {
+        auth: {
+          admin: {
+            listUsers: jest.fn().mockResolvedValue({
+              data: {
+                users: [
+                  {
+                    id: trustedProviderId,
+                    email: allowlistedEmail,
+                  },
+                ],
+              },
+              error: null,
+            }),
+          },
+        },
+      };
+
+      try {
+        let createdUserRecord: any = null;
+        jest.spyOn(mongoUserRepository, 'create').mockImplementation(async (data: any) => {
+          createdUserRecord = data;
+          return data;
+        });
+
+        const result = await adminBootstrapService.provisionAllowlistedAdmin(allowlistedEmail);
+
+        expect(result.success).toBe(true);
+        expect(result.role).toBe('ADMIN');
+        expect(result.action).toBe('CREATED');
+        // Must be bound to the verified identity, NEVER a random placeholder ID
+        expect(createdUserRecord.supabaseUserId).toBe(trustedProviderId);
+      } finally {
+        (supabaseConfig as any).supabaseAdmin = originalAdmin;
+      }
+    });
+
+    it('16. Server-controlled provisioning rejects incorrect identity mismatch', async () => {
+      const { adminBootstrapService } = await import('../src/modules/auth/services/admin-bootstrap.service');
+      const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
+      const mongodb = await import('../src/db/mongodb');
+
+      jest.spyOn(mongodb, 'isMongoConnected').mockReturnValue(true);
+
+      const allowlistedEmail = 'mismatch_admin@ticketification.internal';
+      config.env.initialAdminEmails = [allowlistedEmail];
+
+      // Authoritative database already has real user id
+      jest.spyOn(mongoUserRepository, 'findByEmail').mockResolvedValue({
+        supabaseUserId: 'real_immutable_id_999',
+        email: allowlistedEmail,
+        platformRole: 'USER',
+        status: 'ACTIVE',
+      } as any);
+
+      // Attempting to provision with conflicting mismatched ID
+      await expect(
+        adminBootstrapService.provisionAllowlistedAdmin(allowlistedEmail, 'wrong_mismatched_id_000')
+      ).rejects.toThrow('Identity mismatch');
+    });
+
+    it('17. Server-controlled provisioning fails closed when user identity is missing', async () => {
+      const { adminBootstrapService } = await import('../src/modules/auth/services/admin-bootstrap.service');
+      const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
+      const supabaseConfig = await import('../src/config/supabase');
+      const mongodb = await import('../src/db/mongodb');
+
+      jest.spyOn(mongodb, 'isMongoConnected').mockReturnValue(true);
+
+      const allowlistedEmail = 'missing_identity@ticketification.internal';
+      config.env.initialAdminEmails = [allowlistedEmail];
+
+      // Missing in database
+      jest.spyOn(mongoUserRepository, 'findByEmail').mockResolvedValue(null);
+
+      // Missing in auth provider
+      const originalAdmin = supabaseConfig.supabaseAdmin;
+      (supabaseConfig as any).supabaseAdmin = {
+        auth: {
+          admin: {
+            listUsers: jest.fn().mockResolvedValue({
+              data: { users: [] },
+              error: null,
+            }),
+          },
+        },
+      };
+
+      try {
+        // Must fail closed with NotFoundError, NEVER create a synthetic placeholder ID
+        await expect(
+          adminBootstrapService.provisionAllowlistedAdmin(allowlistedEmail)
+        ).rejects.toThrow('No verified identity found in authentication provider');
+      } finally {
+        (supabaseConfig as any).supabaseAdmin = originalAdmin;
+      }
+    });
+
+    it('18. Server-controlled provisioning rejects non-allowlisted email', async () => {
       const { adminBootstrapService } = await import('../src/modules/auth/services/admin-bootstrap.service');
       config.env.initialAdminEmails = ['only_allowed@ticketification.internal'];
 
@@ -515,7 +739,7 @@ describe('Security Hardening & Production Readiness Verification', () => {
       ).rejects.toThrow('not in the configured administrator allowlist');
     });
 
-    it('11. Server-controlled provisioning fails closed when database is unavailable', async () => {
+    it('19. Server-controlled provisioning fails closed when database is unavailable', async () => {
       const { adminBootstrapService } = await import('../src/modules/auth/services/admin-bootstrap.service');
       const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
       const mongodb = await import('../src/db/mongodb');
@@ -532,6 +756,31 @@ describe('Security Hardening & Production Readiness Verification', () => {
       await expect(
         adminBootstrapService.provisionAllowlistedAdmin(allowlistedEmail)
       ).rejects.toThrow('Authoritative role store is unavailable. Administrator provisioning failed closed.');
+    });
+
+    it('20. Server-controlled provisioning is safe and idempotent on repeated attempts', async () => {
+      const { adminBootstrapService } = await import('../src/modules/auth/services/admin-bootstrap.service');
+      const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
+      const mongodb = await import('../src/db/mongodb');
+
+      jest.spyOn(mongodb, 'isMongoConnected').mockReturnValue(true);
+
+      const allowlistedEmail = 'already_admin@ticketification.internal';
+      config.env.initialAdminEmails = [allowlistedEmail];
+
+      // User is already provisioned as ADMIN
+      jest.spyOn(mongoUserRepository, 'findByEmail').mockResolvedValue({
+        supabaseUserId: 'usr_already_admin_123',
+        email: allowlistedEmail,
+        platformRole: 'ADMIN',
+        status: 'ACTIVE',
+      } as any);
+
+      const result = await adminBootstrapService.provisionAllowlistedAdmin(allowlistedEmail);
+
+      expect(result.success).toBe(true);
+      expect(result.role).toBe('ADMIN');
+      expect(result.action).toBe('ALREADY_ADMIN');
     });
   });
 

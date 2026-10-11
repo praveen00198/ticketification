@@ -89,7 +89,6 @@ export async function authMiddleware(
     }
 
     const email = (user.email || '').toLowerCase().trim();
-    const isApprovedAdmin = config.env.initialAdminEmails.includes(email);
 
     // Resolve application platform role from trusted server database record
     let userRole: PlatformRole = 'USER';

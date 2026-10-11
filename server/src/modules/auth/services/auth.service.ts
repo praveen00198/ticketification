@@ -260,6 +260,10 @@ export class AuthService {
       }
 
       if (mongoUser) {
+        if (mongoUser.status === 'SUSPENDED') {
+          throw new AuthenticationError('Account is suspended. Please contact platform administrators.');
+        }
+
         let isOnboarded = false;
         let organizationName: string | undefined = undefined;
         if (mongoUser.hostProfile?.organizationName) {
@@ -276,40 +280,59 @@ export class AuthService {
           organizationName,
         };
       }
-    } catch (mErr) {
-      console.warn('[AuthService] MongoDB lookup failed in getMe:', mErr);
+    } catch (mErr: any) {
+      if (mErr instanceof AuthenticationError || mErr instanceof AppError) throw mErr;
+      console.error('[AuthService] MongoDB lookup failed in getMe:', mErr);
+      throw new AppError('Unable to verify user profile due to database error.', 500);
     }
 
     // 2. Check Postgres repository if configured
-    try {
-      const user = await this.userRepo.findById(userId);
-      if (user) {
-        this.syncService.syncUserToMongo(user).catch(() => {});
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role || 'USER',
-          isOnboarded: false,
-        };
+    if (config.env.databaseUrl) {
+      try {
+        const user = await this.userRepo.findById(userId);
+        if (user) {
+          if ((user as any).status === 'SUSPENDED') {
+            throw new AuthenticationError('Account is suspended. Please contact platform administrators.');
+          }
+          this.syncService.syncUserToMongo(user).catch(() => {});
+          return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: (user.role as PlatformRole) || 'USER',
+            isOnboarded: false,
+          };
+        }
+      } catch (dbErr: any) {
+        if (dbErr instanceof AuthenticationError || dbErr instanceof AppError) throw dbErr;
+        console.error('[AuthService] Postgres lookup failed in getMe:', dbErr);
+        throw new AppError('Unable to verify user profile due to database error.', 500);
       }
-    } catch (dbErr) {
-      console.warn('[AuthService] Could not query user profile from DB:', dbErr);
     }
 
-    // 3. Fallback to Supabase Auth if configured
+    // 3. Fallback to Supabase Auth if configured (profile missing from application DB)
     if (supabaseAdmin) {
-      const { data } = await supabaseAdmin.auth.admin.getUserById(userId);
-      if (data?.user) {
-        const email = (data.user.email || '').toLowerCase();
-        const fallbackRole: PlatformRole = this.isApprovedAdmin(email) ? 'ADMIN' : 'USER';
+      try {
+        const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId);
+        if (error || !data?.user) {
+          throw new NotFoundError('User profile not found.');
+        }
+        const email = (data.user.email || '').toLowerCase().trim();
+        // A valid identity token establishes identity, not platform-admin privileges.
+        // A missing application profile strictly defaults to USER, never elevated to ADMIN.
         return {
           id: data.user.id,
           name: data.user.user_metadata?.name || email.split('@')[0] || 'User',
           email,
-          role: fallbackRole,
+          role: 'USER' as PlatformRole,
           isOnboarded: false,
         };
+      } catch (sbErr: any) {
+        if (sbErr instanceof NotFoundError || sbErr instanceof AuthenticationError || sbErr instanceof AppError) {
+          throw sbErr;
+        }
+        console.error('[AuthService] Supabase lookup error in getMe:', sbErr);
+        throw new AppError('Unable to verify user profile due to authentication provider error.', 500);
       }
     }
 
