@@ -91,15 +91,15 @@ export function verifyJwtToken(
     }
 
     const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
-    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
-      return null; // Expired token
+    if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) {
+      return null; // Expired or missing expiry
     }
-    // Verify issuer and audience if present
-    if (payload.iss && payload.iss !== LOCAL_JWT_ISSUER) {
-      return null; // Untrusted issuer
+    // Strictly verify trusted issuer and audience claims
+    if (!payload.iss || payload.iss !== LOCAL_JWT_ISSUER) {
+      return null; // Untrusted or missing issuer
     }
-    if (payload.aud && payload.aud !== LOCAL_JWT_AUDIENCE) {
-      return null; // Invalid audience
+    if (!payload.aud || payload.aud !== LOCAL_JWT_AUDIENCE) {
+      return null; // Invalid or missing audience
     }
     return payload;
   } catch {

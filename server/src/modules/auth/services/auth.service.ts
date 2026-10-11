@@ -174,33 +174,71 @@ export class AuthService {
       let profileName = data.user.user_metadata?.name || normalizedEmail.split('@')[0] || 'User';
 
       try {
-        let dbUser = await this.userRepo.findById(data.user.id);
-        if (!dbUser) {
-          // Missing application profile created on login defaults strictly to USER.
-          // Administrator privileges must be provisioned via explicit server-controlled bootstrap.
-          dbUser = await this.userRepo.upsert({
-            id: data.user.id,
-            name: profileName,
-            email: normalizedEmail,
-            role: 'USER',
-          });
-        }
-
-        if (dbUser) {
-          if ((dbUser as any).status === 'SUSPENDED') {
-            throw new AuthenticationError('Account is suspended. Please contact platform administrators.');
+        const mongoConfigured = Boolean(config.env.mongoUri);
+        if (mongoConfigured) {
+          const { isMongoConnected } = await import('../../../db/mongodb');
+          if (isMongoConnected()) {
+            let mongoUser = await this.mongoUserRepo.findBySupabaseId(data.user.id);
+            if (!mongoUser) {
+              mongoUser = await this.mongoUserRepo.create({
+                supabaseUserId: data.user.id,
+                name: profileName,
+                email: normalizedEmail,
+                platformRole: 'USER',
+                status: 'ACTIVE',
+              });
+            }
+            if (mongoUser.status === 'SUSPENDED') {
+              throw new AuthenticationError('Account is suspended. Please contact platform administrators.');
+            }
+            resolvedRole = mongoUser.platformRole || 'USER';
+            profileName = mongoUser.name || profileName;
+          } else if (config.env.isProduction) {
+            throw new AppError('Authentication service temporarily unavailable due to database error.', 500);
+          } else {
+            // Pure legacy PostgreSQL mode in non-production
+            let dbUser = await this.userRepo.findById(data.user.id);
+            if (!dbUser) {
+              dbUser = await this.userRepo.upsert({
+                id: data.user.id,
+                name: profileName,
+                email: normalizedEmail,
+                role: 'USER',
+              });
+            }
+            if (dbUser) {
+              if ((dbUser as any).status === 'SUSPENDED') {
+                throw new AuthenticationError('Account is suspended. Please contact platform administrators.');
+              }
+              const safeRole = (dbUser.role === 'ADMIN' || dbUser.role === 'SUPER_ADMIN') ? 'USER' : ((dbUser.role as PlatformRole) || 'USER');
+              resolvedRole = safeRole;
+              profileName = dbUser.name || profileName;
+            } else {
+              throw new AppError('Unable to resolve user profile.', 500);
+            }
           }
-          // Also check MongoDB record if present for suspended status
-          const mongoUser = await this.mongoUserRepo.findBySupabaseId(data.user.id);
-          if (mongoUser && mongoUser.status === 'SUSPENDED') {
-            throw new AuthenticationError('Account is suspended. Please contact platform administrators.');
-          }
-
-          resolvedRole = (dbUser.role as PlatformRole) || 'USER';
-          profileName = dbUser.name || profileName;
-          this.syncService.syncUserToMongo(dbUser).catch(() => {});
         } else {
-          throw new AppError('Unable to resolve user profile.', 500);
+          // Pure legacy PostgreSQL mode (only when MongoDB is not configured at all)
+          let dbUser = await this.userRepo.findById(data.user.id);
+          if (!dbUser) {
+            // Missing application profile created on login defaults strictly to USER.
+            dbUser = await this.userRepo.upsert({
+              id: data.user.id,
+              name: profileName,
+              email: normalizedEmail,
+              role: 'USER',
+            });
+          }
+
+          if (dbUser) {
+            if ((dbUser as any).status === 'SUSPENDED') {
+              throw new AuthenticationError('Account is suspended. Please contact platform administrators.');
+            }
+            resolvedRole = (dbUser.role as PlatformRole) || 'USER';
+            profileName = dbUser.name || profileName;
+          } else {
+            throw new AppError('Unable to resolve user profile.', 500);
+          }
         }
       } catch (dbErr: any) {
         if (dbErr instanceof AuthenticationError) {
@@ -249,44 +287,62 @@ export class AuthService {
   }
 
   async getMe(userId: string) {
-    // 1. Check MongoDB
-    try {
-      let mongoUser = await this.mongoUserRepo.findBySupabaseId(userId);
-      if (!mongoUser && userId.includes('@')) {
-        mongoUser = await this.mongoUserRepo.findByEmail(userId);
-      }
-      if (!mongoUser && mongoose.Types.ObjectId.isValid(userId)) {
-        mongoUser = await this.mongoUserRepo.findById(userId);
-      }
+    const mongoConfigured = Boolean(config.env.mongoUri);
 
-      if (mongoUser) {
-        if (mongoUser.status === 'SUSPENDED') {
-          throw new AuthenticationError('Account is suspended. Please contact platform administrators.');
-        }
-
-        let isOnboarded = false;
-        let organizationName: string | undefined = undefined;
-        if (mongoUser.hostProfile?.organizationName) {
-          isOnboarded = true;
-          organizationName = mongoUser.hostProfile.organizationName;
-        }
-
-        return {
-          id: mongoUser.supabaseUserId,
-          name: mongoUser.name,
-          email: mongoUser.email,
-          role: mongoUser.platformRole || 'USER',
-          isOnboarded,
-          organizationName,
-        };
+    // 1. In production, MongoDB must be active and connected. Fail closed immediately if disconnected.
+    if (config.env.isProduction && mongoConfigured) {
+      const { isMongoConnected } = await import('../../../db/mongodb');
+      if (!isMongoConnected()) {
+        console.error('[AuthService] Authoritative MongoDB role store is configured but disconnected in production.');
+        throw new AppError('Unable to verify user profile due to database error.', 500);
       }
-    } catch (mErr: any) {
-      if (mErr instanceof AuthenticationError || mErr instanceof AppError) throw mErr;
-      console.error('[AuthService] MongoDB lookup failed in getMe:', mErr);
-      throw new AppError('Unable to verify user profile due to database error.', 500);
     }
 
-    // 2. Check Postgres repository if configured
+    // 2. Check MongoDB (authoritative platform profile & role store)
+    if (mongoConfigured) {
+      try {
+        let mongoUser = await this.mongoUserRepo.findBySupabaseId(userId);
+        if (!mongoUser && userId.includes('@')) {
+          mongoUser = await this.mongoUserRepo.findByEmail(userId);
+        }
+        if (!mongoUser && mongoose.Types.ObjectId.isValid(userId)) {
+          mongoUser = await this.mongoUserRepo.findById(userId);
+        }
+
+        if (mongoUser) {
+          if (mongoUser.status === 'SUSPENDED') {
+            throw new AuthenticationError('Account is suspended. Please contact platform administrators.');
+          }
+
+          let isOnboarded = false;
+          let organizationName: string | undefined = undefined;
+          if (mongoUser.hostProfile?.organizationName) {
+            isOnboarded = true;
+            organizationName = mongoUser.hostProfile.organizationName;
+          }
+
+          return {
+            id: mongoUser.supabaseUserId,
+            name: mongoUser.name,
+            email: mongoUser.email,
+            role: mongoUser.platformRole || 'USER',
+            isOnboarded,
+            organizationName,
+          };
+        }
+      } catch (mErr: any) {
+        if (mErr instanceof AuthenticationError || mErr instanceof AppError) throw mErr;
+        console.error('[AuthService] MongoDB lookup failed in getMe:', mErr);
+        throw new AppError('Unable to verify user profile due to database error.', 500);
+      }
+    }
+
+    // In production, fallback to secondary stores is forbidden when Mongo is authoritative
+    if (config.env.isProduction && mongoConfigured) {
+      throw new NotFoundError('User profile not found.');
+    }
+
+    // 2. Check Postgres repository if configured (legacy fallback)
     if (config.env.databaseUrl) {
       try {
         const user = await this.userRepo.findById(userId);
@@ -294,14 +350,26 @@ export class AuthService {
           if ((user as any).status === 'SUSPENDED') {
             throw new AuthenticationError('Account is suspended. Please contact platform administrators.');
           }
-          this.syncService.syncUserToMongo(user).catch(() => {});
-          return {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            role: (user.role as PlatformRole) || 'USER',
-            isOnboarded: false,
-          };
+          if (mongoConfigured) {
+            // When MongoDB is authoritative, PostgreSQL fallback cannot grant an admin role
+            this.syncService.syncUserToMongo(user).catch(() => {});
+            return {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              role: 'USER' as PlatformRole,
+              isOnboarded: false,
+            };
+          } else {
+            // Pure legacy mode: Postgres is the store
+            return {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              role: (user.role as PlatformRole) || 'USER',
+              isOnboarded: false,
+            };
+          }
         }
       } catch (dbErr: any) {
         if (dbErr instanceof AuthenticationError || dbErr instanceof AppError) throw dbErr;

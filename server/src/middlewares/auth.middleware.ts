@@ -94,29 +94,47 @@ export async function authMiddleware(
     let userRole: PlatformRole = 'USER';
     try {
       const { isMongoConnected } = await import('../db/mongodb');
-      if (isMongoConnected()) {
+      const mongoConfigured = Boolean(config.env.mongoUri);
+
+      // In production, the authoritative MongoDB role store is mandatory. Fail closed!
+      if (config.env.isProduction && mongoConfigured && !isMongoConnected()) {
+        console.error('[authMiddleware] Authoritative MongoDB role store is configured but disconnected.');
+        return next(new AppError('Unable to verify user profile due to database error.', 500));
+      }
+
+      let mongoUser: any = null;
+      try {
         const { mongoUserRepository } = await import('../modules/auth/repositories/mongo-user.repository');
-        let mongoUser = await mongoUserRepository.findBySupabaseId(user.id);
-        if (!mongoUser) {
-          // Missing application profiles default strictly to USER.
-          // Administrator privileges can only be provisioned via explicit server-controlled workflows.
-          mongoUser = await mongoUserRepository.create({
-            supabaseUserId: user.id,
-            email,
-            name: user.user_metadata?.name || email.split('@')[0] || 'User',
-            platformRole: 'USER',
-            status: 'ACTIVE',
-          });
+        mongoUser = await mongoUserRepository.findBySupabaseId(user.id);
+      } catch (mErr) {
+        if (config.env.isProduction) {
+          throw mErr;
         }
-        if (!mongoUser) {
-          return next(new AppError('Unable to verify user profile due to database error.', 500));
-        }
+      }
+
+      if (mongoUser) {
         if (mongoUser.status === 'SUSPENDED') {
           return next(new AuthenticationError('Account is suspended. Please contact platform administrators.'));
         }
         userRole = mongoUser.platformRole;
+      } else if (isMongoConnected()) {
+        // Connected to MongoDB but no profile exists: auto-create baseline USER
+        const { mongoUserRepository } = await import('../modules/auth/repositories/mongo-user.repository');
+        mongoUser = await mongoUserRepository.create({
+          supabaseUserId: user.id,
+          email,
+          name: user.user_metadata?.name || email.split('@')[0] || 'User',
+          platformRole: 'USER',
+          status: 'ACTIVE',
+        });
+        if (!mongoUser) {
+          return next(new AppError('Unable to verify user profile due to database error.', 500));
+        }
+        userRole = mongoUser.platformRole;
+      } else if (config.env.isProduction && mongoConfigured) {
+        return next(new AppError('Unable to verify user profile due to database error.', 500));
       } else {
-        // Fall back to PostgreSQL when MongoDB is not connected
+        // Fall back to PostgreSQL in legacy non-production environments
         let dbUser = await userRepository.findById(user.id);
         if (!dbUser) {
           dbUser = await userRepository.upsert({
@@ -132,8 +150,11 @@ export async function authMiddleware(
         if ((dbUser as any)?.status === 'SUSPENDED') {
           return next(new AuthenticationError('Account is suspended. Please contact platform administrators.'));
         }
-        if (dbUser.role === 'ADMIN' || dbUser.role === 'SUPER_ADMIN' || dbUser.role === 'USER') {
-          userRole = dbUser.role as PlatformRole;
+        // A PostgreSQL fallback must never grant an elevated role that contradicts the authoritative platform role store!
+        if (dbUser.role === 'ADMIN' || dbUser.role === 'SUPER_ADMIN') {
+          userRole = 'USER';
+        } else {
+          userRole = (dbUser.role as PlatformRole) || 'USER';
         }
       }
     } catch (syncErr: any) {

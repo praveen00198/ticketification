@@ -246,6 +246,11 @@ describe('Security Hardening & Production Readiness Verification', () => {
   });
 
   describe('7. Authoritative Role Resolution & Anti-Privilege Escalation (P0)', () => {
+    beforeEach(async () => {
+      const mongodb = await import('../src/db/mongodb');
+      jest.spyOn(mongodb, 'isMongoConnected').mockReturnValue(true);
+    });
+
     it('1. Normal user authenticates successfully with authoritative USER role', async () => {
       const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
       const { createJwtToken } = await import('../src/utils/local-auth');
@@ -781,6 +786,164 @@ describe('Security Hardening & Production Readiness Verification', () => {
       expect(result.success).toBe(true);
       expect(result.role).toBe('ADMIN');
       expect(result.action).toBe('ALREADY_ADMIN');
+    });
+
+    it('21. /auth/me fails closed with 500 when MongoDB is disconnected even if PostgreSQL is reachable with ADMIN record', async () => {
+      const { authService } = await import('../src/modules/auth/services/auth.service');
+      const { userRepository } = await import('../src/modules/auth/repositories/user.repository');
+      const mongodb = await import('../src/db/mongodb');
+
+      const originalIsProd = config.env.isProduction;
+      try {
+        config.env.isProduction = true;
+
+        // MongoDB is configured in config.env.mongoUri, but disconnected
+        jest.spyOn(mongodb, 'isMongoConnected').mockReturnValue(false);
+
+        // PostgreSQL happens to have a record with role='ADMIN'
+        jest.spyOn(userRepository, 'findById').mockResolvedValue({
+          id: 'usr_pg_admin_candidate',
+          email: 'pg_admin@ticketification.internal',
+          name: 'PG Admin',
+          role: 'ADMIN',
+        } as any);
+
+        // Must fail closed with 500, NEVER grant ADMIN from secondary PostgreSQL!
+        await expect(authService.getMe('usr_pg_admin_candidate')).rejects.toThrow(
+          'Unable to verify user profile due to database error.'
+        );
+      } finally {
+        config.env.isProduction = originalIsProd;
+      }
+    });
+
+    it('22. authMiddleware fails closed with 500 when MongoDB is disconnected even if PostgreSQL is available', async () => {
+      const { authMiddleware } = await import('../src/middlewares/auth.middleware');
+      const mongodb = await import('../src/db/mongodb');
+      const supabaseConfig = await import('../src/config/supabase');
+
+      const originalIsProd = config.env.isProduction;
+      const originalAdmin = supabaseConfig.supabaseAdmin;
+      try {
+        config.env.isProduction = true;
+        jest.spyOn(mongodb, 'isMongoConnected').mockReturnValue(false);
+
+        (supabaseConfig as any).supabaseAdmin = {
+          auth: {
+            getUser: jest.fn().mockResolvedValue({
+              data: {
+                user: {
+                  id: 'sb_user_mongo_down',
+                  email: 'user_down@test.com',
+                  user_metadata: {},
+                },
+              },
+              error: null,
+            }),
+          },
+        };
+
+        const req: any = {
+          headers: {
+            authorization: 'Bearer valid_mock_supabase_token',
+          },
+        };
+        const res: any = {};
+        let passedError: any = null;
+        const next = (err?: any) => {
+          passedError = err;
+        };
+
+        await authMiddleware(req, res, next);
+
+        expect(passedError).toBeDefined();
+        expect(passedError.statusCode).toBe(500);
+        expect(passedError.message).toContain('Unable to verify user profile due to database error.');
+      } finally {
+        config.env.isProduction = originalIsProd;
+        (supabaseConfig as any).supabaseAdmin = originalAdmin;
+      }
+    });
+
+    it('25. In non-production, PostgreSQL fallback strictly caps role at USER and never grants ADMIN', async () => {
+      const { authService } = await import('../src/modules/auth/services/auth.service');
+      const { userRepository } = await import('../src/modules/auth/repositories/user.repository');
+      const mongodb = await import('../src/db/mongodb');
+
+      const originalIsProd = config.env.isProduction;
+      const originalDbUrl = config.env.databaseUrl;
+      try {
+        config.env.isProduction = false;
+        (config.env as any).databaseUrl = 'postgres://test:test@localhost:5432/test';
+        const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
+        jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockResolvedValue(null);
+        jest.spyOn(mongoUserRepository, 'findByEmail').mockResolvedValue(null);
+        jest.spyOn(mongodb, 'isMongoConnected').mockReturnValue(false);
+
+        // PostgreSQL record has role='ADMIN'
+        jest.spyOn(userRepository, 'findById').mockResolvedValue({
+          id: 'usr_pg_admin_legacy',
+          email: 'pg_admin_legacy@test.com',
+          name: 'Legacy Admin',
+          role: 'ADMIN',
+        } as any);
+
+        const res = await authService.getMe('usr_pg_admin_legacy');
+        // Must be USER, never ADMIN!
+        expect(res.role).toBe('USER');
+      } finally {
+        config.env.isProduction = originalIsProd;
+        (config.env as any).databaseUrl = originalDbUrl;
+      }
+    });
+
+    it('23. /auth/me in pure legacy mode fails closed with 500 if PostgreSQL is unavailable', async () => {
+      const { authService } = await import('../src/modules/auth/services/auth.service');
+      const { userRepository } = await import('../src/modules/auth/repositories/user.repository');
+
+      const originalMongoUri = config.env.mongoUri;
+      const originalDatabaseUrl = config.env.databaseUrl;
+      try {
+        // Simulate legacy environment where MongoDB is NOT configured and PostgreSQL is configured
+        (config.env as any).mongoUri = '';
+        (config.env as any).databaseUrl = 'postgres://test:test@localhost:5432/test';
+
+        jest.spyOn(userRepository, 'findById').mockRejectedValue(
+          new Error('PostgreSQL connection terminated unexpectedly')
+        );
+
+        await expect(authService.getMe('usr_pg_fail')).rejects.toThrow(
+          'Unable to verify user profile due to database error.'
+        );
+      } finally {
+        (config.env as any).mongoUri = originalMongoUri;
+        (config.env as any).databaseUrl = originalDatabaseUrl;
+      }
+    });
+
+    it('24. Client attempts to supply role="ADMIN" during registration strictly receive role="USER"', async () => {
+      const { authService } = await import('../src/modules/auth/services/auth.service');
+      const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
+
+      jest.spyOn(mongoUserRepository, 'findByEmail').mockResolvedValue(null);
+      let capturedRecord: any = null;
+      jest.spyOn(mongoUserRepository, 'create').mockImplementation(async (doc: any) => {
+        capturedRecord = doc;
+        return doc;
+      });
+
+      const res = await authService.register({
+        name: 'Attacker User',
+        email: 'attacker@evil.internal',
+        password: 'Password123!',
+        // Attacker attempts to inject elevated role
+        ...({ role: 'ADMIN' } as any),
+      });
+
+      expect(res.user.role).toBe('USER');
+      if (capturedRecord) {
+        expect(capturedRecord.platformRole).toBe('USER');
+      }
     });
   });
 
