@@ -4,6 +4,37 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: #FAFAF9;
+    color: #18181B;
+    overflow-x: hidden;
+  }
+
+  /* Custom subtle scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #E4E4E7;
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #D4D4D8;
+  }
+}
+
 @layer utilities {
   /* Signature Ticket Perforation Notches */
   .ticket-perforation-left {
@@ -17,7 +48,7 @@
     transform: translateY(-50%);
     width: 20px;
     height: 20px;
-    background-color: #FAF9F6;
+    background-color: #FAFAF9;
     border-radius: 50%;
     border-right: 1px solid #E4E4E7;
     z-index: 10;
@@ -34,7 +65,7 @@
     transform: translateY(-50%);
     width: 20px;
     height: 20px;
-    background-color: #FAF9F6;
+    background-color: #FAFAF9;
     border-radius: 50%;
     border-left: 1px solid #E4E4E7;
     z-index: 10;
@@ -44,5 +75,72 @@
     border-style: dashed;
     border-width: 1px;
     border-color: #D4D4D8;
+  }
+
+  /* Text shimmer animation */
+  .animate-text-shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.6) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2.5s infinite;
+  }
+
+  /* Subtle emerald shimmer for live badges */
+  .animate-badge-shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(16, 185, 129, 0.08) 0%,
+      rgba(16, 185, 129, 0.25) 50%,
+      rgba(16, 185, 129, 0.08) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 3s infinite;
+  }
+
+  /* Laser scan line for turnstiles */
+  .animate-scanline {
+    animation: scanline 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes scanline {
+  0% {
+    transform: translateY(-20%);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(420%);
+    opacity: 0;
+  }
+}
+
+/* Reduced motion accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

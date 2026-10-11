@@ -16,6 +16,7 @@ import {
   Settings,
   Ticket as TicketIcon,
 } from 'lucide-react';
+import { Button, Badge, Modal, Input, InView, AnimatedGroup } from '../components/ui';
 
 export const EventsPage: React.FC = () => {
   const { events, currentEvent, setCurrentEvent, refreshEvents, loading } = useEvent();
@@ -89,119 +90,126 @@ export const EventsPage: React.FC = () => {
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white border border-stone-200/90 p-6 rounded-2xl shadow-xs">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200/80">
-              Event Management
-            </span>
+      <InView direction="up" distance={12}>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white border border-stone-200/90 p-5 sm:p-6 rounded-2xl shadow-xs">
+          <div>
+            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+              <Badge variant="emerald">Event Management</Badge>
+              <span className="text-xs text-stone-300">•</span>
+              <span className="text-xs text-stone-500 font-semibold">{events.length} Total Events</span>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-extrabold text-zinc-900 tracking-tight">Your Events</h1>
+            <p className="text-xs text-stone-500 mt-1 max-w-xl leading-relaxed">
+              Manage your event configurations, ticket categories, and guest lists in one place.
+            </p>
           </div>
-          <h1 className="text-2xl font-extrabold text-zinc-900 tracking-tight">Your Events</h1>
-          <p className="text-xs text-stone-500 mt-1">
-            Manage your event configurations, ticket categories, and guest lists in one place.
-          </p>
-        </div>
 
-        <div className="flex items-center gap-2.5 self-start sm:self-auto">
-          <button
-            onClick={() => navigate('/events/create')}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition-all shadow-xs active:scale-95"
-          >
-            <Sparkles className="w-4 h-4 text-emerald-100" />
-            <span>Create Event (Wizard)</span>
-          </button>
-          <button
-            onClick={() => setIsCreateOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-stone-100 hover:bg-stone-200 text-zinc-700 text-xs font-semibold rounded-xl transition-all border border-stone-200"
-          >
-            <Plus className="w-3.5 h-3.5 text-stone-500" />
-            <span>Quick Add</span>
-          </button>
+          <div className="flex items-center gap-2.5 self-start sm:self-auto shrink-0 flex-wrap">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => navigate('/events/create')}
+              iconLeft={<Sparkles className="w-4 h-4 text-emerald-100" />}
+            >
+              Create Event Wizard
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setIsCreateOpen(true)}
+              iconLeft={<Plus className="w-3.5 h-3.5 text-stone-500" />}
+            >
+              Quick Add
+            </Button>
+          </div>
         </div>
-      </div>
+      </InView>
 
       {/* Events Grid */}
       {loading ? (
-        <div className="text-center py-16 text-stone-400 text-xs font-medium bg-white border border-stone-200/90 rounded-2xl p-8">
+        <div className="text-center py-16 text-stone-400 text-xs font-medium bg-white border border-stone-200/90 rounded-2xl p-8 shadow-xs">
           <div className="w-7 h-7 rounded-full border-2 border-emerald-500/30 border-t-emerald-600 animate-spin mx-auto mb-2" />
           Loading your events...
         </div>
       ) : events.length === 0 ? (
-        <div className="bg-white border border-stone-200/90 rounded-2xl p-8 shadow-xs space-y-6">
+        <div className="bg-white border border-stone-200/90 rounded-2xl p-6 sm:p-10 shadow-xs space-y-6">
           <div className="text-center max-w-lg mx-auto space-y-2">
-            <div className="w-14 h-14 bg-emerald-50 text-emerald-700 rounded-full flex items-center justify-center mx-auto mb-3 border border-emerald-100">
+            <div className="w-14 h-14 bg-emerald-50 text-emerald-700 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-emerald-100/80 shadow-2xs">
               <Calendar className="w-7 h-7" />
             </div>
-            <h3 className="text-lg font-bold text-zinc-900 tracking-tight">You Haven't Created Any Events Yet</h3>
+            <h3 className="text-lg font-bold text-zinc-900 tracking-tight">You Haven&apos;t Created Any Events Yet</h3>
             <p className="text-xs text-stone-500 leading-relaxed">
               Ticketification is your unified platform to attend and organize events. Choose your journey below:
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-            {/* Pathway 1: Host an event */}
-            <div className="p-5 rounded-xl border border-stone-200/90 hover:border-emerald-500/50 transition-all flex flex-col justify-between space-y-4 bg-stone-50/50">
+            <div className="p-5 rounded-2xl border border-stone-200/90 hover:border-emerald-500/60 transition-all flex flex-col justify-between space-y-4 bg-stone-50/50 hover:bg-white shadow-2xs group">
               <div>
-                <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center mb-3 border border-emerald-200">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center mb-3 border border-emerald-200/80 group-hover:scale-105 transition-transform">
                   <Sparkles className="w-5 h-5" />
                 </div>
                 <h4 className="text-sm font-bold text-zinc-900">Host an Event</h4>
-                <p className="text-xs text-stone-500 mt-1">
+                <p className="text-xs text-stone-500 mt-1 leading-relaxed">
                   Configure custom credential badges, venue logistics, registration caps, and real-time gate turnstiles.
                 </p>
               </div>
-              <button
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={() => navigate('/events/create')}
-                className="inline-flex items-center justify-center gap-1.5 w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition-all shadow-xs"
+                iconRight={<ArrowRight className="w-3.5 h-3.5" />}
+                className="w-full"
               >
-                <span>Create Event Wizard</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+                Create Event Wizard
+              </Button>
             </div>
 
-            {/* Pathway 2: Discover and attend */}
-            <div className="p-5 rounded-xl border border-stone-200/90 hover:border-emerald-500/50 transition-all flex flex-col justify-between space-y-4 bg-stone-50/50">
+            <div className="p-5 rounded-2xl border border-stone-200/90 hover:border-emerald-500/60 transition-all flex flex-col justify-between space-y-4 bg-stone-50/50 hover:bg-white shadow-2xs group">
               <div>
-                <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center mb-3 border border-emerald-200">
+                <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center mb-3 border border-sky-200/80 group-hover:scale-105 transition-transform">
                   <Calendar className="w-5 h-5" />
                 </div>
                 <h4 className="text-sm font-bold text-zinc-900">Discover Events to Attend</h4>
-                <p className="text-xs text-stone-500 mt-1">
+                <p className="text-xs text-stone-500 mt-1 leading-relaxed">
                   Explore published hackathons, conferences, and workshops. Check eligibility and claim your pass.
                 </p>
               </div>
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => navigate('/explore')}
-                className="inline-flex items-center justify-center gap-1.5 w-full py-2 bg-white hover:bg-stone-100 text-zinc-800 text-xs font-semibold rounded-xl transition-all border border-stone-200 shadow-xs"
+                iconRight={<ArrowRight className="w-3.5 h-3.5" />}
+                className="w-full"
               >
-                <span>Explore Events Catalog</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+                Explore Events Catalog
+              </Button>
             </div>
 
-            {/* Pathway 3: Wallet */}
-            <div className="p-5 rounded-xl border border-stone-200/90 hover:border-emerald-500/50 transition-all flex flex-col justify-between space-y-4 bg-stone-50/50">
+            <div className="p-5 rounded-2xl border border-stone-200/90 hover:border-emerald-500/60 transition-all flex flex-col justify-between space-y-4 bg-stone-50/50 hover:bg-white shadow-2xs group">
               <div>
-                <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center mb-3 border border-emerald-200">
+                <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center mb-3 border border-amber-200/80 group-hover:scale-105 transition-transform">
                   <TicketIcon className="w-5 h-5" />
                 </div>
                 <h4 className="text-sm font-bold text-zinc-900">Access Your Passes</h4>
-                <p className="text-xs text-stone-500 mt-1">
+                <p className="text-xs text-stone-500 mt-1 leading-relaxed">
                   View your active registration credentials, dynamic QR entry tokens, and hackathon team rosters.
                 </p>
               </div>
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => navigate('/wallet')}
-                className="inline-flex items-center justify-center gap-1.5 w-full py-2 bg-white hover:bg-stone-100 text-zinc-800 text-xs font-semibold rounded-xl transition-all border border-stone-200 shadow-xs"
+                iconRight={<ArrowRight className="w-3.5 h-3.5" />}
+                className="w-full"
               >
-                <span>Open Pass Wallet</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+                Open Pass Wallet
+              </Button>
             </div>
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <AnimatedGroup staggerDelay={60} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
           {events.map((event) => {
             const isSelected = currentEvent?.id === event.id;
             return (
@@ -218,28 +226,29 @@ export const EventsPage: React.FC = () => {
                   {/* Card Header & Status */}
                   <div className="flex items-start justify-between gap-2 mb-3">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                          event.status === 'ACTIVE'
-                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/80'
+                      <Badge
+                        variant={
+                          event.status === 'ACTIVE' || event.status === 'PUBLISHED'
+                            ? 'emerald'
                             : event.status === 'DRAFT'
-                            ? 'bg-amber-50 text-amber-800 border border-amber-200/80'
+                            ? 'amber'
                             : event.status === 'COMPLETED'
-                            ? 'bg-stone-100 text-stone-600 border border-stone-200'
-                            : 'bg-blue-50 text-blue-800 border border-blue-200/80'
-                        }`}
+                            ? 'neutral'
+                            : 'sky'
+                        }
+                        size="sm"
                       >
                         {event.status}
-                      </span>
+                      </Badge>
                       {event.eventType && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-stone-100 text-stone-600 border border-stone-200/60">
+                        <Badge variant="neutral" size="sm">
                           {event.eventType}
-                        </span>
+                        </Badge>
                       )}
                     </div>
 
                     {isSelected && (
-                      <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80">
+                      <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80 shadow-2xs">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                         <span>Active</span>
                       </span>
@@ -247,25 +256,25 @@ export const EventsPage: React.FC = () => {
                   </div>
 
                   {/* Event Name */}
-                  <h3 className="text-lg font-bold text-zinc-900 group-hover:text-emerald-700 transition-colors line-clamp-1 mb-2">
+                  <h3 className="text-base sm:text-lg font-bold text-zinc-900 group-hover:text-emerald-700 transition-colors line-clamp-1 mb-2">
                     {event.name}
                   </h3>
 
                   {/* Description */}
                   {event.description && (
-                    <p className="text-xs text-stone-500 line-clamp-2 mb-4">
+                    <p className="text-xs text-stone-500 line-clamp-2 mb-4 leading-relaxed">
                       {event.description}
                     </p>
                   )}
 
                   {/* Details */}
-                  <div className="space-y-1.5 text-xs text-stone-600 mb-5">
+                  <div className="space-y-2 text-xs text-stone-600 mb-5">
                     <div className="flex items-center gap-2">
-                      <Calendar className="w-3.5 h-3.5 text-stone-400" />
-                      <span>{event.date}</span>
+                      <Calendar className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+                      <span className="font-medium text-zinc-800">{event.date}</span>
                       {event.time && (
                         <span className="flex items-center gap-1 text-stone-400">
-                          <Clock className="w-3 h-3 text-stone-400 ml-1" />
+                          <Clock className="w-3 h-3 ml-1" />
                           {event.time}
                         </span>
                       )}
@@ -278,194 +287,158 @@ export const EventsPage: React.FC = () => {
                     )}
                     {event.organizerName && (
                       <div className="flex items-center gap-2">
-                        <Users className="w-3.5 h-3.5 text-stone-400" />
-                        <span className="text-stone-500">Org: {event.organizerName}</span>
+                        <Users className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+                        <span className="text-stone-500 truncate">Host: {event.organizerName}</span>
                       </div>
                     )}
                     {event.credentialTerminology && (
                       <div className="flex items-center gap-2">
-                        <TicketIcon className="w-3.5 h-3.5 text-emerald-600" />
-                        <span className="text-emerald-700 font-medium">{event.credentialTerminology}</span>
+                        <TicketIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span className="text-emerald-700 font-semibold">{event.credentialTerminology}</span>
                       </div>
                     )}
                   </div>
                 </div>
 
                 {/* Card Actions */}
-                <div className="pt-4 border-t border-stone-100 flex items-center justify-between gap-2">
-                  <button
+                <div className="pt-3.5 border-t border-stone-100 flex items-center justify-between gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={(e) => {
                       e.stopPropagation();
                       navigate(`/events/${event.id}`);
                     }}
-                    className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700 hover:text-zinc-900 hover:bg-stone-100 px-2.5 py-1.5 rounded-lg transition-colors"
+                    iconLeft={<Settings className="w-3.5 h-3.5 text-stone-400" />}
                   >
-                    <Settings className="w-3.5 h-3.5 text-stone-400" />
-                    <span>Manage</span>
-                  </button>
+                    Manage
+                  </Button>
 
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={(e) => handleDelete(event.id, event.name, e)}
                       title="Delete Event"
-                      className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                      className="p-2 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
+                      aria-label="Delete Event"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
 
-                    <button
+                    <Button
+                      variant={isSelected ? 'secondary' : 'primary'}
+                      size="sm"
                       onClick={() => {
                         setCurrentEvent(event);
                         navigate('/dashboard');
                       }}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition-all shadow-2xs"
+                      iconRight={<ArrowRight className="w-3.5 h-3.5" />}
                     >
-                      <span>Select</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
+                      {isSelected ? 'Dashboard' : 'Select'}
+                    </Button>
                   </div>
                 </div>
               </div>
             );
           })}
-        </div>
+        </AnimatedGroup>
       )}
 
-      {/* Create Event Modal */}
-      {isCreateOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-xs">
-          <div className="bg-white border border-stone-200 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="p-5 border-b border-stone-100 flex items-center justify-between bg-stone-50/60">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100">
-                  <Sparkles className="w-4 h-4" />
-                </div>
-                <h3 className="text-base font-bold text-zinc-900">Quick Create Event</h3>
-              </div>
-              <button
-                onClick={() => setIsCreateOpen(false)}
-                className="text-stone-400 hover:text-zinc-700 text-sm font-bold"
-              >
-                ✕
-              </button>
+      {/* Quick Create Event Modal */}
+      <Modal
+        isOpen={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        title="Quick Create Event"
+        description="Fill in the basic event parameters to quickly draft your event."
+        maxWidth="md"
+      >
+        <form onSubmit={handleCreateSubmit} className="space-y-4">
+          {error && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{error}</span>
             </div>
+          )}
 
-            <form onSubmit={handleCreateSubmit} className="p-6 space-y-4">
-              {error && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{error}</span>
-                </div>
-              )}
+          <Input
+            label="Event Name"
+            name="name"
+            required
+            placeholder="e.g. Global Tech Expo 2026"
+            value={formData.name}
+            onChange={handleInputChange}
+          />
 
-              <div>
-                <label className="block text-xs font-bold text-zinc-700 mb-1">
-                  Event Name <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="name"
-                  required
-                  placeholder="e.g. Global Tech Expo 2026"
-                  value={formData.name}
-                  onChange={handleInputChange}
-                  className="w-full bg-white border border-stone-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-stone-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 shadow-2xs"
-                />
-              </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Input
+              type="date"
+              label="Event Date"
+              name="date"
+              required
+              value={formData.date}
+              onChange={handleInputChange}
+            />
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-zinc-700 mb-1">
-                    Event Date <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    name="date"
-                    required
-                    value={formData.date}
-                    onChange={handleInputChange}
-                    className="w-full bg-white border border-stone-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-stone-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 shadow-2xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-zinc-700 mb-1">
-                    Start Time
-                  </label>
-                  <input
-                    type="time"
-                    name="time"
-                    value={formData.time || ''}
-                    onChange={handleInputChange}
-                    className="w-full bg-white border border-stone-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-stone-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 shadow-2xs"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-zinc-700 mb-1">
-                    Venue / Location
-                  </label>
-                  <input
-                    type="text"
-                    name="venue"
-                    placeholder="e.g. Main Auditorium / Online"
-                    value={formData.venue || ''}
-                    onChange={handleInputChange}
-                    className="w-full bg-white border border-stone-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-stone-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 shadow-2xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-zinc-700 mb-1">
-                    Organizer / Host Name
-                  </label>
-                  <input
-                    type="text"
-                    name="organizerName"
-                    placeholder="e.g. ACM Student Chapter"
-                    value={formData.organizerName || ''}
-                    onChange={handleInputChange}
-                    className="w-full bg-white border border-stone-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-stone-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 shadow-2xs"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-zinc-700 mb-1">
-                  Description
-                </label>
-                <textarea
-                  name="description"
-                  rows={3}
-                  placeholder="Brief overview of event details..."
-                  value={formData.description || ''}
-                  onChange={handleInputChange}
-                  className="w-full bg-white border border-stone-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-stone-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 shadow-2xs resize-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold text-stone-600 hover:text-zinc-900 hover:bg-stone-100 rounded-xl transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={creating}
-                  className="px-5 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-all disabled:opacity-50"
-                >
-                  {creating ? 'Creating...' : 'Create Event'}
-                </button>
-              </div>
-            </form>
+            <Input
+              type="time"
+              label="Start Time"
+              name="time"
+              value={formData.time || ''}
+              onChange={handleInputChange}
+            />
           </div>
-        </div>
-      )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Input
+              label="Venue / Location"
+              name="venue"
+              placeholder="e.g. Main Auditorium / Online"
+              value={formData.venue || ''}
+              onChange={handleInputChange}
+            />
+
+            <Input
+              label="Organizer / Host Name"
+              name="organizerName"
+              placeholder="e.g. ACM Student Chapter"
+              value={formData.organizerName || ''}
+              onChange={handleInputChange}
+            />
+          </div>
+
+          <div className="space-y-1.5 text-left">
+            <label className="block text-xs font-semibold text-zinc-700 select-none">
+              Description
+            </label>
+            <textarea
+              name="description"
+              rows={3}
+              placeholder="Brief overview of event details..."
+              value={formData.description || ''}
+              onChange={handleInputChange}
+              className="w-full bg-white border border-stone-200/90 rounded-xl px-3.5 py-2 text-xs text-zinc-900 placeholder:text-stone-400 focus:outline-none focus:border-emerald-500 focus:ring-3 focus:ring-emerald-500/15 shadow-2xs resize-none"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-stone-100">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setIsCreateOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              loading={creating}
+            >
+              Create Event
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };

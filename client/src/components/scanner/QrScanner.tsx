@@ -51,7 +51,6 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
     async (targetCameraId?: string, targetFacingMode: 'environment' | 'user' = facingMode) => {
       if (!isMountedRef.current) return;
       if (isTransitioningRef.current) {
-        // Queue or wait if already transitioning
         return;
       }
 
@@ -72,7 +71,6 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
           return;
         }
 
-        // Clean out any stale child nodes in the container
         containerEl.innerHTML = '';
 
         const html5QrCode = new Html5Qrcode(containerId);
@@ -80,7 +78,7 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
 
         const scanConfig = {
           fps: 15,
-          qrbox: { width: 260, height: 260 },
+          qrbox: { width: 240, height: 240 },
           aspectRatio: 1.0,
         };
 
@@ -93,7 +91,6 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
           }, 1800);
         };
 
-        // If a specific camera was picked, use its ID; otherwise use facingMode constraints
         if (targetCameraId) {
           await html5QrCode.start(targetCameraId, scanConfig, handleDecoded, () => {});
           if (isMountedRef.current) {
@@ -110,11 +107,9 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
 
         if (isMountedRef.current) {
           setIsScanning(true);
-          // Query available cameras after camera access is established so labels are populated
           try {
             const devices = await Html5Qrcode.getCameras();
             if (devices && devices.length > 0) {
-              // Deduplicate devices
               const unique = devices.filter(
                 (d, idx, self) => idx === self.findIndex((t) => t.id === d.id)
               );
@@ -127,7 +122,7 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
         if (isMountedRef.current) {
           const errMsg =
             err?.name === 'NotAllowedError' || err?.message?.includes('Permission')
-              ? 'Camera permission denied. Please enable camera access in browser permissions.'
+              ? 'Camera permission denied. Please allow camera access in browser permissions.'
               : err?.name === 'NotReadableError' || err?.message?.includes('busy')
               ? 'Camera is in use by another tab or app. Please close other camera tabs and tap Retry.'
               : err?.message || 'Unable to start camera.';
@@ -148,7 +143,6 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
     isMountedRef.current = true;
     let timer: NodeJS.Timeout;
 
-    // Small delay to ensure DOM is ready and any React StrictMode cycle completes
     timer = setTimeout(() => {
       if (isMountedRef.current) {
         startCamera();
@@ -177,18 +171,21 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
   return (
     <div className="w-full space-y-3">
       {/* Scanner Header & Controls */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
-          <Camera className="w-4 h-4 text-brand-600" />
+          <Camera className="w-4 h-4 text-emerald-600" />
           <span className="text-xs font-bold text-zinc-900">Live Camera Feed</span>
+          {isScanning && (
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           {cameras.length > 1 && (
             <select
               value={selectedCameraId}
               onChange={(e) => handleSwitchCamera(e.target.value)}
-              className="text-[11px] font-semibold bg-zinc-100 border border-zinc-200 rounded-lg px-2 py-1 text-zinc-800 focus:outline-none focus:ring-1 focus:ring-brand-500 max-w-[140px] truncate"
+              className="text-[11px] font-semibold bg-stone-100 border border-stone-200/90 rounded-xl px-2 py-1 text-zinc-800 focus:outline-none focus:border-emerald-500 max-w-[130px] truncate shadow-2xs"
             >
               <option value="">Default ({facingMode === 'environment' ? 'Back' : 'Front'})</option>
               {cameras.map((c, idx) => (
@@ -202,17 +199,18 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
           <button
             onClick={handleToggleFacingMode}
             title="Flip Camera (Front / Back)"
-            className="p-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-lg border border-zinc-200 transition-colors"
+            aria-label="Flip Camera"
+            className="p-1.5 bg-stone-100 hover:bg-stone-200 text-zinc-700 rounded-xl border border-stone-200/90 transition-colors shadow-2xs"
           >
             <SwitchCamera className="w-3.5 h-3.5" />
           </button>
 
           <button
             onClick={() => (isScanning ? stopScanner() : startCamera(selectedCameraId))}
-            className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-lg border transition-colors ${
+            className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-xl border transition-colors shadow-2xs ${
               isScanning
                 ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
-                : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
             }`}
           >
             {isScanning ? (
@@ -231,28 +229,45 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
       </div>
 
       {scannerError && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-900 text-xs p-3 rounded-xl flex items-center justify-between gap-2">
+        <div className="bg-amber-50 border border-amber-200 text-amber-900 text-xs p-3 rounded-xl flex items-center justify-between gap-2 shadow-2xs">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
             <span>{scannerError}</span>
           </div>
           <button
             onClick={() => startCamera(selectedCameraId)}
-            className="px-2.5 py-1 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded text-[11px] shrink-0"
+            className="px-2.5 py-1 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-lg text-[11px] shrink-0"
           >
             Retry
           </button>
         </div>
       )}
 
-      {/* Camera Viewport */}
-      <div className="relative rounded-2xl overflow-hidden border border-zinc-300 bg-black min-h-[300px] flex items-center justify-center shadow-inner">
+      {/* Camera Viewport with Framing Brackets */}
+      <div className="relative rounded-2xl overflow-hidden border border-stone-300 bg-stone-950 min-h-[280px] sm:min-h-[320px] flex items-center justify-center shadow-inner">
         {isInitializing && (
-          <div className="absolute inset-0 z-10 bg-black/80 backdrop-blur-xs flex flex-col items-center justify-center gap-2 text-zinc-300 text-xs">
-            <RefreshCw className="w-6 h-6 animate-spin text-brand-500" />
+          <div className="absolute inset-0 z-10 bg-stone-950/80 backdrop-blur-xs flex flex-col items-center justify-center gap-2 text-stone-300 text-xs">
+            <RefreshCw className="w-6 h-6 animate-spin text-emerald-500" />
             <span>Connecting to camera stream...</span>
           </div>
         )}
+
+        {/* Viewfinder Target Frame (Visual Aid) */}
+        {isScanning && !isInitializing && (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+            <div className="w-[200px] h-[200px] sm:w-[230px] sm:h-[230px] relative border-2 border-emerald-500/40 rounded-2xl overflow-hidden">
+              {/* Corner Accent Brackets */}
+              <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-emerald-400 rounded-tl-lg" />
+              <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-emerald-400 rounded-tr-lg" />
+              <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-emerald-400 rounded-bl-lg" />
+              <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-emerald-400 rounded-br-lg" />
+
+              {/* Scanning Laser Guide */}
+              <div className="absolute inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent animate-scanline" />
+            </div>
+          </div>
+        )}
+
         <div id={containerId} className="w-full h-full [&_video]:w-full [&_video]:h-full [&_video]:object-cover" />
       </div>
     </div>

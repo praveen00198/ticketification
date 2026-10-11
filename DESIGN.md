@@ -129,3 +129,25 @@ flowchart TD
   - Red flash + double vibration on **Already Checked-In** or **Wrong Event**.
   - Amber prompt card with autofocus input on **Unassigned Worker Pass**.
 - **Zero-Scroll Operational Surface**: Essential stats (Total Scans, Checked In Today, Scans/Min) displayed above the fold.
+
+---
+
+## 6. Motion Primitives & Shared UI Component System
+
+### Motion Primitives (`src/components/ui/motion/`)
+Selectively adopted from [Motion Primitives](https://motion-primitives.com/) using native React + Tailwind CSS with strict `@media (prefers-reduced-motion: reduce)` compliance:
+- **`InView`**: Lightweight IntersectionObserver reveal with subtle translate-y (8px-16px) and opacity fade for section intros and metric cards.
+- **`AnimatedGroup`**: Staggered cascading reveal (40ms interval) for cards, grid items, and tables.
+- **`AnimatedBackground`**: Smooth sliding pill behind active navigation tabs and filter buttons.
+- **`SlidingNumber`**: Smooth numeric counter animation for live velocity, capacity, and scan stats.
+- **`Disclosure`**: Accessible smooth-expanding accordion with chevron rotation for settings and FAQ items.
+
+### Core UI Component Library (`src/components/ui/`)
+- **`Button`**: `primary` (emerald-600), `secondary` (stone-100), `outline`, `ghost`, `danger`, and `neutral` variants with loading spinner and disabled states.
+- **`Badge`**: High-contrast semantic status pills (`emerald`, `amber`, `rose`, `sky`, `indigo`, `neutral`) with optional pulsating live indicators.
+- **`Card`**: Surface panels with subtle borders (`border-surface-border`), warm backgrounds, and structured header/content/footer slots.
+- **`Modal`**: Responsive modal transitioning to a bottom-sheet drawer on mobile (<640px) and centered dialog on desktop with ESC key dismiss.
+- **`EmptyState`**: Contextual empty-state container with icon slot, title, description, and primary/secondary action triggers.
+- **`StatCard`**: Operational metric container featuring icon, label, and animated `SlidingNumber`.
+- **`Input`**: Accessible form control with floating or top label, helper text, error state, and icon prefixes.
+
