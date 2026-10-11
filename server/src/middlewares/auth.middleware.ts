@@ -35,17 +35,29 @@ export async function authMiddleware(
     return next(new AuthenticationError('Authentication required. Bearer token is empty.'));
   }
 
-  // 1. Try local JWT token verification first (works with MongoDB local auth)
-  try {
-    const { verifyJwtToken } = await import('../utils/local-auth');
-    const localPayload = verifyJwtToken(token);
-    if (localPayload && localPayload.id) {
-      const { mongoUserRepository } = await import('../modules/auth/repositories/mongo-user.repository');
-      const mongoUser = await mongoUserRepository.findBySupabaseId(localPayload.id);
-      if (mongoUser) {
+  // 1. Try local JWT token verification if local auth is enabled in this environment
+  if (config.env.enableLocalAuth) {
+    try {
+      const { verifyJwtToken } = await import('../utils/local-auth');
+      const localPayload = verifyJwtToken(token);
+      if (localPayload && localPayload.id) {
+        const { mongoUserRepository } = await import('../modules/auth/repositories/mongo-user.repository');
+        let mongoUser = null;
+        try {
+          mongoUser = await mongoUserRepository.findBySupabaseId(localPayload.id);
+        } catch (dbErr: any) {
+          console.error('[authMiddleware] Database error during local user lookup:', dbErr);
+          return next(new AppError('Unable to verify user profile due to database error.', 500));
+        }
+
+        if (!mongoUser) {
+          return next(new AuthenticationError('Invalid authentication token. User profile not found.'));
+        }
+
         if (mongoUser.status === 'SUSPENDED') {
           return next(new AuthenticationError('Account is suspended. Please contact platform administrators.'));
         }
+
         req.user = {
           id: mongoUser.supabaseUserId,
           email: mongoUser.email,
@@ -53,9 +65,12 @@ export async function authMiddleware(
         };
         return next();
       }
+    } catch (err: any) {
+      if (err instanceof AppError || err instanceof AuthenticationError) {
+        return next(err);
+      }
+      // If local token parsing failed, proceed to Supabase verification
     }
-  } catch (err) {
-    // Fall through to Supabase verification
   }
 
   // 2. Fall back to Supabase verification if configured
@@ -73,31 +88,61 @@ export async function authMiddleware(
       return next(new AuthenticationError('Invalid or expired authentication token.'));
     }
 
-    const email = (user.email || '').toLowerCase();
+    const email = (user.email || '').toLowerCase().trim();
     const isApprovedAdmin = config.env.initialAdminEmails.includes(email);
 
     // Resolve application platform role from trusted server database record
     let userRole: PlatformRole = 'USER';
     try {
-      let dbUser = await userRepository.findById(user.id);
-      if (!dbUser) {
-        const initialRole: PlatformRole = isApprovedAdmin ? 'ADMIN' : 'USER';
-        dbUser = await userRepository.upsert({
-          id: user.id,
-          name: user.user_metadata?.name || email.split('@')[0] || 'User',
-          email,
-          role: initialRole,
-        });
-      } else if (isApprovedAdmin && dbUser.role === 'USER') {
-        dbUser = await userRepository.updateRole(user.id, 'ADMIN');
+      const { isMongoConnected } = await import('../db/mongodb');
+      if (isMongoConnected()) {
+        const { mongoUserRepository } = await import('../modules/auth/repositories/mongo-user.repository');
+        let mongoUser = await mongoUserRepository.findBySupabaseId(user.id);
+        if (!mongoUser) {
+          const initialRole: PlatformRole = isApprovedAdmin ? 'ADMIN' : 'USER';
+          mongoUser = await mongoUserRepository.create({
+            supabaseUserId: user.id,
+            email,
+            name: user.user_metadata?.name || email.split('@')[0] || 'User',
+            platformRole: initialRole,
+            status: 'ACTIVE',
+          });
+        }
+        if (!mongoUser) {
+          return next(new AppError('Unable to verify user profile due to database error.', 500));
+        }
+        if (mongoUser.status === 'SUSPENDED') {
+          return next(new AuthenticationError('Account is suspended. Please contact platform administrators.'));
+        }
+        userRole = mongoUser.platformRole;
+      } else {
+        // Fall back to PostgreSQL when MongoDB is not connected
+        let dbUser = await userRepository.findById(user.id);
+        if (!dbUser) {
+          const initialRole: PlatformRole = isApprovedAdmin ? 'ADMIN' : 'USER';
+          dbUser = await userRepository.upsert({
+            id: user.id,
+            name: user.user_metadata?.name || email.split('@')[0] || 'User',
+            email,
+            role: initialRole,
+          });
+        }
+        if (!dbUser) {
+          return next(new AppError('Unable to verify user profile due to database error.', 500));
+        }
+        if ((dbUser as any)?.status === 'SUSPENDED') {
+          return next(new AuthenticationError('Account is suspended. Please contact platform administrators.'));
+        }
+        if (dbUser.role === 'ADMIN' || dbUser.role === 'SUPER_ADMIN' || dbUser.role === 'USER') {
+          userRole = dbUser.role as PlatformRole;
+        }
       }
-
-      if (dbUser && (dbUser.role === 'ADMIN' || dbUser.role === 'SUPER_ADMIN' || dbUser.role === 'USER')) {
-        userRole = dbUser.role as PlatformRole;
+    } catch (syncErr: any) {
+      if (syncErr instanceof AuthenticationError) {
+        return next(syncErr);
       }
-    } catch (syncErr) {
-      console.warn('[authMiddleware] Profile lookup/sync warning:', syncErr);
-      userRole = isApprovedAdmin ? 'ADMIN' : 'USER';
+      console.error('[authMiddleware] Profile lookup/sync error:', syncErr);
+      return next(new AppError('Unable to verify user profile due to database error.', 500));
     }
 
     req.user = {
@@ -108,6 +153,9 @@ export async function authMiddleware(
 
     next();
   } catch (err: any) {
+    if (err instanceof AppError || err instanceof AuthenticationError) {
+      return next(err);
+    }
     return next(new AuthenticationError('Authentication failed. Please sign in again.'));
   }
 }

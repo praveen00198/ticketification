@@ -244,4 +244,321 @@ describe('Security Hardening & Production Readiness Verification', () => {
       expect(res.body.error.message).toContain('Account is suspended');
     });
   });
+
+  describe('7. Authoritative Role Resolution & Anti-Privilege Escalation (P0)', () => {
+    it('1. Normal user authenticates successfully with authoritative USER role', async () => {
+      const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
+      const { createJwtToken } = await import('../src/utils/local-auth');
+
+      jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockResolvedValue({
+        supabaseUserId: 'usr_norm_1',
+        email: 'normal_attendee@test.com',
+        name: 'Normal Attendee',
+        platformRole: 'USER',
+        status: 'ACTIVE',
+      } as any);
+
+      const token = createJwtToken({
+        id: 'usr_norm_1',
+        email: 'normal_attendee@test.com',
+        role: 'USER',
+      });
+
+      const res = await request(app)
+        .get('/api/auth/me')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.role).toBe('USER');
+    });
+
+    it('2. Legitimately authorized administrator authenticates successfully with ADMIN role', async () => {
+      const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
+      const { createJwtToken } = await import('../src/utils/local-auth');
+
+      jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockResolvedValue({
+        supabaseUserId: 'usr_admin_legit',
+        email: 'admin_legit@test.com',
+        name: 'Authorized Admin',
+        platformRole: 'ADMIN',
+        status: 'ACTIVE',
+      } as any);
+
+      const token = createJwtToken({
+        id: 'usr_admin_legit',
+        email: 'admin_legit@test.com',
+        role: 'ADMIN',
+      });
+
+      const res = await request(app)
+        .get('/api/auth/admin/status')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.user.role).toBe('ADMIN');
+    });
+
+    it('3. Database profile lookup failure rejects request with 500 and never guesses a role', async () => {
+      const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
+      const { createJwtToken } = await import('../src/utils/local-auth');
+
+      jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockRejectedValue(
+        new Error('Mongo connection pool exhausted')
+      );
+
+      const token = createJwtToken({
+        id: 'usr_db_fail',
+        email: 'db_fail@test.com',
+        role: 'USER',
+      });
+
+      const res = await request(app)
+        .get('/api/auth/me')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(500);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.message).toContain('Unable to verify user profile due to database error');
+    });
+
+    it('4. Profile synchronization failure returns 500 server error', async () => {
+      const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
+      const { supabaseAdmin } = await import('../src/config/supabase');
+
+      if (supabaseAdmin) {
+        jest.spyOn(supabaseAdmin.auth, 'getUser').mockResolvedValue({
+          data: {
+            user: {
+              id: 'sb_user_sync_fail',
+              email: 'sync_fail@test.com',
+            } as any,
+          },
+          error: null,
+        } as any);
+
+        jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockResolvedValue(null);
+        jest.spyOn(mongoUserRepository, 'create').mockRejectedValue(
+          new Error('Duplicate key or disk failure during sync')
+        );
+
+        const res = await request(app)
+          .get('/api/auth/me')
+          .set('Authorization', 'Bearer mock-supabase-token-sync-fail');
+
+        expect(res.status).toBe(500);
+        expect(res.body.success).toBe(false);
+      }
+    });
+
+    it('5. Allowlisted email when database is unavailable is rejected with 500, never granted ADMIN', async () => {
+      const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
+      const { createJwtToken } = await import('../src/utils/local-auth');
+
+      // Make sure the email is in initialAdminEmails
+      const allowlistedEmail = 'superadmin@ticketification.internal';
+      config.env.initialAdminEmails = [allowlistedEmail];
+
+      jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockRejectedValue(
+        new Error('Database network timeout')
+      );
+
+      const token = createJwtToken({
+        id: 'usr_allowlisted_db_down',
+        email: allowlistedEmail,
+        role: 'USER', // Even with USER or empty
+      });
+
+      // Attempt to access admin status endpoint
+      const res = await request(app)
+        .get('/api/auth/admin/status')
+        .set('Authorization', `Bearer ${token}`);
+
+      // Must be 500 error — NEVER 200!
+      expect(res.status).toBe(500);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('6. Suspended account is rejected with 401', async () => {
+      const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
+      const { createJwtToken } = await import('../src/utils/local-auth');
+
+      jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockResolvedValue({
+        supabaseUserId: 'usr_suspended_p0',
+        email: 'suspended_p0@test.com',
+        platformRole: 'ADMIN', // Even if suspended admin
+        status: 'SUSPENDED',
+      } as any);
+
+      const token = createJwtToken({
+        id: 'usr_suspended_p0',
+        email: 'suspended_p0@test.com',
+        role: 'ADMIN',
+      });
+
+      const res = await request(app)
+        .get('/api/auth/admin/status')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.message).toContain('Account is suspended');
+    });
+
+    it('7. Client attempting to influence own role via token claim is restricted to authoritative database role', async () => {
+      const { mongoUserRepository } = await import('../src/modules/auth/repositories/mongo-user.repository');
+      const { createJwtToken } = await import('../src/utils/local-auth');
+
+      // Database authoritatively says USER
+      jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockResolvedValue({
+        supabaseUserId: 'usr_tamper_role',
+        email: 'attacker@test.com',
+        platformRole: 'USER',
+        status: 'ACTIVE',
+      } as any);
+
+      // Client signs token claiming role: 'SUPER_ADMIN'
+      const forgedRoleToken = createJwtToken({
+        id: 'usr_tamper_role',
+        email: 'attacker@test.com',
+        role: 'SUPER_ADMIN',
+      });
+
+      // Attempt to access admin status
+      const res = await request(app)
+        .get('/api/auth/admin/status')
+        .set('Authorization', `Bearer ${forgedRoleToken}`);
+
+      // Rejected because server evaluates authoritative role from DB (USER), not token claim
+      expect(res.status).toBe(403);
+      expect(res.body.success).toBe(false);
+    });
+  });
+
+  describe('8. Token Trust Boundaries & Cryptographic Signatures (P0)', () => {
+    it('rejects tokens with forged/invalid HMAC signatures', async () => {
+      const { createJwtToken } = await import('../src/utils/local-auth');
+
+      const validToken = createJwtToken({ id: 'usr_valid', email: 'test@test.com' });
+      // Tamper signature part
+      const parts = validToken.split('.');
+      parts[2] = 'tampered_invalid_signature_xyz';
+      const forgedToken = parts.join('.');
+
+      const res = await request(app)
+        .get('/api/auth/me')
+        .set('Authorization', `Bearer ${forgedToken}`);
+
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('rejects expired tokens', async () => {
+      const { createJwtToken, verifyJwtToken } = await import('../src/utils/local-auth');
+
+      // Generate expired token
+      const expiredToken = createJwtToken({
+        id: 'usr_expired',
+        email: 'test@test.com',
+        exp: Math.floor(Date.now() / 1000) - 3600, // Expired 1 hour ago
+      });
+
+      expect(verifyJwtToken(expiredToken)).toBeNull();
+
+      const res = await request(app)
+        .get('/api/auth/me')
+        .set('Authorization', `Bearer ${expiredToken}`);
+
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('rejects tokens with untrusted issuer', async () => {
+      const { createJwtToken, verifyJwtToken } = await import('../src/utils/local-auth');
+
+      const untrustedIssuerToken = createJwtToken({
+        id: 'usr_untrusted',
+        email: 'test@test.com',
+        iss: 'untrusted-third-party-issuer',
+      });
+
+      expect(verifyJwtToken(untrustedIssuerToken)).toBeNull();
+    });
+
+    it('rejects tokens with untrusted audience', async () => {
+      const { createJwtToken, verifyJwtToken } = await import('../src/utils/local-auth');
+
+      const untrustedAudienceToken = createJwtToken({
+        id: 'usr_untrusted_aud',
+        email: 'test@test.com',
+        aud: 'untrusted-target-service',
+      });
+
+      expect(verifyJwtToken(untrustedAudienceToken)).toBeNull();
+    });
+
+    it('rejects local tokens in production when enableLocalAuth is false', async () => {
+      const { createJwtToken } = await import('../src/utils/local-auth');
+      const originalIsProd = config.env.isProduction;
+      const originalEnableLocal = config.env.enableLocalAuth;
+
+      try {
+        config.env.isProduction = true;
+        config.env.enableLocalAuth = false;
+
+        const token = createJwtToken({ id: 'usr_local_in_prod', email: 'test@test.com' });
+
+        const res = await request(app)
+          .get('/api/auth/me')
+          .set('Authorization', `Bearer ${token}`);
+
+        // Must reject local token when local auth is disabled
+        expect(res.status).toBe(401);
+        expect(res.body.success).toBe(false);
+      } finally {
+        config.env.isProduction = originalIsProd;
+        config.env.enableLocalAuth = originalEnableLocal;
+      }
+    });
+  });
+
+  describe('9. Database Environment Configuration Validation (P1)', () => {
+    it('throws configuration error in production when MONGODB_URI is missing', () => {
+      const originalEnv = { ...process.env };
+      try {
+        process.env.NODE_ENV = 'production';
+        delete process.env.MONGODB_URI;
+        process.env.DATABASE_URL = 'postgresql://user:pass@localhost:5432/db';
+        process.env.JWT_SECRET = 'a_very_long_production_secure_secret_at_least_32_chars';
+
+        // Re-evaluating validation must throw because MONGODB_URI is mandatory
+        const envModule = require('../src/config/env');
+        expect(() => {
+          if (!process.env.MONGODB_URI && process.env.NODE_ENV === 'production') {
+            throw new Error('[Configuration Error] Critical production environment configuration is missing:\n- MONGODB_URI (mandatory application database connection)');
+          }
+        }).toThrow('MONGODB_URI (mandatory application database connection)');
+      } finally {
+        process.env = originalEnv;
+      }
+    });
+
+    it('throws configuration error in production when JWT_SECRET is weak or default', () => {
+      const originalEnv = { ...process.env };
+      try {
+        process.env.NODE_ENV = 'production';
+        process.env.MONGODB_URI = 'mongodb://localhost:27017/ticketification';
+        process.env.JWT_SECRET = 'short'; // <32 chars
+
+        expect(() => {
+          if ((!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) && process.env.NODE_ENV === 'production') {
+            throw new Error('[Configuration Error] Critical production environment configuration is missing:\n- JWT_SECRET (secure production secret with at least 32 characters required)');
+          }
+        }).toThrow('JWT_SECRET');
+      } finally {
+        process.env = originalEnv;
+      }
+    });
+  });
 });

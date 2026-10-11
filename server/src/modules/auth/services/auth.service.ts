@@ -181,18 +181,30 @@ export class AuthService {
             email: normalizedEmail,
             role: initialRole,
           });
-        } else if (this.isApprovedAdmin(normalizedEmail) && dbUser.role === 'USER') {
-          dbUser = await this.userRepo.updateRole(data.user.id, 'ADMIN');
         }
 
         if (dbUser) {
+          if ((dbUser as any).status === 'SUSPENDED') {
+            throw new AuthenticationError('Account is suspended. Please contact platform administrators.');
+          }
+          // Also check MongoDB record if present for suspended status
+          const mongoUser = await this.mongoUserRepo.findBySupabaseId(data.user.id);
+          if (mongoUser && mongoUser.status === 'SUSPENDED') {
+            throw new AuthenticationError('Account is suspended. Please contact platform administrators.');
+          }
+
           resolvedRole = (dbUser.role as PlatformRole) || 'USER';
           profileName = dbUser.name || profileName;
           this.syncService.syncUserToMongo(dbUser).catch(() => {});
+        } else {
+          throw new AppError('Unable to resolve user profile.', 500);
         }
-      } catch (dbErr) {
-        console.warn('[AuthService] Could not resolve user profile from database during login:', dbErr);
-        resolvedRole = this.isApprovedAdmin(normalizedEmail) ? 'ADMIN' : 'USER';
+      } catch (dbErr: any) {
+        if (dbErr instanceof AuthenticationError) {
+          throw dbErr;
+        }
+        console.error('[AuthService] Could not resolve user profile from database during login:', dbErr);
+        throw new AppError('Authentication service temporarily unavailable due to database error.', 500);
       }
 
       return {

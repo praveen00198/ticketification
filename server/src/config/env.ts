@@ -20,6 +20,8 @@ export interface EnvConfig {
   mongoUri: string;
   // JWT signing secret
   jwtSecret: string;
+  // Local Auth Enabled flag
+  enableLocalAuth: boolean;
   // Application
   appUrl: string;
   uploadDir: string;
@@ -41,16 +43,26 @@ function validateAndLoadEnv(): EnvConfig {
 
   const databaseUrl = process.env.DATABASE_URL || '';
   const mongoUri = process.env.MONGODB_URI || '';
-  const jwtSecret =
-    process.env.JWT_SECRET || (isProduction ? '' : 'Ticketification_Default_Secret_2026');
+  const rawJwtSecret = process.env.JWT_SECRET || '';
+  const jwtSecret = isProduction ? rawJwtSecret : (rawJwtSecret || 'Ticketification_Default_Secret_2026');
+
+  // Local authentication is enabled by default in development/test or if Supabase is unconfigured,
+  // but in production it requires explicit opt-in via ENABLE_LOCAL_AUTH=true.
+  const enableLocalAuth =
+    process.env.ENABLE_LOCAL_AUTH === 'true' ||
+    (!isProduction && process.env.ENABLE_LOCAL_AUTH !== 'false') ||
+    (!supabaseUrl && !supabaseServiceRoleKey);
 
   if (isProduction) {
     const missing: string[] = [];
-    if (!mongoUri && !databaseUrl) {
-      missing.push('MONGODB_URI or DATABASE_URL (database connection required)');
+    if (!mongoUri) {
+      missing.push('MONGODB_URI (mandatory application database connection)');
     }
-    if (!jwtSecret) {
-      missing.push('JWT_SECRET (secure secret required in production)');
+    if (!jwtSecret || jwtSecret === 'Ticketification_Default_Secret_2026' || jwtSecret.length < 32) {
+      missing.push('JWT_SECRET (secure production secret with at least 32 characters required)');
+    }
+    if (!databaseUrl) {
+      console.warn('ℹ️ [Env] DATABASE_URL is not set. PostgreSQL/Drizzle features will operate in standby mode.');
     }
     if (!supabaseUrl) {
       console.warn('⚠️ [Env] SUPABASE_URL is missing in production environment. Storage features will run in standby mode.');
@@ -79,6 +91,7 @@ function validateAndLoadEnv(): EnvConfig {
     mongoUri,
     // JWT
     jwtSecret,
+    enableLocalAuth,
     // Application
     appUrl: process.env.APP_URL || 'http://localhost:5173',
     uploadDir: process.env.UPLOAD_DIR || 'uploads',

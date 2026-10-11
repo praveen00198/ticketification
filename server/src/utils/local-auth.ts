@@ -29,12 +29,19 @@ export function verifyPassword(password: string, stored: string): boolean {
   }
 }
 
+export const LOCAL_JWT_ISSUER = 'ticketification-local';
+export const LOCAL_JWT_AUDIENCE = 'ticketification-api';
+
 function getEffectiveSecret(customSecret?: string): string {
   if (customSecret) return customSecret;
-  if (config.env.jwtSecret) return config.env.jwtSecret;
-  if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
+  if (config.env.jwtSecret && config.env.jwtSecret !== 'Ticketification_Default_Secret_2026') {
+    return config.env.jwtSecret;
+  }
+  if (process.env.JWT_SECRET && process.env.JWT_SECRET !== 'Ticketification_Default_Secret_2026') {
+    return process.env.JWT_SECRET;
+  }
   if (config.env.isProduction) {
-    throw new Error('[Security Invariant] JWT_SECRET must be configured in production environment.');
+    throw new Error('[Security Invariant] JWT_SECRET must be configured with a secure value in production environment.');
   }
   return 'Ticketification_Default_Secret_2026';
 }
@@ -48,8 +55,16 @@ export function createJwtToken(
 ): string {
   const signingSecret = getEffectiveSecret(secret);
   const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-  const exp = Math.floor(Date.now() / 1000) + 86400 * 7; // 7 days expiration
-  const body = Buffer.from(JSON.stringify({ ...payload, exp, iat: Math.floor(Date.now() / 1000) })).toString('base64url');
+  const now = Math.floor(Date.now() / 1000);
+  const exp = now + 86400 * 7; // 7 days expiration
+  const tokenPayload = {
+    iss: LOCAL_JWT_ISSUER,
+    aud: LOCAL_JWT_AUDIENCE,
+    iat: now,
+    exp,
+    ...payload,
+  };
+  const body = Buffer.from(JSON.stringify(tokenPayload)).toString('base64url');
   const signature = crypto.createHmac('sha256', signingSecret).update(`${header}.${body}`).digest('base64url');
   return `${header}.${body}.${signature}`;
 }
@@ -78,6 +93,13 @@ export function verifyJwtToken(
     const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
     if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
       return null; // Expired token
+    }
+    // Verify issuer and audience if present
+    if (payload.iss && payload.iss !== LOCAL_JWT_ISSUER) {
+      return null; // Untrusted issuer
+    }
+    if (payload.aud && payload.aud !== LOCAL_JWT_AUDIENCE) {
+      return null; // Invalid audience
     }
     return payload;
   } catch {

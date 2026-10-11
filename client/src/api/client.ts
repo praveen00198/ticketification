@@ -43,16 +43,28 @@ export const apiClient = axios.create({
 
 /**
  * Global authentication token helpers.
- * Reads canonical 'ticketification_token' with seamless backward-compatible fallback to legacy 'admin_token'.
+ * Reads canonical 'ticketification_token' with seamless one-time migration from legacy 'admin_token'.
+ * Eliminates duplicate token exposure in browser storage.
  */
 export function getStoredAuthToken(): string | null {
-  return localStorage.getItem('ticketification_token') || localStorage.getItem('admin_token');
+  const token = localStorage.getItem('ticketification_token');
+  if (token) return token;
+
+  // Seamless one-time migration from legacy storage key
+  const legacyToken = localStorage.getItem('admin_token');
+  if (legacyToken) {
+    localStorage.setItem('ticketification_token', legacyToken);
+    localStorage.removeItem('admin_token');
+    return legacyToken;
+  }
+
+  return null;
 }
 
 export function setStoredAuthToken(token: string): void {
   localStorage.setItem('ticketification_token', token);
-  // Maintain backward compatibility for legacy callers
-  localStorage.setItem('admin_token', token);
+  // Remove legacy storage key to prevent duplicate credentials in storage
+  localStorage.removeItem('admin_token');
 }
 
 export function clearStoredAuthToken(): void {
