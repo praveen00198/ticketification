@@ -54,4 +54,30 @@ describe('Phase 10: End-to-End System Integration & Contract Verification', () =
       expect(isPngBuffer(invalidJpeg)).toBe(false);
     });
   });
+
+  describe('End-to-End Workflow Security & Reliability Invariants', () => {
+    it('Invariant 4: Attendee registration must require authenticated user session (401)', async () => {
+      const res = await request(app)
+        .post('/api/events/507f1f77bcf86cd799439011/register')
+        .send({ phone: '+919876543210' });
+
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('Invariant 5: Turnstile check-in endpoints must require active staff credentials (401)', async () => {
+      const res = await request(app)
+        .post('/api/events/507f1f77bcf86cd799439011/checkin')
+        .send({ token: 'a'.repeat(64) });
+
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('Invariant 6: Attendee wallet query must require authenticated session (401)', async () => {
+      const res = await request(app).get('/api/attendee/wallet');
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+    });
+  });
 });

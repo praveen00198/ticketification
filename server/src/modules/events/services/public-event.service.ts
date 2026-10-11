@@ -13,9 +13,12 @@ import {
   MongoUserRepository,
   mongoUserRepository,
 } from '../../auth/repositories/mongo-user.repository';
+import {
+  MongoEventRegistrationRepository,
+  mongoEventRegistrationRepository,
+} from '../repositories/mongo-event-registration.repository';
 import { AuditService } from './audit.service';
-import { EventReportModel, REPORT_CATEGORIES, ReportCategory } from '../../../db/mongo/models/event-report.model';
-import { EventRegistrationModel } from '../../../db/mongo/models/event-registration.model';
+import { REPORT_CATEGORIES, ReportCategory } from '../../../db/mongo/models/event-report.model';
 import { IEventDocument } from '../../../db/mongo/models/event.model';
 import { IUserDocument } from '../../../db/mongo/models/user.model';
 
@@ -63,6 +66,7 @@ export class PublicEventService {
     private eventRepo: MongoEventRepository = mongoEventRepository,
     private reportRepo: MongoEventReportRepository = mongoEventReportRepository,
     private userRepo: MongoUserRepository = mongoUserRepository,
+    private registrationRepo: MongoEventRegistrationRepository = mongoEventRegistrationRepository,
     private auditService: AuditService = new AuditService()
   ) {}
 
@@ -167,10 +171,10 @@ export class PublicEventService {
     }
 
     // Capacity metrics
-    const confirmedCount = await EventRegistrationModel.countDocuments({
-      eventId: event._id,
-      status: { $in: ['CONFIRMED', 'ATTENDED'] },
-    }).exec();
+    const confirmedCount = await this.registrationRepo.countByEvent(
+      event._id.toString(),
+      ['CONFIRMED', 'ATTENDED']
+    );
 
     const totalCapacity = event.registration?.capacity || null;
     const remainingCapacity = totalCapacity ? Math.max(0, totalCapacity - confirmedCount) : null;

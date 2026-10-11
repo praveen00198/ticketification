@@ -37,6 +37,8 @@ console.log(`[DIAG:Storage] ${JSON.stringify({
 })}`);
 
 
+let serverInstance: any = null;
+
 async function startServer() {
   if (config.env.mongoUri) {
     try {
@@ -47,7 +49,7 @@ async function startServer() {
   }
 
   const PORT = config.env.port;
-  app.listen(PORT, () => {
+  serverInstance = app.listen(PORT, () => {
     console.log(`[Server] Operational console API listening on http://localhost:${PORT}`);
     console.log(`[Environment] Node ENV: ${config.env.nodeEnv}`);
     // ── LIFECYCLE POINT 2: Server ready/listening ──
@@ -69,19 +71,28 @@ process.on('unhandledRejection', (reason: any) => {
   console.error('[FATAL] Unhandled Rejection:', reason);
 });
 
-// ── LIFECYCLE POINT 13: Before process shutdown ──
-process.on('SIGTERM', async () => {
-  logMemory('sigterm_shutdown');
-  console.log('[Server] SIGTERM received, shutting down...');
-  await disconnectMongoDB();
-  process.exit(0);
-});
+// ── LIFECYCLE POINT 13: Before process shutdown (Graceful) ──
+async function gracefulShutdown(signal: string) {
+  logMemory(`${signal.toLowerCase()}_shutdown`);
+  console.log(`[Server] ${signal} received, shutting down gracefully...`);
+  if (serverInstance) {
+    serverInstance.close(async () => {
+      console.log('[Server] HTTP listener closed cleanly.');
+      await disconnectMongoDB();
+      process.exit(0);
+    });
+    // Safety fallback: force exit after 10s if sockets remain open
+    setTimeout(() => {
+      console.error('[Server] Force terminating after shutdown timeout.');
+      process.exit(1);
+    }, 10000).unref();
+  } else {
+    await disconnectMongoDB();
+    process.exit(0);
+  }
+}
 
-process.on('SIGINT', async () => {
-  logMemory('sigint_shutdown');
-  console.log('[Server] SIGINT received, shutting down...');
-  await disconnectMongoDB();
-  process.exit(0);
-});
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 startServer();

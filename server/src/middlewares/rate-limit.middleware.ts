@@ -5,6 +5,7 @@ export interface RateLimiterOptions {
   max: number;
   message?: string;
   skipFailedRequests?: boolean;
+  keyGenerator?: (req: Request) => string;
 }
 
 interface ClientRecord {
@@ -15,17 +16,19 @@ interface ClientRecord {
 /**
  * Creates an in-memory, zero-dependency sliding window rate limiter middleware.
  * Automatically evicts expired IP records to prevent memory growth.
+ * Properly isolates authenticated users so one user's activity never exhausts another user's allowance behind a shared IP.
  */
 export function createRateLimiter(options: RateLimiterOptions) {
   const { windowMs, max, message } = options;
   const store = new Map<string, ClientRecord>();
+  const MAX_STORE_SIZE = 10000; // Defense against unbounded memory consumption
 
   // Periodically sweep expired records every 60 seconds (unrefed so it doesn't block process exit)
   const cleanupInterval = setInterval(() => {
     const now = Date.now();
-    for (const [ip, record] of store.entries()) {
+    for (const [key, record] of store.entries()) {
       if (now > record.resetTime) {
-        store.delete(ip);
+        store.delete(key);
       }
     }
   }, 60000);
@@ -41,11 +44,26 @@ export function createRateLimiter(options: RateLimiterOptions) {
       req.socket.remoteAddress ||
       'unknown-client';
 
+    // Properly scope limiter key:
+    // 1. Explicit keyGenerator (e.g. per-endpoint custom isolation)
+    // 2. Authenticated user ID (prevents NAT/shared-proxy starvation)
+    // 3. Client IP fallback for unauthenticated requests
+    const key = options.keyGenerator
+      ? options.keyGenerator(req)
+      : (req as any).user?.id
+      ? `user:${(req as any).user.id}`
+      : `ip:${clientIp}`;
+
     const now = Date.now();
-    const existing = store.get(clientIp);
+    const existing = store.get(key);
 
     if (!existing || now > existing.resetTime) {
-      store.set(clientIp, {
+      if (store.size >= MAX_STORE_SIZE) {
+        const oldestKey = store.keys().next().value;
+        if (oldestKey) store.delete(oldestKey);
+      }
+
+      store.set(key, {
         count: 1,
         resetTime: now + windowMs,
       });

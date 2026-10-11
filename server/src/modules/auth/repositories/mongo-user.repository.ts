@@ -101,6 +101,17 @@ export class MongoUserRepository {
   }
 
   /**
+   * Update user password hash.
+   */
+  async updatePasswordHash(supabaseUserId: string, passwordHash: string): Promise<IUserDocument | null> {
+    return UserModel.findOneAndUpdate(
+      { supabaseUserId },
+      { $set: { passwordHash } },
+      { new: true }
+    ).exec();
+  }
+
+  /**
    * List users with explicit ordering and pagination.
    */
   async listUsers(filter: Record<string, any> = {}, limit = 50, skip = 0): Promise<IUserDocument[]> {

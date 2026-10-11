@@ -2,7 +2,6 @@ import { Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
 import { AuthenticatedRequest } from '../../../middlewares/auth.middleware';
 import { eventService, EventService } from '../services/event.service';
-import { supabaseStorageService, SupabaseStorageService } from '../../tickets/services/supabase-storage.service';
 import { AuthenticationError, ValidationError } from '../../../middlewares/error.middleware';
 import {
   validateEventWizardInput,
@@ -14,8 +13,7 @@ import {
 
 export class EventController {
   constructor(
-    private service: EventService = eventService,
-    private storageService: SupabaseStorageService = supabaseStorageService
+    private service: EventService = eventService
   ) {}
 
   /**
@@ -219,7 +217,7 @@ export class EventController {
         return;
       }
 
-      const result = await this.storageService.uploadEventBanner(
+      const result = await this.service.uploadBanner(
         req.user.id,
         file.buffer,
         file.originalname,

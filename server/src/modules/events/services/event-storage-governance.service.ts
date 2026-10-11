@@ -2,7 +2,10 @@ import {
   SupabaseStorageService,
   supabaseStorageService,
 } from '../../tickets/services/supabase-storage.service';
-import { EventJobModel } from '../../../db/mongo/models/event-job.model';
+import {
+  MongoEventJobRepository,
+  mongoEventJobRepository,
+} from '../repositories/mongo-event-job.repository';
 import { AppError } from '../../../middlewares/error.middleware';
 
 export interface StorageFolderBreakdown {
@@ -58,7 +61,8 @@ export class EventStorageGovernanceService {
   private readonly defaultQuotaBytes = 1024 * 1024 * 1024;
 
   constructor(
-    private storageService: SupabaseStorageService = supabaseStorageService
+    private storageService: SupabaseStorageService = supabaseStorageService,
+    private jobRepo: MongoEventJobRepository = mongoEventJobRepository
   ) {}
 
   /**
@@ -185,18 +189,7 @@ export class EventStorageGovernanceService {
 
     // Invalidate expired download URLs in event_jobs
     try {
-      await EventJobModel.updateMany(
-        {
-          eventId,
-          jobType: 'EXPORT_CREDENTIALS',
-          'result.storagePath': { $in: pathsToDelete },
-        },
-        {
-          $set: {
-            'result.downloadUrl': null,
-          },
-        }
-      );
+      await this.jobRepo.clearDownloadUrlsForStoragePaths(eventId, pathsToDelete);
     } catch (err: any) {
       console.warn('[EventStorageGovernanceService] Note updating stale jobs:', err?.message);
     }

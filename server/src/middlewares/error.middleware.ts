@@ -107,18 +107,17 @@ export function errorHandler(
     message = 'A server error occurred. Please try again or contact support.';
   }
 
-  const details =
-    err?.details ||
-    (!config.env.isProduction || process.env.EXPOSE_ERROR_DETAILS === 'true'
-      ? { originalMessage: err?.message, code: errorCode }
-      : undefined);
+  // In production, internal 500 details and database error structures are never exposed to clients
+  const details = config.env.isProduction
+    ? (isAppError && statusCode < 500 ? err?.details : undefined)
+    : (err?.details || { originalMessage: err?.message, code: errorCode });
 
   res.status(statusCode).json({
     success: false,
     error: {
       message,
       code: errorCode,
-      ...(details && { details }),
+      ...(details !== undefined && { details }),
     },
   });
 }

@@ -122,6 +122,34 @@ describe('Phase 2: Events & Guest Management Subsystem', () => {
       expect(result.ticketTypes).toHaveLength(3);
     });
 
+    it('should assign USER role and never ADMIN when creating an event for an unregistered user', async () => {
+      const mockEventRepo: any = {
+        create: jest.fn().mockResolvedValue({ id: 'evt-2', name: 'Hackathon', date: '2026-10-10', createdBy: 'new-user' }),
+      };
+      const mockTicketTypeRepo: any = {
+        createMany: jest.fn().mockResolvedValue([]),
+      };
+      const mockUserRepo: any = {
+        findById: jest.fn().mockResolvedValue(null),
+        upsert: jest.fn().mockResolvedValue({ id: 'new-user', role: 'USER' }),
+      };
+
+      const service = new EventService(mockEventRepo, mockTicketTypeRepo, mockUserRepo);
+      await service.createEvent('new-user', { name: 'Hackathon', date: '2026-10-10' });
+
+      expect(mockUserRepo.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'new-user',
+          role: 'USER',
+        })
+      );
+      expect(mockUserRepo.upsert).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          role: 'ADMIN',
+        })
+      );
+    });
+
     it('should throw AuthorizationError when User B attempts to access User A event', async () => {
       const mockEventRepo: any = {
         findById: jest.fn().mockResolvedValue({ id: 'evt-1', createdBy: 'user-A' }),

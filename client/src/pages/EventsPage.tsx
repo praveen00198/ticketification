@@ -122,25 +122,83 @@ export const EventsPage: React.FC = () => {
 
       {/* Events Grid */}
       {loading ? (
-        <div className="text-center py-16 text-stone-400 text-xs font-medium">
-          Loading events...
+        <div className="text-center py-16 text-stone-400 text-xs font-medium bg-white border border-stone-200/90 rounded-2xl p-8">
+          <div className="w-7 h-7 rounded-full border-2 border-emerald-500/30 border-t-emerald-600 animate-spin mx-auto mb-2" />
+          Loading your events...
         </div>
       ) : events.length === 0 ? (
-        <div className="text-center py-16 bg-white border border-stone-200/90 rounded-2xl p-8 shadow-xs">
-          <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3 border border-emerald-100">
-            <Calendar className="w-6 h-6" />
+        <div className="bg-white border border-stone-200/90 rounded-2xl p-8 shadow-xs space-y-6">
+          <div className="text-center max-w-lg mx-auto space-y-2">
+            <div className="w-14 h-14 bg-emerald-50 text-emerald-700 rounded-full flex items-center justify-center mx-auto mb-3 border border-emerald-100">
+              <Calendar className="w-7 h-7" />
+            </div>
+            <h3 className="text-lg font-bold text-zinc-900 tracking-tight">You Haven't Created Any Events Yet</h3>
+            <p className="text-xs text-stone-500 leading-relaxed">
+              Ticketification is your unified platform to attend and organize events. Choose your journey below:
+            </p>
           </div>
-          <h3 className="text-base font-bold text-zinc-900 mb-1">No Events Found</h3>
-          <p className="text-xs text-stone-500 max-w-md mx-auto mb-5">
-            You haven't created any events yet. Get started with our event-aware creation wizard to configure your venue, schedule, and credential terminology.
-          </p>
-          <button
-            onClick={() => navigate('/events/create')}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition-all shadow-xs"
-          >
-            <Sparkles className="w-4 h-4 text-emerald-100" />
-            <span>Start Event Creation Wizard</span>
-          </button>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+            {/* Pathway 1: Host an event */}
+            <div className="p-5 rounded-xl border border-stone-200/90 hover:border-emerald-500/50 transition-all flex flex-col justify-between space-y-4 bg-stone-50/50">
+              <div>
+                <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center mb-3 border border-emerald-200">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <h4 className="text-sm font-bold text-zinc-900">Host an Event</h4>
+                <p className="text-xs text-stone-500 mt-1">
+                  Configure custom credential badges, venue logistics, registration caps, and real-time gate turnstiles.
+                </p>
+              </div>
+              <button
+                onClick={() => navigate('/events/create')}
+                className="inline-flex items-center justify-center gap-1.5 w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition-all shadow-xs"
+              >
+                <span>Create Event Wizard</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Pathway 2: Discover and attend */}
+            <div className="p-5 rounded-xl border border-stone-200/90 hover:border-emerald-500/50 transition-all flex flex-col justify-between space-y-4 bg-stone-50/50">
+              <div>
+                <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center mb-3 border border-emerald-200">
+                  <Calendar className="w-5 h-5" />
+                </div>
+                <h4 className="text-sm font-bold text-zinc-900">Discover Events to Attend</h4>
+                <p className="text-xs text-stone-500 mt-1">
+                  Explore published hackathons, conferences, and workshops. Check eligibility and claim your pass.
+                </p>
+              </div>
+              <button
+                onClick={() => navigate('/explore')}
+                className="inline-flex items-center justify-center gap-1.5 w-full py-2 bg-white hover:bg-stone-100 text-zinc-800 text-xs font-semibold rounded-xl transition-all border border-stone-200 shadow-xs"
+              >
+                <span>Explore Events Catalog</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Pathway 3: Wallet */}
+            <div className="p-5 rounded-xl border border-stone-200/90 hover:border-emerald-500/50 transition-all flex flex-col justify-between space-y-4 bg-stone-50/50">
+              <div>
+                <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center mb-3 border border-emerald-200">
+                  <TicketIcon className="w-5 h-5" />
+                </div>
+                <h4 className="text-sm font-bold text-zinc-900">Access Your Passes</h4>
+                <p className="text-xs text-stone-500 mt-1">
+                  View your active registration credentials, dynamic QR entry tokens, and hackathon team rosters.
+                </p>
+              </div>
+              <button
+                onClick={() => navigate('/wallet')}
+                className="inline-flex items-center justify-center gap-1.5 w-full py-2 bg-white hover:bg-stone-100 text-zinc-800 text-xs font-semibold rounded-xl transition-all border border-stone-200 shadow-xs"
+              >
+                <span>Open Pass Wallet</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">

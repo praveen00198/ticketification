@@ -3,6 +3,7 @@ import { mongoEventRepository, MongoEventRepository, EventQueryOptions, Paginate
 import { ticketTypeRepository, TicketTypeRepository, CreateTicketTypeInput } from '../repositories/ticket-type.repository';
 import { userRepository, UserRepository } from '../../auth/repositories/user.repository';
 import { mongoUserRepository, MongoUserRepository } from '../../auth/repositories/mongo-user.repository';
+import { supabaseStorageService, SupabaseStorageService } from '../../tickets/services/supabase-storage.service';
 import {
   ValidationError,
   NotFoundError,
@@ -36,7 +37,8 @@ export class EventService {
     private readonly ticketTypeRepo: TicketTypeRepository = ticketTypeRepository,
     private readonly userRepo: UserRepository = userRepository,
     private readonly mongoEventRepo: MongoEventRepository = mongoEventRepository,
-    private readonly mongoUserRepo: MongoUserRepository = mongoUserRepository
+    private readonly mongoUserRepo: MongoUserRepository = mongoUserRepository,
+    private readonly storageService: SupabaseStorageService = supabaseStorageService
   ) {}
 
   /**
@@ -252,9 +254,9 @@ export class EventService {
       if (!existingUser) {
         await this.userRepo.upsert({
           id: userId,
-          name: data.organizerName?.trim() || 'Admin',
+          name: data.organizerName?.trim() || 'User',
           email: `${userId}@ticketification.internal`,
-          role: 'ADMIN',
+          role: 'USER',
         });
       }
     } catch (syncErr) {
@@ -388,6 +390,22 @@ export class EventService {
     }
 
     return await this.ticketTypeRepo.findByEventId(eventId);
+  }
+
+  /**
+   * Upload an event banner to storage.
+   */
+  async uploadBanner(
+    userId: string,
+    fileBuffer: Buffer,
+    fileName: string,
+    mimeType: string
+  ): Promise<{ bannerUrl?: string; storagePath: string }> {
+    const result = await this.storageService.uploadEventBanner(userId, fileBuffer, fileName, mimeType);
+    return {
+      bannerUrl: result.publicUrl,
+      storagePath: result.storagePath,
+    };
   }
 }
 

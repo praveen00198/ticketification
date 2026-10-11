@@ -1,7 +1,7 @@
 # AGENTS.md — Permanent Project Rules & Engineering Governance
 
 ## 1. Project Purpose & Scope
-Ticketification is an **Event Operating + Credential + Access Platform** supporting diverse event types (Hackathons, Conferences, Concerts, Festivals, Workshops, Competitions, etc.). It enables event organizers (Hosts) to configure events, manage attendees, coordinate staff (Coordinators, Volunteers, Mentors, Evaluators), issue tamper-proof visual credentials with dynamic QR codes, run blind evaluation rubrics, and execute high-throughput, atomic day-of-event access control.
+Ticketification is an **Event Operating + Credential + Access Platform** supporting diverse event types (Hackathons, Conferences, Concerts, Festivals, Workshops, Competitions, etc.). It serves normal registered users who can discover and attend events and, whenever they choose, organize and manage their own events. Attending and organizing are equally important, foundational capabilities. The platform enables users to manage attendee lifecycles, coordinate staff, issue tamper-proof visual credentials with dynamic QR codes, run evaluation rubrics, and execute high-throughput, atomic day-of-event access control.
 
 ---
 
@@ -11,7 +11,7 @@ The following documentation files in the project root constitute the single engi
 2. `ARCHITECTURE.md` — System Architecture & Layered Boundaries (Triad, Models, RBAC)
 3. `RULES.md` — Non-negotiable Engineering Rules & Invariants
 4. `PHASES.md` — 22-Phase Roadmap & Phase Gate Definitions
-5. `DESIGN.md` — Design System & Visual Specification (Context-Aware UX, Obsidian/Emerald)
+5. `DESIGN.md` — Design System & Visual Specification (Context-Aware UX, Clean Light Aesthetic)
 6. `MEMORY.md` — Operational Knowledge & Architecture Truths
 7. `AGENTS.md` — Agent Guidelines & Invariants (this file)
 8. `DECISION.md` — Architecture Decision Records (ADRs)
@@ -62,7 +62,7 @@ Future coding agents MUST strictly follow these rules:
 
 ## 5. Domain Skills Map (`.agents/skills/`)
 Before performing domain-specific work, invoke the corresponding skill:
-- **`frontend-design`**: Context-aware UI, dark theme palette, color rules, layout hierarchy.
+- **`frontend-design`**: Context-aware UI, clean light aesthetic, restrained emerald accents, layout hierarchy.
 - **`frontend-engineering`**: React 18, Vite, component separation, API clients.
 - **`backend-engineering`**: Layered architecture, controllers, services, repositories.
 - **`supabase-engineering`**: Supabase Auth (JWT validation) & Supabase Storage (presigned URLs).

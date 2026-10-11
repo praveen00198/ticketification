@@ -169,6 +169,25 @@ export class MongoEventJobRepository {
       { new: true }
     ).exec();
   }
+
+  /**
+   * Invalidate expired download URLs in event jobs.
+   */
+  async clearDownloadUrlsForStoragePaths(eventId: string, storagePaths: string[]): Promise<void> {
+    if (!mongoose.Types.ObjectId.isValid(eventId) || !storagePaths.length) return;
+    await EventJobModel.updateMany(
+      {
+        eventId: new mongoose.Types.ObjectId(eventId),
+        jobType: 'EXPORT_CREDENTIALS',
+        'result.storagePath': { $in: storagePaths },
+      },
+      {
+        $set: {
+          'result.downloadUrl': null,
+        },
+      }
+    );
+  }
 }
 
 export const mongoEventJobRepository = new MongoEventJobRepository();

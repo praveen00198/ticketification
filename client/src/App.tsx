@@ -1,5 +1,5 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { Layout } from './components/layout/Layout';
 import { EventProvider } from './context/EventContext';
 import { apiClient } from './api/client';
@@ -30,7 +30,7 @@ const PublicEventDetailPage      = lazy(() => import('./pages/PublicEventDetailP
 
 // ─── Minimal Suspense Fallback ────────────────────────────────────────────────
 const PageLoader: React.FC = () => (
-  <div className="min-h-screen bg-[#09090b] flex items-center justify-center">
+  <div className="min-h-screen bg-[#FAFAF9] flex items-center justify-center">
     <div className="flex flex-col items-center gap-3">
       <div className="w-8 h-8 rounded-full border-2 border-emerald-500/30 border-t-emerald-500 animate-spin" />
       <span className="text-xs font-semibold text-zinc-500 tracking-wider uppercase">Loading</span>
@@ -38,7 +38,8 @@ const PageLoader: React.FC = () => (
   </div>
 );
 
-export const App: React.FC = () => {
+const AppContent: React.FC = () => {
+  const navigate = useNavigate();
   const [token, setToken] = useState<string | null>(localStorage.getItem('admin_token'));
   const [user, setUser] = useState<{
     id?: string;
@@ -98,7 +99,7 @@ export const App: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#09090b] flex items-center justify-center">
+      <div className="min-h-screen bg-[#FAFAF9] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 rounded-full border-2 border-emerald-500/30 border-t-emerald-500 animate-spin" />
           <span className="text-xs font-semibold text-zinc-500 tracking-wider uppercase">
@@ -109,21 +110,22 @@ export const App: React.FC = () => {
     );
   }
 
+  const redirectTarget = new URLSearchParams(window.location.search).get('redirect') || '/events';
+
   return (
-    <Router>
-      <Suspense fallback={<PageLoader />}>
-        <Routes>
-          {/* ── Flagship Public Landing Page ─────────────────────────────── */}
-          <Route
-            path="/"
-            element={
-              <PublicLandingPage
-                currentUser={user}
-                onNavigateToLogin={() => (window.location.href = '/login')}
-                onNavigateToRegister={() => (window.location.href = '/register')}
-              />
-            }
-          />
+    <Suspense fallback={<PageLoader />}>
+      <Routes>
+        {/* ── Flagship Public Landing Page ─────────────────────────────── */}
+        <Route
+          path="/"
+          element={
+            <PublicLandingPage
+              currentUser={user}
+              onNavigateToLogin={() => navigate('/login')}
+              onNavigateToRegister={() => navigate('/register')}
+            />
+          }
+        />
 
           {/* ── Public Event Discovery & Catalog ─────────────────────────── */}
           <Route
@@ -168,11 +170,11 @@ export const App: React.FC = () => {
             path="/login"
             element={
               token && user ? (
-                <Navigate to="/events" replace />
+                <Navigate to={redirectTarget} replace />
               ) : (
                 <Login
                   onLoginSuccess={handleLoginSuccess}
-                  onNavigateToRegister={() => (window.location.href = '/register')}
+                  onNavigateToRegister={() => navigate('/register')}
                 />
               )
             }
@@ -181,11 +183,11 @@ export const App: React.FC = () => {
             path="/register"
             element={
               token && user ? (
-                <Navigate to="/events" replace />
+                <Navigate to={redirectTarget} replace />
               ) : (
                 <Register
                   onRegisterSuccess={handleLoginSuccess}
-                  onNavigateToLogin={() => (window.location.href = '/login')}
+                  onNavigateToLogin={() => navigate('/login')}
                 />
               )
             }
@@ -241,6 +243,13 @@ export const App: React.FC = () => {
           )}
         </Routes>
       </Suspense>
+  );
+};
+
+export const App: React.FC = () => {
+  return (
+    <Router>
+      <AppContent />
     </Router>
   );
 };

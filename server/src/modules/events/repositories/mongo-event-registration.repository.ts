@@ -80,9 +80,11 @@ export class MongoEventRegistrationRepository {
       .exec();
   }
 
-  async countByEvent(eventId: string, status?: RegistrationStatus): Promise<number> {
+  async countByEvent(eventId: string, status?: RegistrationStatus | RegistrationStatus[]): Promise<number> {
     const query: any = { eventId: new mongoose.Types.ObjectId(eventId) };
-    if (status) {
+    if (Array.isArray(status)) {
+      query.status = { $in: status };
+    } else if (status) {
       query.status = status;
     } else {
       query.status = { $ne: 'CANCELLED' };

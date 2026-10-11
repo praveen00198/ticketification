@@ -52,9 +52,18 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (response) => response.data,
   (error) => {
+    if (error.response?.status === 401) {
+      // Cleanly evict expired authentication token from browser storage
+      localStorage.removeItem('admin_token');
+    }
+
     let message = error.response?.data?.error?.message;
     if (!message) {
-      if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
+      if (error.response?.status === 401) {
+        message = 'Your session has expired. Please sign in again.';
+      } else if (error.response?.status === 403) {
+        message = 'You do not have permission to perform this action.';
+      } else if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
         message = 'Unable to connect to the server. Please check your internet connection and try again.';
       } else if (error.message?.includes('timeout') || error.code === 'ECONNABORTED') {
         message = 'The server took too long to respond. Please try again.';

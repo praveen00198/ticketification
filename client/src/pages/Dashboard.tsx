@@ -14,7 +14,9 @@ import {
   Clock,
   ArrowRight,
   ShieldCheck,
-  Plus,
+  Compass,
+  Wallet,
+  Sparkles,
 } from 'lucide-react';
 import { ChangePasswordModal } from '../components/auth/ChangePasswordModal';
 
@@ -55,29 +57,74 @@ export const Dashboard: React.FC = () => {
 
   if (!currentEvent) {
     return (
-      <div className="max-w-2xl mx-auto py-16 text-center bg-white border border-stone-200/90 rounded-2xl p-8 space-y-4 shadow-xs">
-        <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-2 border border-emerald-100">
-          <Calendar className="w-7 h-7" />
-        </div>
-        <h2 className="text-xl font-bold text-zinc-900">Welcome to Ticketification</h2>
-        <p className="text-xs text-stone-500 max-w-md mx-auto">
-          Create or select an event to unlock guest importing, verified ticket generation, and live turnstile check-ins.
-        </p>
-        <div className="flex items-center justify-center gap-3 pt-2">
-          <button
-            onClick={() => navigate('/events/create')}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition-all shadow-xs"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Create New Event</span>
-          </button>
-          <button
-            onClick={() => navigate('/events')}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-stone-100 hover:bg-stone-200 text-zinc-700 text-xs font-semibold rounded-xl transition-all"
-          >
-            <Calendar className="w-4 h-4 text-stone-500" />
-            <span>View Events Catalog</span>
-          </button>
+      <div className="max-w-4xl mx-auto space-y-6">
+        <div className="bg-white border border-stone-200/90 rounded-2xl p-8 shadow-xs text-center space-y-3">
+          <div className="w-14 h-14 bg-emerald-50 text-emerald-700 rounded-full flex items-center justify-center mx-auto mb-2 border border-emerald-100">
+            <Calendar className="w-7 h-7" />
+          </div>
+          <h2 className="text-xl font-extrabold text-zinc-900 tracking-tight">Welcome to Ticketification</h2>
+          <p className="text-xs text-stone-500 max-w-lg mx-auto leading-relaxed">
+            Your unified platform for event discovery, digital credentialing, and live turnstile operations. Select an action to get started:
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 text-left">
+            <div className="p-5 rounded-xl border border-stone-200/90 hover:border-emerald-500/50 bg-stone-50/50 transition-all flex flex-col justify-between space-y-4">
+              <div>
+                <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center mb-3 border border-emerald-200">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <h4 className="text-sm font-bold text-zinc-900">Host an Event</h4>
+                <p className="text-xs text-stone-500 mt-1">
+                  Configure custom credentials, guest imports, turnstile scanning, and judging rubrics.
+                </p>
+              </div>
+              <button
+                onClick={() => navigate('/events/create')}
+                className="inline-flex items-center justify-center gap-1.5 w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition-all shadow-xs"
+              >
+                <span>Create Event Wizard</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="p-5 rounded-xl border border-stone-200/90 hover:border-emerald-500/50 bg-stone-50/50 transition-all flex flex-col justify-between space-y-4">
+              <div>
+                <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center mb-3 border border-emerald-200">
+                  <Compass className="w-5 h-5" />
+                </div>
+                <h4 className="text-sm font-bold text-zinc-900">Explore Catalog</h4>
+                <p className="text-xs text-stone-500 mt-1">
+                  Discover upcoming hackathons, conferences, and workshops open for attendance.
+                </p>
+              </div>
+              <button
+                onClick={() => navigate('/explore')}
+                className="inline-flex items-center justify-center gap-1.5 w-full py-2 bg-white hover:bg-stone-100 text-zinc-800 text-xs font-semibold rounded-xl transition-all border border-stone-200 shadow-xs"
+              >
+                <span>Explore Events</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="p-5 rounded-xl border border-stone-200/90 hover:border-emerald-500/50 bg-stone-50/50 transition-all flex flex-col justify-between space-y-4">
+              <div>
+                <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center mb-3 border border-emerald-200">
+                  <Wallet className="w-5 h-5" />
+                </div>
+                <h4 className="text-sm font-bold text-zinc-900">My Pass Wallet</h4>
+                <p className="text-xs text-stone-500 mt-1">
+                  View your confirmed event registrations, scannable QR tokens, and team rosters.
+                </p>
+              </div>
+              <button
+                onClick={() => navigate('/wallet')}
+                className="inline-flex items-center justify-center gap-1.5 w-full py-2 bg-white hover:bg-stone-100 text-zinc-800 text-xs font-semibold rounded-xl transition-all border border-stone-200 shadow-xs"
+              >
+                <span>Open Wallet</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );

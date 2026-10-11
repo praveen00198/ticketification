@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import config from '../config/env';
 
 /**
  * Derives a secure password hash using PBKDF2 (SHA-512 with 10,000 iterations).
@@ -33,7 +34,7 @@ export function verifyPassword(password: string, stored: string): boolean {
  */
 export function createJwtToken(
   payload: Record<string, any>,
-  secret: string = process.env.JWT_SECRET || 'Ticketification_Default_Secret_2026'
+  secret: string = config.env.jwtSecret || process.env.JWT_SECRET || 'Ticketification_Default_Secret_2026'
 ): string {
   const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
   const exp = Math.floor(Date.now() / 1000) + 86400 * 7; // 7 days expiration
@@ -48,7 +49,7 @@ export function createJwtToken(
  */
 export function verifyJwtToken(
   token: string,
-  secret: string = process.env.JWT_SECRET || 'Ticketification_Default_Secret_2026'
+  secret: string = config.env.jwtSecret || process.env.JWT_SECRET || 'Ticketification_Default_Secret_2026'
 ): Record<string, any> | null {
   try {
     const parts = token.split('.');

@@ -1,8 +1,8 @@
 # DESIGN.md — Design System & Visual Specification
 
-## 1. Visual Philosophy & Separation of Concerns
+## 1. Visual Philosophy & Design Principles
 
-Ticketification pairs a **high-precision Obsidian Dark & Vivid Emerald** aesthetic with an **event-type aware, context-adaptive architecture**. 
+Ticketification employs a **light, clean, and distinctive interface** with restrained accent colors, deliberate typography and spacing, minimal unnecessary borders, and selective, disciplined use of corner radii.
 
 > [!CRITICAL]
 > **Architecture vs. Design Separation**:
@@ -11,19 +11,17 @@ Ticketification pairs a **high-precision Obsidian Dark & Vivid Emerald** aesthet
 > - The backend is the sole authority on what data or actions are permitted.
 
 > [!IMPORTANT]
-> **Strict Color Rule**:
-> NEVER introduce random violet, purple, or indigo colors into the UI.
-> The visual identity is strictly anchored around:
-> - Deep Blacks & Charcoal Surface Layers (`#09090b`, `#121215`, `#18181b`)
-> - Vivid Emerald Greens & Subtle Green Accents (`#10b981`, `#059669`)
-> - High-contrast Neutral Zinc Grays for Typography & Borders
-> - Semantic Status Colors (Success=Emerald, Error=Crimson, Warning=Amber, Info=Sky)
+> **Aesthetic Principles**:
+> - **Light, Crisp Canvas**: Base backgrounds are clean, bright, and airy (`#FAFAF9` / `#FFFFFF`), eliminating gloomy dark-only surfaces.
+> - **Restrained Emerald Accents**: Subtle emerald and mint tones (`#10b981`, `#059669`) serve as intentional focal points for calls to action, badges, and verified states. No garish or random secondary colors.
+> - **Deliberate Typography & Spacing**: Generous whitespace and strong typographic scale (`Inter` + monospace tokens) guide the eye naturally without clutter.
+> - **Minimal Borders & Selective Radii**: Avoid heavy borders and excessive nested rounded cards. Use subtle separators (`#E4E4E7` / `#F4F4F5`) and gentle radii (`rounded-md` / `rounded-lg`).
 
 ---
 
-## 2. Context-Aware Adaptive Host UX
+## 2. Context-Aware Adaptive Architecture
 
-The Host Dashboard is explicitly **event-type aware**. It does not overwhelm organizers with irrelevant tools:
+The platform adapts dynamically to the event type. It does not overwhelm organizers or attendees with irrelevant tooling:
 
 ```mermaid
 flowchart TD
@@ -77,33 +75,33 @@ flowchart TD
 ### 3.1 Core Surfaces
 | Token | Hex / HSL Value | Purpose |
 |---|---|---|
-| `canvas-base` | `#09090b` (Zinc 950) | Full page viewport background |
-| `surface-panel` | `#121215` | Dashboard cards, modular panels, dialog shells |
-| `surface-elevated`| `#18181b` (Zinc 900) | Form inputs, dropdown menus, table headers |
-| `surface-hover` | `#27272a` (Zinc 800) | Row hover states, secondary button hover |
+| `canvas-base` | `#FAFAF9` (Stone 50) | Full page viewport background |
+| `surface-panel` | `#FFFFFF` (White) | Dashboard cards, modular panels, dialog shells |
+| `surface-elevated`| `#F4F4F5` (Zinc 100) | Secondary panels, dropdown items, table headers |
+| `surface-hover` | `#ECECEE` | Row hover states, secondary button hover |
 
 ### 3.2 Borders & Dividers
 | Token | Value | Purpose |
 |---|---|---|
-| `border-subtle` | `rgba(255, 255, 255, 0.08)` / `#27272a` | Card boundaries, table row dividers |
-| `border-medium` | `rgba(255, 255, 255, 0.16)` / `#3f3f46` | Input field borders, modal separators |
+| `border-subtle` | `#E4E4E7` (Zinc 200) | Card boundaries, table row dividers |
+| `border-medium` | `#D4D4D8` (Zinc 300) | Input field borders, modal separators |
 | `border-focus` | `#10b981` (Emerald 500) | Active input focus rings, selected card borders |
 
-### 3.3 Emerald Accents
+### 3.3 Restrained Emerald Accents
 | Token | Hex Value | Purpose |
 |---|---|---|
 | `accent-primary` | `#10b981` (Emerald 500) | Primary CTA buttons, checkmarks, active toggles |
 | `accent-hover` | `#059669` (Emerald 600) | Primary CTA hover state |
-| `accent-subtle` | `rgba(16, 185, 129, 0.12)` | Badge backgrounds, active tab pills |
-| `accent-border` | `rgba(16, 185, 129, 0.3)` | Badge borders, active card outlines |
+| `accent-subtle` | `#ECFDF5` (Emerald 50) | Badge backgrounds, active tab pills |
+| `accent-border` | `#A7F3D0` (Emerald 200) | Badge borders, active card outlines |
 
 ### 3.4 Semantic Status Colors
 | State | Text & Icon Hex | Background Hex | Border Hex |
 |---|---|---|---|
-| **Valid / Success** | `#10b981` (Emerald 500) | `rgba(16, 185, 129, 0.15)` | `rgba(16, 185, 129, 0.3)` |
-| **Error / Already Used**| `#ef4444` (Red 500) | `rgba(239, 68, 68, 0.15)` | `rgba(239, 68, 68, 0.3)` |
-| **Warning / Attention**| `#f59e0b` (Amber 500) | `rgba(245, 158, 11, 0.15)` | `rgba(245, 158, 11, 0.3)` |
-| **Info / Neutral** | `#38bdf8` (Sky 400) | `rgba(56, 189, 248, 0.15)` | `rgba(56, 189, 248, 0.3)` |
+| **Valid / Success** | `#059669` (Emerald 600) | `#ECFDF5` (Emerald 50) | `#A7F3D0` (Emerald 200) |
+| **Error / Already Used**| `#DC2626` (Red 600) | `#FEF2F2` (Red 50) | `#FECACA` (Red 200) |
+| **Warning / Attention**| `#D97706` (Amber 600) | `#FFFBEB` (Amber 50) | `#FDE68A` (Amber 200) |
+| **Info / Neutral** | `#0284C7` (Sky 600) | `#F0F9FF` (Sky 50) | `#BAE6FD` (Sky 200) |
 
 ---
 
@@ -113,19 +111,19 @@ flowchart TD
 - **Code & Monospace Numbers**: `JetBrains Mono`, `Fira Code`, `monospace`
 
 ### Hierarchy Scale
-- **Display Title (H1)**: `32px` (`text-3xl`), font-weight 800, tracking `-0.02em`
-- **Section Title (H2)**: `24px` (`text-2xl`), font-weight 700, tracking `-0.01em`
-- **Card Title (H3)**: `18px` (`text-lg`), font-weight 600
-- **Body Regular**: `14px` (`text-sm`), font-weight 400, line-height 1.5
-- **Body Semibold**: `14px` (`text-sm`), font-weight 600
-- **Caption / Meta**: `12px` (`text-xs`), font-weight 500, color `text-zinc-400`
+- **Display Title (H1)**: `32px` (`text-3xl`), font-weight 800, tracking `-0.02em`, text `#09090B`
+- **Section Title (H2)**: `24px` (`text-2xl`), font-weight 700, tracking `-0.01em`, text `#18181B`
+- **Card Title (H3)**: `18px` (`text-lg`), font-weight 600, text `#27272A`
+- **Body Regular**: `14px` (`text-sm`), font-weight 400, line-height 1.5, text `#52525B`
+- **Body Semibold**: `14px` (`text-sm`), font-weight 600, text `#18181B`
+- **Caption / Meta**: `12px` (`text-xs`), font-weight 500, color `text-zinc-500`
 - **Code / Tokens**: `13px` (`text-xs`), font-weight 600, font-mono
 
 ---
 
 ## 5. Mobile Scanner UI Specification
 
-- **High-Contrast Camera Viewport**: Full viewport mobile camera with animated emerald corner brackets.
+- **High-Contrast Camera Viewport**: Clean camera viewport with disciplined emerald corner brackets.
 - **Immediate Visual Status Banner**:
   - Green flash + affirmative haptic vibration on **Valid Check-In**.
   - Red flash + double vibration on **Already Checked-In** or **Wrong Event**.

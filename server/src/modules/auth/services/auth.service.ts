@@ -1,8 +1,9 @@
 import crypto from 'crypto';
+import mongoose from 'mongoose';
 import { supabaseAdmin, supabasePublic } from '../../../config/supabase';
 import { userRepository, UserRepository } from '../repositories/user.repository';
+import { mongoUserRepository, MongoUserRepository } from '../repositories/mongo-user.repository';
 import { identitySyncService, IdentitySyncService } from './identity-sync.service';
-import { UserModel } from '../../../db/mongo/models/user.model';
 import { hashPassword, verifyPassword, createJwtToken } from '../../../utils/local-auth';
 import config from '../../../config/env';
 import { PlatformRole } from '../../../db/schema';
@@ -18,6 +19,7 @@ import { RegisterInput, LoginInput, AuthResponse } from '../auth.types';
 export class AuthService {
   constructor(
     private userRepo: UserRepository = userRepository,
+    private mongoUserRepo: MongoUserRepository = mongoUserRepository,
     private syncService: IdentitySyncService = identitySyncService
   ) {}
 
@@ -102,7 +104,7 @@ export class AuthService {
     }
 
     // 2. Native MongoDB Auth (fallback when Supabase is not configured)
-    const existingUser = await UserModel.findOne({ email: normalizedEmail }).exec();
+    const existingUser = await this.mongoUserRepo.findByEmail(normalizedEmail);
     if (existingUser) {
       throw new ConflictError('An account with this email address already exists. Please sign in.');
     }
@@ -110,7 +112,7 @@ export class AuthService {
     const generatedId = 'usr_' + crypto.randomUUID().replace(/-/g, '');
     const pwdHash = hashPassword(password);
 
-    const mongoUser = await UserModel.create({
+    const mongoUser = await this.mongoUserRepo.create({
       supabaseUserId: generatedId,
       email: normalizedEmail,
       name: name.trim(),
@@ -205,7 +207,7 @@ export class AuthService {
     }
 
     // 2. Native MongoDB Auth Fallback
-    const mongoUser = await UserModel.findOne({ email: normalizedEmail }).exec();
+    const mongoUser = await this.mongoUserRepo.findByEmail(normalizedEmail);
     if (!mongoUser || !mongoUser.passwordHash || !verifyPassword(password, mongoUser.passwordHash)) {
       throw new AuthenticationError('Invalid email or password. Please check your credentials and try again.');
     }
@@ -234,9 +236,13 @@ export class AuthService {
   async getMe(userId: string) {
     // 1. Check MongoDB
     try {
-      const mongoUser = await UserModel.findOne({
-        $or: [{ supabaseUserId: userId }, { email: userId.toLowerCase() }],
-      }).exec();
+      let mongoUser = await this.mongoUserRepo.findBySupabaseId(userId);
+      if (!mongoUser && userId.includes('@')) {
+        mongoUser = await this.mongoUserRepo.findByEmail(userId);
+      }
+      if (!mongoUser && mongoose.Types.ObjectId.isValid(userId)) {
+        mongoUser = await this.mongoUserRepo.findById(userId);
+      }
 
       if (mongoUser) {
         let isOnboarded = false;
@@ -311,7 +317,7 @@ export class AuthService {
     } else {
       // Update in MongoDB
       const pwdHash = hashPassword(newPassword);
-      await UserModel.updateOne({ supabaseUserId: userId }, { $set: { passwordHash: pwdHash } }).exec();
+      await this.mongoUserRepo.updatePasswordHash(userId, pwdHash);
     }
   }
 }

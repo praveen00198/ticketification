@@ -1,3 +1,4 @@
+import fs from 'fs';
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../../../middlewares/auth.middleware';
 import { guestService } from '../services/guest.service';
@@ -124,6 +125,14 @@ export class GuestController {
         data: result,
       });
     } catch (err) {
+      // Clean up orphaned upload file from disk if analysis threw an error
+      if (req.file?.path && fs.existsSync(req.file.path)) {
+        try {
+          fs.unlinkSync(req.file.path);
+        } catch {
+          // ignore
+        }
+      }
       next(err);
     }
   }

@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
 import { AppError } from '../../../middlewares/error.middleware';
 import {
-  EventModel,
   IEventDocument,
   EventStatus,
   IEventStatusHistory,

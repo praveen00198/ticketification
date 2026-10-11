@@ -3,7 +3,15 @@
 ## 1. Product Overview & Vision
 **Product Name**: Ticketification  
 **Platform**: Event Operating + Credential + Access Platform  
-**Target Direction**: Ticketification is evolving from a single-purpose ticket generation tool into a comprehensive **Event Operating, Credential, and Access Platform**. It empowers event hosts to plan, configure, and operate diverse gatherings, manage attendee lifecycles, administer event staff and specialized roles, issue tamper-proof event credentials with dynamic QR codes, facilitate fair competitions and evaluations, and enforce high-throughput, atomic day-of-event access control.
+**Target Direction**: Ticketification is an **Event Operating, Credential, and Access Platform** that serves normal registered users who can discover and attend events and, whenever they choose, organize and manage their own events. 
+
+Attending and organizing are **equally important, foundational product capabilities**. Ticketification is deliberately designed neither as host-only software nor as a pure attendee portal. Every human on the platform has **one global user identity** that supports multiple concurrent relationships across different events:
+- **Attendee** at one gathering.
+- **Organizer / Host** of another gathering.
+- **Event staff, volunteer, mentor, or evaluator** where assigned.
+- **Platform administrator** only when explicitly authorized in platform governance records.
+
+Being authenticated through Supabase Auth grants zero default administrative or event-management privileges.
 
 The platform is explicitly **event-type aware** and avoids forcing every gathering into a rigid corporate or concert model. Supported event types include:
 - College Festivals & University Cultural Meets
@@ -21,7 +29,7 @@ The platform is explicitly **event-type aware** and avoids forcing every gatheri
 
 ---
 
-## 2. Customer-Facing Surfaces & Architectural Layers
+## 2. Platform Experiences & Surface Architecture
 
 ```
                                ┌────────────────────────────────────────────────────────┐
@@ -31,51 +39,45 @@ The platform is explicitly **event-type aware** and avoids forcing every gatheri
              ┌──────────────────────────────┬──────────────┴───────────────┬──────────────────────────────┐
              ▼                              ▼                              ▼                              ▼
     ┌─────────────────┐           ┌─────────────────┐            ┌─────────────────┐            ┌───────────────────┐
-    │     PUBLIC      │           │      HOST       │            │    ATTENDEE     │            │  PLATFORM ADMIN   │
-    │ (Discovery &    │           │ (Organizer Ops  │            │ (Self-service   │            │ (Trust, Safety &  │
-    │  Public Landing)│           │  & Management)  │            │  Portal - Future│            │  Platform Control)│
+    │     PUBLIC      │           │    ATTENDEE     │            │  ORGANIZER/HOST │            │  PLATFORM ADMIN   │
+    │ (Discovery,     │           │ (Discovery, Reg,│            │ (Operations,    │            │ (Trust, Safety,   │
+    │  Catalog &      │           │  Pass Wallet,   │            │  Credentials,   │            │  Verification,    │
+    │  Verification)  │           │  Participation) │            │  Staff, Gates)  │            │  Suspension)      │
     └─────────────────┘           └─────────────────┘            └─────────────────┘            └───────────────────┘
 ```
 
-### 2.1 Public Surface
-- **Status**: Functional & Simple (Current); Interactive Public Platform (Future Phase 21).
-- **Current Scope**: Minimal event landing page, public credential verification portal (`/verify/:token`), basic trust signals, report event modal.
-- **Future Scope**: Rich event discovery, search & filtering, organizer public profiles, public schedule/speaker directories, direct attendee registration checkout.
-- **Guideline**: Do not over-engineer the public surface during the current host-focused phase.
+### 2.1 Normal User Journey
+1. **Registration & Identity**: A user registers once (Supabase Auth). A unified profile is maintained in the application database (`users`). The user starts with platform role `USER`.
+2. **Event Discovery & Attendance**:
+   - The user browses upcoming events (`/explore`) and detailed event landing microsites (`/events/:eventId/public`).
+   - The user registers for an event (free or paid) or claims an imported attendee credential.
+   - The issued tamper-proof pass with dynamic QR code appears in the user's personal credential wallet (`/wallet`).
+   - On the day of the event, the attendee presents the QR code for atomic verification and admission at venue gates.
+3. **Organizing & Hosting Events**:
+   - At any time, the same registered user can click **Create Event** (`/events/create`).
+   - The user chooses the event type, specifies the credential taxonomy, configures schedule/venue, and selects attendee ingestion (native form vs. spreadsheet import).
+   - Upon creating an event, the user becomes the event's `HOST` via an isolated `event_members` record (without gaining global platform admin privileges).
+4. **Staff Collaboration**:
+   - The user may also receive staff invitations to collaborate on other events (as `COORDINATOR`, `VOLUNTEER`, `MENTOR`, or `EVALUATOR`).
+   - Accepting an invitation binds the user's global identity to that event with strictly scoped permissions.
 
-### 2.2 Host Surface (Primary Product Focus)
-- **Status**: Current Primary Focus (Phases 1–19).
-- **Target Persona**: Event organizers, campus club leads, conference chairs, hackathon leads, production managers.
-- **Core Capabilities**:
-  - Event creation with event-type detection and credential taxonomy selection.
-  - Institutional and event verification submission.
-  - Lifecycle management (`DRAFT` → `SUBMITTED` → `APPROVED` → `PUBLISHED` → `EVENT_LIVE` → `COMPLETED`).
-  - Dual registration mode configuration (Ticketification native registration vs. existing attendee data import).
-  - Staff onboarding via secure email tokens (Coordinators, Volunteers, Mentors, Evaluators).
-  - Fine-grained permission assignments (e.g. assigning credential scanning rights to select volunteers).
-  - Team creation and management for hackathons/competitions.
-  - Evaluation criteria configuration, judging assignments, real-time scorecards, and ranking exports.
-  - Credential template management and dynamic layout binding.
-  - Asynchronous background jobs for bulk credential generation (10,000–20,000 attendees) and ZIP exports.
-  - Day-of-event mobile QR verification console with real-time operational feeds.
-  - Event health analytics, capacity monitors, and audit trail inspection.
+### 2.2 Surface Definitions & Status
 
-### 2.3 Attendee Surface (Future Architecture)
-- **Status**: Architecture Ready; Implementation Deferred (Phase 20).
-- **Design Rule**: All database models, authorization rules, and identity relationships must accommodate the attendee self-service portal without requiring an architectural rewrite.
-- **Future Capabilities**: Personal credential wallet, registration history, team formation and submission dashboard, mentor session booking, live event announcements, and direct payment tracking.
+#### A. Public Surface
+- **Scope**: Public landing showcase (`/`), event catalog discovery (`/explore`), standalone event landing pages (`/events/:eventId/public`), and public credential verification gateway (`/verify/:token`).
+- **Implementation State**: Functional and integrated with React Router. Verified public exploration, event details, and tamper-proof QR verification without requiring authentication.
 
-### 2.4 Internal Platform Admin Surface
-- **Status**: Administrative Governance Layer.
-- **Purpose**: Internal operations, trust, safety, and regulatory compliance. Distinct from event hosts.
-- **Core Capabilities**:
-  - Host identity verification and institution validation.
-  - Review and approval of paid events before ticketing activates.
-  - Moderation of reported events (scams, impersonation, policy violations).
-  - Emergency event and host suspension with immediate operational circuit breakers.
-  - Dispute management, payment audit logging, and platform-wide telemetry.
+#### B. Attendee Experience
+- **Scope**: Event registration checkout, cross-event personal credential wallet (`/wallet`), check-in history, dynamic QR pass presentation, and competition/hackathon team formation.
+- **Implementation State**: Verified wallet view, event registration modal, and QR pass display. Planned future enhancements include advanced team submission dashboards and mentor booking.
 
----
+#### C. Organizer / Host Operations
+- **Scope**: Event creation wizard with 13 event types, lifecycle state machine (`DRAFT` → `SUBMITTED` → `APPROVED` → `PUBLISHED` → `EVENT_LIVE` → `COMPLETED`), attendee roster management, high-throughput spreadsheet ingestion (10k–20k attendees), customizable credential templates with Sharp image rendering, bulk generation, ZIP export jobs, mobile check-in gate console (`/scan`), and competition judging workspaces.
+- **Implementation State**: Verified modular architecture, background job processing, Sharp rendering engine, and atomic conditional check-in.
+
+#### D. Internal Platform Admin Surface
+- **Scope**: Trust, safety, organizer KYC/institution validation, paid event approval, abuse/fraud reports moderation, emergency event suspension circuit breakers, and platform audit trail inspection.
+- **Implementation State**: Administrative verification backend endpoints and platform audit logging implemented. Role-based isolation strictly enforced: standard users cannot elevate to `ADMIN` or `SUPER_ADMIN`.
 
 ## 3. Core Identity & Authorization Model
 
@@ -286,19 +288,20 @@ Bulk credential generation (10,000–20,000 items) and ZIP creation MUST NEVER e
 
 ## 11. Scope Boundaries & Roadmap
 
-### 11.1 Current Phase Scope (Phases 0–19)
-- Architecture and documentation reconciliation.
-- Authentication & MongoDB authorization foundation.
-- Host onboarding and event creation workflows.
-- Event verification and lifecycle management.
-- Granular event RBAC (Coordinators, Volunteers, Mentors, Evaluators).
-- Team and evaluation management.
-- Credential generation, templates, and atomic QR check-in.
-- Asynchronous bulk jobs (import, generation, export).
-- Performance, security, and audit hardening.
+### 11.1 Verified Implemented Architecture
+- Single global user identity with event-scoped role relationships (zero automatic admin elevations).
+- Event creation engine with 13 event types, flexible credential taxonomies, and venue/schedule configurations.
+- Dual ingestion models: native event registration and high-throughput spreadsheet attendee imports.
+- Granular event RBAC supporting Hosts, Coordinators, Volunteers, Mentors, and Evaluators.
+- Hackathon and competition modules with team registrations, weighted rubrics, and blind judging isolation.
+- Credential generation engine with dynamic SVG overlays, Sharp rasterization, and Supabase Storage persistence.
+- High-throughput atomic single-use QR check-in gate resolution with concurrency protection.
+- Asynchronous background workers for bulk imports, generation queues, and ZIP exports.
+- Public surfaces: flagship public showcase, event discovery catalog (`/explore`), standalone event microsites, and instant QR verification (`/verify/:token`).
+- Attendee experience: personal multi-event pass wallet (`/wallet`) and event registration flows.
 
-### 11.2 Future Scope (Phases 20–21)
-- Attendee self-service portal (Phase 20).
-- Public interactive event discovery directory and social features (Phase 21).
-- External registration webhook API.
-- Native mobile scanner applications (iOS/Android) if web camera performance requires augmentation.
+### 11.2 Planned Future Roadmap
+- Advanced attendee self-service capabilities (collaborative team dashboards, project submission portals, mentor session booking).
+- External registration ingestion webhooks and third-party CRM API connectors.
+- Advanced public discovery features (geo-search, speaker/session agenda explorers, organizer social followings).
+- Dedicated native mobile scanner apps (iOS/Android) if high-density optical camera requirements exceed web camera capabilities.

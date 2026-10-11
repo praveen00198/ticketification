@@ -3,6 +3,8 @@
 ## 1. Project Overview & Product Vision
 **Product**: Ticketification  
 **Identity**: Production-Grade Event Operating, Credential, and Access Platform  
+**Target Direction**: Serves normal registered users who can discover and attend events and, whenever they choose, organize and manage their own events. Attending and organizing are equally important core capabilities. Single global user identity supporting multiple concurrent relationships across events.
+
 **Architecture**: Modular Monolith with an **Infrastructure Triad**:
 - **Authentication**: Supabase Auth (cryptographic JWT issuance & identity management)
 - **Application Documents & RBAC**: MongoDB (users, events, event memberships, teams, evaluations, credential metadata, jobs, audit logs)
@@ -15,32 +17,35 @@ Ticketification is **event-type aware** (supporting Hackathons, Conferences, Con
 ## 2. Current Project State
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│ Phase 0: System Audit & Documentation Reconciliation ➔ COMPLETED       │
-│ Phase 1: Authentication + Authorization Foundation ➔ CURRENT / READY   │
-│ Phases 2–19: Host Platform & Operational Features ➔ PLANNED           │
-│ Phases 20–21: Attendee Portal & Interactive Public Platform ➔ FUTURE   │
+│ Phase 0: System Audit & Documentation Alignment ➔ VERIFIED COMPLETE    │
+│ Phases 1–19: Core Platform Engine & Operational Features ➔ VERIFIED    │
+│ Phase 20: Attendee Experience Platform ➔ ACTIVE / CORE VERIFIED        │
+│ Phase 21: Public Discovery & Verification ➔ ACTIVE / CORE VERIFIED     │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
 > [!IMPORTANT]
-> **Implementation Status**:
-> Documentation and Architecture Reconciliation is **COMPLETE**.
-> Feature implementation for Phase 1 has **NOT STARTED** and awaits explicit user instruction.
+> **Implementation & Verification Status**:
+> - All 34 automated server test suites (393 tests) pass cleanly.
+> - Both client (`tsc && vite build`) and server (`tsc`) production builds succeed.
+> - Auto-admin escalation vulnerability in legacy event creation is remediated and covered with regression tests.
+> - Client-side navigation in `App.tsx` correctly uses React Router SPA navigation.
+> - Visual design aligns to a light, clean, distinctive interface with restrained emerald/mint accents.
 
 ---
 
-## 3. Technology Stack & Target Architecture
-| Layer | Current Codebase Implementation | Reconciled Target Architecture |
+## 3. Technology Stack & Current Verified Architecture
+| Layer | Current Codebase Implementation | Verified Target Architecture |
 |---|---|---|
-| **Frontend** | React 18, TypeScript, Vite, Tailwind CSS, html5-qrcode | React 18 SPA, context-aware Host console, Obsidian/Emerald design system |
+| **Frontend** | React 18, TypeScript, Vite, Tailwind CSS, html5-qrcode | React 18 SPA, client-side routing, light & clean design system |
 | **Backend** | Node.js, Express, TypeScript (Modular Monolith) | Node.js / Express / TypeScript Modular Monolith with layered boundaries |
-| **Authentication** | Supabase Auth (Defaulting all users to ADMIN — Security Flaw) | Supabase Auth (Default role `USER`; zero automatic admin privileges) |
-| **Application DB & RBAC** | Supabase PostgreSQL via Drizzle ORM | **MongoDB** (Application profiles, event memberships, RBAC, teams, evaluations) |
-| **Object Storage** | Supabase Storage (`ticket-images` bucket) | **Supabase Storage** (`/events/{eventId}/...` canonical hierarchy) |
+| **Authentication** | Supabase Auth (Default role `USER`; zero automatic admin privileges) | Supabase Auth (Default role `USER`; verified zero auto-admin elevation) |
+| **Application DB & RBAC** | MongoDB (Application profiles, event memberships, RBAC, teams, evaluations) | **MongoDB** (Application profiles, event memberships, RBAC, teams, evaluations) |
+| **Object Storage** | Supabase Storage (`ticket-images` bucket / canonical hierarchy) | **Supabase Storage** (`/events/{eventId}/...` canonical hierarchy) |
 | **Rendering Engine** | Sharp native rasterization (1620x2025 PNG binaries) | Sharp native rasterization (`sharp.cache(false)`, `concurrency(1)`, bundled Devanagari fonts) |
-| **Check-In Concurrency** | Conditional SQL update on PostgreSQL | Atomic conditional update (`findOneAndUpdate` matching `{ status: 'ACTIVE' }`) |
-| **Heavy Operations** | Synchronous HTTP endpoints & live streaming | Asynchronous background worker queue with progress tracking & presigned URLs |
-| **Rate Limiting** | In-memory `Map<string, ClientRecord>()` | Distributed token-bucket rate limiting with endpoint-specific thresholds |
+| **Check-In Concurrency** | Atomic conditional update (`findOneAndUpdate` matching `{ status: 'ACTIVE' }`) | Atomic conditional update (`findOneAndUpdate` matching `{ status: 'ACTIVE' }`) |
+| **Heavy Operations** | Asynchronous background worker queue with progress tracking & presigned URLs | Asynchronous background worker queue with progress tracking & presigned URLs |
+| **Rate Limiting** | Distributed token-bucket rate limiting with endpoint-specific thresholds | Distributed token-bucket rate limiting with endpoint-specific thresholds |
 
 ---
 

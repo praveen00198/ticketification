@@ -18,7 +18,15 @@ import config from './config/env';
 import sharp from 'sharp';
 import { logMemory } from './utils/memory-logger';
 
+import { securityHeadersMiddleware } from './middlewares/security-headers.middleware';
+
 const app = express();
+
+// Disable technology fingerprint header
+app.disable('x-powered-by');
+
+// Enforce standard OWASP security headers on all responses
+app.use(securityHeadersMiddleware);
 
 const allowedOrigins = [
   config.env.appUrl,
@@ -30,16 +38,19 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
+      // Allow requests with no origin (e.g. native apps, curl, or server-to-server health checks)
       if (!origin) return callback(null, true);
-      if (
+
+      const isAllowed =
         allowedOrigins.includes(origin) ||
         origin.endsWith('.vercel.app') ||
         process.env.CORS_ORIGIN === '*' ||
-        !config.env.isProduction
-      ) {
+        !config.env.isProduction;
+
+      if (isAllowed) {
         return callback(null, true);
       }
-      return callback(null, true);
+      return callback(new Error('Blocked by CORS policy: Origin not allowed'));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
