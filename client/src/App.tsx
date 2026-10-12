@@ -27,6 +27,7 @@ const MentorEvaluatorWorkspacePage = lazy(() => import('./pages/MentorEvaluatorW
 const AttendeeWalletPage         = lazy(() => import('./pages/AttendeeWalletPage').then(m => ({ default: m.AttendeeWalletPage })));
 const PublicEventsPage           = lazy(() => import('./pages/PublicEventsPage').then(m => ({ default: m.PublicEventsPage })));
 const PublicEventDetailPage      = lazy(() => import('./pages/PublicEventDetailPage').then(m => ({ default: m.PublicEventDetailPage })));
+const PricingPage                = lazy(() => import('./pages/PricingPage').then(m => ({ default: m.PricingPage })));
 
 // ─── Minimal Suspense Fallback ────────────────────────────────────────────────
 const PageLoader: React.FC = () => (
@@ -156,6 +157,18 @@ const AppContent: React.FC = () => {
               ) : (
                 <PublicEventDetailPage />
               )
+            }
+          />
+
+          {/* ── Public Event Pricing & Attendance Calculator ──────────── */}
+          <Route
+            path="/pricing"
+            element={
+              <PricingPage
+                currentUser={user}
+                onNavigateToLogin={() => navigate('/login')}
+                onNavigateToRegister={() => navigate('/register')}
+              />
             }
           />
 

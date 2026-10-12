@@ -31,7 +31,8 @@ export default {
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+        serif: ['"Libre Baskerville"', 'Georgia', 'Cambria', 'serif'],
+        mono: ['"Cutive Mono"', 'monospace'],
       },
     },
   },

@@ -31,6 +31,8 @@ server/uploads/mock-emails/
 # Testing
 coverage/
 .nyc_output/
+*.playwright-mcp/
+
 
 # OS
 .DS_Store
