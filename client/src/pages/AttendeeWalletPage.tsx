@@ -219,7 +219,7 @@ export const AttendeeWalletPage: React.FC = () => {
       <InView direction="up" distance={12}>
         <div className="bg-white border border-stone-200/90 rounded-2xl p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-200/80 flex items-center justify-center text-emerald-700 shrink-0 shadow-2xs">
+            <div className="w-12 h-12 rounded-2xl bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-900 shrink-0 shadow-2xs">
               <Wallet className="w-6 h-6" />
             </div>
             <div>
@@ -227,7 +227,7 @@ export const AttendeeWalletPage: React.FC = () => {
                 <h1 className="text-xl sm:text-2xl font-extrabold text-zinc-900 tracking-tight">
                   My Credential Wallet
                 </h1>
-                <Badge variant="emerald" size="sm">
+                <Badge variant="neutral" size="sm">
                   {wallet.length} {wallet.length === 1 ? 'Pass' : 'Passes'}
                 </Badge>
               </div>
@@ -287,7 +287,7 @@ export const AttendeeWalletPage: React.FC = () => {
       {/* Loading State */}
       {loading ? (
         <div className="py-20 flex flex-col items-center justify-center gap-3 text-stone-400 bg-white border border-stone-200/90 rounded-2xl p-8 shadow-xs">
-          <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
+          <Loader2 className="w-8 h-8 animate-spin text-stone-900" />
           <p className="text-xs font-semibold text-stone-500">Loading your verified passes...</p>
         </div>
       ) : filteredWallet.length === 0 ? (
@@ -317,7 +317,7 @@ export const AttendeeWalletPage: React.FC = () => {
             return (
               <div
                 key={pass.credentialId}
-                className="rounded-2xl bg-white border border-stone-200/90 hover:border-emerald-500/60 transition-all shadow-xs hover:shadow-md flex flex-col justify-between overflow-hidden group relative"
+                className="rounded-2xl bg-white border border-stone-200/90 hover:border-stone-900 transition-all shadow-xs hover:shadow-md flex flex-col justify-between overflow-hidden group relative"
               >
                 {/* Perforation edge notches */}
                 <div className="ticket-perforation-left" />
@@ -326,7 +326,7 @@ export const AttendeeWalletPage: React.FC = () => {
                 {/* Top Header with Category & Status */}
                 <div className="p-4 px-5 border-b border-stone-100 bg-stone-50/70 flex items-center justify-between">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant="emerald" size="sm">
+                    <Badge variant="neutral" size="sm">
                       {pass.eventType.replace('_', ' ')}
                     </Badge>
                     <span className="text-xs font-mono font-bold text-stone-500">
@@ -354,7 +354,7 @@ export const AttendeeWalletPage: React.FC = () => {
                 {/* Pass Body */}
                 <div className="p-5 space-y-4 flex-1">
                   <div>
-                    <h3 className="text-base sm:text-lg font-bold text-zinc-900 group-hover:text-emerald-700 transition-colors">
+                    <h3 className="text-base sm:text-lg font-bold text-zinc-900 group-hover:text-black transition-colors">
                       {pass.eventName}
                     </h3>
                     <p className="text-xs text-stone-500 mt-0.5">
@@ -365,7 +365,7 @@ export const AttendeeWalletPage: React.FC = () => {
                   {/* Schedule & Venue Meta */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-stone-600 bg-stone-50 p-3 rounded-xl border border-stone-100">
                     <div className="flex items-center gap-2">
-                      <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <Calendar className="w-3.5 h-3.5 text-stone-500 shrink-0" />
                       <span className="truncate">
                         {pass.schedule?.startAt
                           ? new Date(pass.schedule.startAt).toLocaleDateString()
@@ -373,7 +373,7 @@ export const AttendeeWalletPage: React.FC = () => {
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <MapPin className="w-3.5 h-3.5 text-stone-400 shrink-0" />
                       <span className="truncate">
                         {pass.venue?.city || pass.venue?.name || 'Venue TBA'}
                       </span>
@@ -406,7 +406,7 @@ export const AttendeeWalletPage: React.FC = () => {
                       variant="secondary"
                       size="sm"
                       onClick={() => setSelectedPassForQr(pass)}
-                      iconLeft={<QrCode className="w-3.5 h-3.5 text-emerald-600" />}
+                      iconLeft={<QrCode className="w-3.5 h-3.5 text-stone-700" />}
                     >
                       View QR
                     </Button>
@@ -431,7 +431,7 @@ export const AttendeeWalletPage: React.FC = () => {
                         variant="neutral"
                         size="sm"
                         onClick={() => openTeamWorkspace(pass)}
-                        iconLeft={<Users className="w-3.5 h-3.5 text-emerald-600" />}
+                        iconLeft={<Users className="w-3.5 h-3.5 text-stone-700" />}
                       >
                         Team Hub
                       </Button>
@@ -480,7 +480,7 @@ export const AttendeeWalletPage: React.FC = () => {
             <p className="text-[11px] font-mono text-stone-400 truncate max-w-xs mx-auto">
               Token: {selectedPassForQr?.verificationToken.slice(0, 16)}...
             </p>
-            <div className="p-2.5 bg-emerald-50 border border-emerald-200/70 rounded-xl text-[11px] text-emerald-800 font-semibold mt-2">
+            <div className="p-2.5 bg-stone-100 border border-stone-200 rounded-xl text-[11px] text-stone-800 font-semibold mt-2">
               Present this QR code at the event gate turnstile for admission.
             </div>
           </div>
@@ -498,20 +498,20 @@ export const AttendeeWalletPage: React.FC = () => {
         <div className="space-y-5">
           {teamError && (
             <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
               <span>{teamError}</span>
             </div>
           )}
 
           {teamSuccess && (
             <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
               <span>{teamSuccess}</span>
             </div>
           )}
 
           {teamLoading ? (
-            <div className="py-12 flex justify-center text-emerald-600">
+            <div className="py-12 flex justify-center text-stone-900">
               <Loader2 className="w-6 h-6 animate-spin" />
             </div>
           ) : teamData ? (
@@ -521,12 +521,12 @@ export const AttendeeWalletPage: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-bold text-zinc-900 flex items-center gap-2">
                     {teamData.teamName}
-                    <Badge variant="emerald" size="sm">
+                    <Badge variant="neutral" size="sm">
                       {teamData.track || 'General'}
                     </Badge>
                   </h4>
                   <span className="text-[10px] font-bold uppercase text-stone-500">
-                    Status: <span className="text-emerald-700">{teamData.status}</span>
+                    Status: <span className="text-stone-900 font-semibold">{teamData.status}</span>
                   </span>
                 </div>
 
@@ -544,7 +544,7 @@ export const AttendeeWalletPage: React.FC = () => {
                           <span className="text-zinc-900 font-semibold block">{m.name}</span>
                           <span className="text-[10px] text-stone-400">{m.email}</span>
                         </div>
-                        <span className="text-[10px] text-emerald-700 font-semibold">
+                        <span className="text-[10px] text-stone-600 font-semibold">
                           {m.role || 'Member'}
                         </span>
                       </div>
@@ -555,8 +555,8 @@ export const AttendeeWalletPage: React.FC = () => {
 
               {/* Project Submission Form */}
               <form onSubmit={handleProjectSubmit} className="space-y-3 border-t border-stone-200 pt-4">
-                <h5 className="text-xs font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
-                  <Code2 className="w-3.5 h-3.5 text-emerald-600" /> Project Submission
+                <h5 className="text-xs font-bold uppercase tracking-wider text-stone-900 flex items-center gap-1.5">
+                  <Code2 className="w-3.5 h-3.5 text-stone-700" /> Project Submission
                 </h5>
 
                 <Input
@@ -575,7 +575,7 @@ export const AttendeeWalletPage: React.FC = () => {
                     placeholder="Brief overview of problem and architecture..."
                     value={projectDescription}
                     onChange={(e) => setProjectDescription(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-stone-50 border border-stone-200 text-zinc-900 text-xs placeholder:text-stone-400 focus:outline-none focus:border-emerald-500 resize-none shadow-2xs"
+                    className="w-full px-3 py-2 rounded-xl bg-stone-50 border border-stone-200 text-zinc-900 text-xs placeholder:text-stone-400 focus:outline-none focus:border-stone-900 focus:ring-3 focus:ring-stone-400/20 resize-none shadow-2xs"
                   />
                 </div>
 

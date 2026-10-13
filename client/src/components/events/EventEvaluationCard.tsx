@@ -258,7 +258,7 @@ export const EventEvaluationCard: React.FC<EventEvaluationCardProps> = ({
           {isHostOrCoordinator && activeTab === 'RUBRICS' && (
             <button
               onClick={() => setIsCreateOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-stone-900 hover:bg-black text-white text-xs font-bold rounded-xl transition-all shadow-sm"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>New Rubric</span>
@@ -312,7 +312,7 @@ export const EventEvaluationCard: React.FC<EventEvaluationCardProps> = ({
               {isHostOrCoordinator && (
                 <button
                   onClick={() => setIsCreateOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-stone-900 hover:bg-black text-white text-xs font-bold rounded-xl transition-all shadow-sm"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Create First Rubric</span>
@@ -687,7 +687,7 @@ export const EventEvaluationCard: React.FC<EventEvaluationCardProps> = ({
                 <button
                   type="submit"
                   disabled={submittingRubric}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
+                  className="px-5 py-2 bg-stone-900 hover:bg-black disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
                 >
                   {submittingRubric ? 'Saving Rubric...' : 'Save & Publish Rubric'}
                 </button>

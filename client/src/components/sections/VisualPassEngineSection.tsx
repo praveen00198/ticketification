@@ -92,7 +92,7 @@ export const VisualPassEngineSection: React.FC<VisualPassEngineSectionProps> = (
           </p>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-[#111827] tracking-tight">
             Tamper-Proof Visual Credentials.<br />
-            <span className="text-stone-500 font-serif italic">Rendered On-The-Fly.</span>
+            <span className="text-stone-500 font-serif italic tracking-wide">Rendered On-The-Fly.</span>
           </h2>
           <p className="text-sm text-stone-600 leading-relaxed">
             The interactive preview below demonstrates how the server-side Sharp rasterization engine renders tamper-proof visual credentials with single-use cryptographic QR tokens.

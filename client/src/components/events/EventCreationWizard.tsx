@@ -1141,7 +1141,7 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({ onSucc
           <button
             type="button"
             onClick={handleNext}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded bg-emerald-600 hover:bg-emerald-700 text-xs font-semibold text-white transition-colors"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded bg-stone-900 hover:bg-black text-xs font-semibold text-white transition-colors"
           >
             Next Step
             <ArrowRight className="w-4 h-4" />
@@ -1151,7 +1151,7 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({ onSucc
             type="button"
             onClick={handleSaveDraft}
             disabled={isSubmitting}
-            className="inline-flex items-center gap-2 px-6 py-2.5 rounded bg-emerald-600 hover:bg-emerald-700 text-xs font-semibold text-white transition-colors shadow-sm disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-6 py-2.5 rounded bg-stone-900 hover:bg-black text-xs font-semibold text-white transition-colors shadow-sm disabled:opacity-50"
           >
             {isSubmitting ? (
               <>

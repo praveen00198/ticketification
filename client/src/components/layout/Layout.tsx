@@ -129,9 +129,9 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
   const breadcrumbs = getBreadcrumbs();
 
   return (
-    <div className="min-h-screen flex bg-[#FAFAF9] text-[#18181B] font-sans selection:bg-emerald-100 selection:text-emerald-900">
-      {/* ── Desktop Fixed Sidebar ── */}
-      <div className="hidden md:block shrink-0">
+    <div className="h-screen w-screen flex bg-stone-100 text-[#18181B] font-sans selection:bg-stone-200 selection:text-stone-900 overflow-hidden gap-2">
+      {/* ── Desktop Fixed Sidebar (No background, No separation lines) ── */}
+      <div className="hidden md:flex shrink-0 w-64 h-full flex-col bg-transparent">
         <Sidebar user={user} onLogout={onLogout} />
       </div>
 
@@ -161,22 +161,22 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
         </div>
       )}
 
-      {/* ── Main Content Area ── */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Header / Bar */}
-        <header className="sticky top-0 z-20 bg-white/90 backdrop-blur-md border-b border-stone-200/80 px-3.5 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-2">
+      {/* ── Right Workspace Area ── */}
+      <div className="flex-1 h-full flex flex-col min-w-0 pr-0 pb-0 overflow-hidden">
+        {/* ── Topbar (No Box, No Background, No Separation Line) ── */}
+        <header className="h-14 sm:h-16 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 shrink-0 bg-transparent border-none">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
             {/* Mobile Hamburger Button */}
             <button
               onClick={() => setMobileSidebarOpen(true)}
-              className="md:hidden p-2 -ml-1.5 text-zinc-600 hover:text-zinc-900 hover:bg-stone-100 rounded-xl transition-colors shrink-0"
+              className="md:hidden p-2 -ml-1.5 text-stone-600 hover:text-stone-900 hover:bg-stone-200/50 rounded-xl transition-colors shrink-0 cursor-pointer"
               aria-label="Open mobile menu"
             >
               <Menu className="w-5 h-5" />
             </button>
 
-            {/* Breadcrumb Path */}
-            <nav className="flex items-center gap-1 sm:gap-1.5 text-xs overflow-hidden" aria-label="Breadcrumb">
+            {/* Breadcrumb Path (Clean, Minimal, No Box) */}
+            <nav className="flex items-center gap-1.5 sm:gap-2 text-xs overflow-hidden" aria-label="Breadcrumb">
               {breadcrumbs.map((crumb, idx) => {
                 const isLast = idx === breadcrumbs.length - 1;
                 const Icon = crumb.icon;
@@ -186,14 +186,14 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
                       <ChevronRight className="w-3.5 h-3.5 text-stone-400 shrink-0" />
                     )}
                     {isLast ? (
-                      <span className="font-bold text-zinc-900 truncate flex items-center gap-1.5 bg-stone-100/80 px-2 py-0.5 rounded-md text-[11px] sm:text-xs">
-                        {Icon && <Icon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                      <span className="font-semibold text-stone-900 truncate flex items-center gap-1.5 text-xs sm:text-sm">
+                        {Icon && <Icon className="w-3.5 h-3.5 text-stone-800 shrink-0" />}
                         <span className="truncate">{crumb.label}</span>
                       </span>
                     ) : (
                       <Link
                         to={crumb.path}
-                        className="text-stone-500 hover:text-zinc-900 transition-colors font-medium truncate flex items-center gap-1 text-[11px] sm:text-xs hidden sm:flex"
+                        className="text-stone-500 hover:text-stone-900 transition-colors font-medium truncate flex items-center gap-1 text-xs hidden sm:flex"
                       >
                         {Icon && <Icon className="w-3.5 h-3.5 text-stone-400 shrink-0" />}
                         <span>{crumb.label}</span>
@@ -205,13 +205,13 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
             </nav>
           </div>
 
-          {/* Right Header Actions */}
-          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+          {/* Right Header Actions (Minimal & Clean) */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {/* Onboarding Alert Pill */}
             {user && !user.isOnboarded && (
               <button
                 onClick={() => navigate('/onboarding')}
-                className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200/80 rounded-full hover:bg-amber-100 transition-colors shadow-2xs"
+                className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-amber-800 bg-amber-500/10 border border-amber-600/20 rounded-full hover:bg-amber-500/15 transition-colors cursor-pointer"
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-600" />
                 <span>Finish Setup</span>
@@ -221,33 +221,30 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
             {/* Quick Action: New Event */}
             <button
               onClick={() => navigate('/events/create')}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-all active:scale-95"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-stone-900 hover:bg-black rounded-xl shadow-2xs transition-all active:scale-95 cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
               <span>New Event</span>
             </button>
 
-            {/* Quick Action: Scan */}
+            {/* Quick Action: Scan / Turnstiles */}
             <button
               onClick={() => navigate('/scan')}
-              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-zinc-700 bg-stone-100/90 hover:bg-stone-200 hover:text-zinc-900 rounded-xl border border-stone-200/80 transition-colors shadow-2xs"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-stone-700 hover:text-stone-900 hover:bg-stone-200/60 rounded-xl transition-colors cursor-pointer"
             >
-              <QrCode className="w-3.5 h-3.5 text-emerald-600" />
+              <QrCode className="w-3.5 h-3.5 text-stone-600" />
               <span className="hidden sm:inline">Turnstiles</span>
               <span className="sm:hidden text-[11px]">Scan</span>
             </button>
           </div>
         </header>
 
-        {/* ── Page Content Container ── */}
-        <main className="flex-1 max-w-7xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 py-5 sm:py-6">
-          {children}
+        {/* ── Single Content Box with Subtle BG & Border (0 Margin from Right & Bottom) ── */}
+        <main className="flex-1 min-h-0 bg-white border-t border-l border-stone-200/80 rounded-tl-2xl sm:rounded-tl-3xl shadow-xs mr-0 mb-0 p-5 sm:p-7 lg:p-9 overflow-y-auto">
+          <div className="w-full">
+            {children}
+          </div>
         </main>
-
-        {/* ── Global Footer ── */}
-        <footer className="bg-white/80 border-t border-stone-200/80 py-3 px-4 text-center text-[11px] text-stone-400">
-          Ticketification OS &bull; Operational Event Credential & Verification Platform &bull; 2026
-        </footer>
       </div>
     </div>
   );

@@ -218,7 +218,7 @@ export const EventVerificationCard: React.FC<EventVerificationCardProps> = ({
   if (loading) {
     return (
       <div className="bg-white border border-surface-border rounded-2xl p-6 shadow-sm flex items-center justify-center gap-3 text-zinc-500 text-xs">
-        <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+        <Loader2 className="w-4 h-4 animate-spin text-stone-900" />
         <span>Loading institutional verification...</span>
       </div>
     );
@@ -387,7 +387,7 @@ export const EventVerificationCard: React.FC<EventVerificationCardProps> = ({
                     placeholder="e.g. Stanford University / Tech Corp"
                     value={institutionName}
                     onChange={(e) => setInstitutionName(e.target.value)}
-                    className="w-full bg-white border border-zinc-300 rounded-xl pl-9 pr-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 shadow-sm"
+                    className="w-full bg-white border border-zinc-300 rounded-xl pl-9 pr-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-stone-900 focus:ring-1 focus:ring-stone-400/20 shadow-sm"
                   />
                 </div>
               </div>
@@ -399,7 +399,7 @@ export const EventVerificationCard: React.FC<EventVerificationCardProps> = ({
                 <select
                   value={institutionType}
                   onChange={(e) => setInstitutionType(e.target.value)}
-                  className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 shadow-sm"
+                  className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 focus:outline-none focus:border-stone-900 focus:ring-1 focus:ring-stone-400/20 shadow-sm"
                 >
                   <option value="COLLEGE_UNIVERSITY">College / University</option>
                   <option value="HIGH_SCHOOL">High School</option>
@@ -434,7 +434,7 @@ export const EventVerificationCard: React.FC<EventVerificationCardProps> = ({
                       placeholder="e.g. dean@university.edu"
                       value={officialEmail}
                       onChange={(e) => setOfficialEmail(e.target.value)}
-                      className={`w-full bg-white border border-zinc-300 rounded-xl pl-9 pr-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 shadow-sm ${
+                      className={`w-full bg-white border border-zinc-300 rounded-xl pl-9 pr-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-stone-900 focus:ring-1 focus:ring-stone-400/20 shadow-sm ${
                         verification?.otpVerified ? 'bg-zinc-100 text-zinc-500 cursor-not-allowed' : ''
                       }`}
                     />
@@ -470,13 +470,13 @@ export const EventVerificationCard: React.FC<EventVerificationCardProps> = ({
                     placeholder="Enter 6-digit OTP"
                     value={otpCode}
                     onChange={(e) => setOtpCode(e.target.value)}
-                    className="w-full sm:w-48 font-mono tracking-widest text-center text-sm font-bold bg-white border border-emerald-400 rounded-xl px-3 py-2 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm"
+                    className="w-full sm:w-48 font-mono tracking-widest text-center text-sm font-bold bg-white border border-stone-300 rounded-xl px-3 py-2 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-stone-400/20 shadow-sm"
                   />
                   <button
                     type="button"
                     disabled={verifyingOtp || otpCode.trim().length !== 6}
                     onClick={handleVerifyOtp}
-                    className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-stone-900 hover:bg-black disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
                   >
                     {verifyingOtp ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -486,7 +486,7 @@ export const EventVerificationCard: React.FC<EventVerificationCardProps> = ({
                     <span>Verify Code</span>
                   </button>
                   {devOtpHint && (
-                    <span className="text-[11px] font-mono text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
+                    <span className="text-[11px] font-mono text-stone-800 bg-stone-100 px-2 py-1 rounded border border-stone-200">
                       Dev Code: {devOtpHint}
                     </span>
                   )}
@@ -505,7 +505,7 @@ export const EventVerificationCard: React.FC<EventVerificationCardProps> = ({
                   placeholder="e.g. Department of Computer Science"
                   value={department}
                   onChange={(e) => setDepartment(e.target.value)}
-                  className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 shadow-sm"
+                  className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-stone-900 focus:ring-1 focus:ring-stone-400/20 shadow-sm"
                 />
               </div>
 
@@ -518,7 +518,7 @@ export const EventVerificationCard: React.FC<EventVerificationCardProps> = ({
                   placeholder="e.g. Associate Professor / Lead Organizer"
                   value={designation}
                   onChange={(e) => setDesignation(e.target.value)}
-                  className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 shadow-sm"
+                  className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-stone-900 focus:ring-1 focus:ring-stone-400/20 shadow-sm"
                 />
               </div>
             </div>
@@ -533,7 +533,7 @@ export const EventVerificationCard: React.FC<EventVerificationCardProps> = ({
                 placeholder="https://engineering.stanford.edu"
                 value={websiteUrl}
                 onChange={(e) => setWebsiteUrl(e.target.value)}
-                className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 shadow-sm"
+                className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-stone-900 focus:ring-1 focus:ring-stone-400/20 shadow-sm"
               />
             </div>
 
@@ -550,9 +550,9 @@ export const EventVerificationCard: React.FC<EventVerificationCardProps> = ({
                 </div>
                 <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-zinc-300 hover:bg-zinc-50 text-zinc-700 text-xs font-bold rounded-xl transition-all shadow-sm">
                   {uploadingDoc ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-stone-900" />
                   ) : (
-                    <Upload className="w-3.5 h-3.5 text-emerald-600" />
+                    <Upload className="w-3.5 h-3.5 text-stone-700" />
                   )}
                   <span>Upload Document</span>
                   <input
@@ -574,7 +574,7 @@ export const EventVerificationCard: React.FC<EventVerificationCardProps> = ({
                       className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-zinc-200 text-xs text-zinc-800"
                     >
                       <div className="flex items-center gap-2 truncate">
-                        <FileText className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                        <FileText className="w-4 h-4 text-stone-700 flex-shrink-0" />
                         <span className="truncate max-w-xs font-mono text-[11px]">{url}</span>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
@@ -621,7 +621,7 @@ export const EventVerificationCard: React.FC<EventVerificationCardProps> = ({
                 type="button"
                 disabled={submitting || !verification?.otpVerified}
                 onClick={handleSubmit}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-stone-900 hover:bg-black disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
               >
                 {submitting ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />

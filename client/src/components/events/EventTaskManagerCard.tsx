@@ -165,7 +165,7 @@ export const EventTaskManagerCard: React.FC<EventTaskManagerCardProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <ClipboardList className="w-5 h-5 text-emerald-400" />
+            <ClipboardList className="w-5 h-5 text-white" />
             <h3 className="text-lg font-semibold text-white">Volunteer Stations & Shift Tasks</h3>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-zinc-800 text-zinc-300 border border-zinc-700">
               {tasks.length} {tasks.length === 1 ? 'Task' : 'Tasks'}
@@ -182,7 +182,7 @@ export const EventTaskManagerCard: React.FC<EventTaskManagerCardProps> = ({
               resetForm();
               setIsCreateOpen(true);
             }}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-black font-semibold text-sm rounded-xl transition duration-150 shadow-sm"
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-white hover:bg-zinc-200 text-black font-semibold text-sm rounded-xl transition duration-150 shadow-sm"
           >
             <Plus className="w-4 h-4" />
             New Shift / Task
@@ -198,7 +198,7 @@ export const EventTaskManagerCard: React.FC<EventTaskManagerCardProps> = ({
             onClick={() => setStatusFilter(statusKey)}
             className={`px-3 py-1.5 rounded-xl text-xs font-medium transition ${
               statusFilter === statusKey
-                ? 'bg-zinc-800 text-emerald-400 border border-emerald-500/40 shadow-sm'
+                ? 'bg-zinc-800 text-white border border-zinc-700 shadow-sm'
                 : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 border border-transparent'
             }`}
           >
@@ -278,7 +278,7 @@ export const EventTaskManagerCard: React.FC<EventTaskManagerCardProps> = ({
                       {task.status}
                     </span>
                     {task.requiresScanning && (
-                      <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full font-mono">
+                      <span className="flex items-center gap-1 text-[10px] text-zinc-300 bg-zinc-800 border border-zinc-700 px-2 py-0.5 rounded-full font-mono">
                         <QrCode className="w-3 h-3" /> Scanner Required
                       </span>
                     )}
@@ -290,7 +290,7 @@ export const EventTaskManagerCard: React.FC<EventTaskManagerCardProps> = ({
 
                   <div className="flex items-center gap-4 text-xs text-zinc-400 pt-1 flex-wrap">
                     <span className="flex items-center gap-1 text-zinc-300 font-medium">
-                      <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+                      <MapPin className="w-3.5 h-3.5 text-zinc-400" />
                       {task.station}
                     </span>
                     <span className="flex items-center gap-1">
@@ -321,9 +321,9 @@ export const EventTaskManagerCard: React.FC<EventTaskManagerCardProps> = ({
                     <button
                       onClick={() => handleStatusChange(task._id, 'COMPLETED')}
                       disabled={transitioningId === task._id}
-                      className="px-3 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition"
+                      className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 transition"
                     >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-zinc-300" />
                       Complete
                     </button>
                   )}
@@ -356,7 +356,7 @@ export const EventTaskManagerCard: React.FC<EventTaskManagerCardProps> = ({
             </button>
 
             <div className="flex items-center gap-2 mb-2">
-              <ClipboardList className="w-5 h-5 text-emerald-400" />
+              <ClipboardList className="w-5 h-5 text-white" />
               <h3 className="text-lg font-semibold text-white">Create Operational Shift Task</h3>
             </div>
             <p className="text-xs text-zinc-400 mb-5">
@@ -374,7 +374,7 @@ export const EventTaskManagerCard: React.FC<EventTaskManagerCardProps> = ({
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="e.g. Main Gate QR Ticket Scanning & Wristband Distribution"
-                  className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500 transition"
+                  className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-400 transition"
                 />
               </div>
 
@@ -389,7 +389,7 @@ export const EventTaskManagerCard: React.FC<EventTaskManagerCardProps> = ({
                     value={station}
                     onChange={(e) => setStation(e.target.value)}
                     placeholder="e.g. Gate 1, VIP Lounge"
-                    className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500 transition"
+                    className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-400 transition"
                   />
                 </div>
 
@@ -398,7 +398,7 @@ export const EventTaskManagerCard: React.FC<EventTaskManagerCardProps> = ({
                   <select
                     value={priority}
                     onChange={(e) => setPriority(e.target.value as TaskPriority)}
-                    className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500 transition"
+                    className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-zinc-400 transition"
                   >
                     <option value="LOW">Low</option>
                     <option value="MEDIUM">Medium</option>
@@ -413,7 +413,7 @@ export const EventTaskManagerCard: React.FC<EventTaskManagerCardProps> = ({
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value as TaskCategory)}
-                  className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500 transition"
+                  className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-zinc-400 transition"
                 >
                   {(Object.keys(CATEGORY_LABELS) as TaskCategory[]).map((catKey) => (
                     <option key={catKey} value={catKey}>
@@ -432,7 +432,7 @@ export const EventTaskManagerCard: React.FC<EventTaskManagerCardProps> = ({
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Operational protocols, escalation contacts, or guidelines..."
-                  className="w-full px-3.5 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500 transition resize-none"
+                  className="w-full px-3.5 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-400 transition resize-none"
                 />
               </div>
 
@@ -464,7 +464,7 @@ export const EventTaskManagerCard: React.FC<EventTaskManagerCardProps> = ({
                               );
                             }
                           }}
-                          className="w-3.5 h-3.5 rounded border-zinc-700 text-emerald-500 bg-zinc-800"
+                          className="w-3.5 h-3.5 rounded border-zinc-700 text-stone-900 bg-zinc-800"
                         />
                         <span className="text-zinc-200">{member.userEmail}</span>
                         <span className="text-[10px] px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-400 font-mono">
@@ -483,11 +483,11 @@ export const EventTaskManagerCard: React.FC<EventTaskManagerCardProps> = ({
                   id="reqScan"
                   checked={requiresScanning}
                   onChange={(e) => setRequiresScanning(e.target.checked)}
-                  className="mt-0.5 w-4 h-4 rounded border-zinc-700 text-emerald-500 bg-zinc-800"
+                  className="mt-0.5 w-4 h-4 rounded border-zinc-700 text-stone-900 bg-zinc-800"
                 />
                 <label htmlFor="reqScan" className="cursor-pointer">
                   <span className="block text-xs font-medium text-white flex items-center gap-1.5">
-                    <QrCode className="w-3.5 h-3.5 text-emerald-400" /> Requires Ticket Scanning
+                    <QrCode className="w-3.5 h-3.5 text-zinc-400" /> Requires Ticket Scanning
                   </span>
                   <span className="block text-[11px] text-zinc-400">
                     Flag this duty as an active QR verification station for check-in gate logistics.
@@ -506,7 +506,7 @@ export const EventTaskManagerCard: React.FC<EventTaskManagerCardProps> = ({
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-black font-semibold text-xs rounded-xl flex items-center gap-1.5 transition"
+                  className="px-4 py-2 bg-white hover:bg-zinc-200 disabled:opacity-50 text-black font-semibold text-xs rounded-xl flex items-center gap-1.5 transition"
                 >
                   {submitting ? 'Creating...' : 'Create Shift'}
                 </button>

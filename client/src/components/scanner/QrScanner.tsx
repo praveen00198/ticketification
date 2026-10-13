@@ -173,7 +173,7 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
       {/* Scanner Header & Controls */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
-          <Camera className="w-4 h-4 text-emerald-600" />
+          <Camera className="w-4 h-4 text-stone-900" />
           <span className="text-xs font-bold text-zinc-900">Live Camera Feed</span>
           {isScanning && (
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
@@ -185,7 +185,7 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
             <select
               value={selectedCameraId}
               onChange={(e) => handleSwitchCamera(e.target.value)}
-              className="text-[11px] font-semibold bg-stone-100 border border-stone-200/90 rounded-xl px-2 py-1 text-zinc-800 focus:outline-none focus:border-emerald-500 max-w-[130px] truncate shadow-2xs"
+              className="text-[11px] font-semibold bg-stone-100 border border-stone-200/90 rounded-xl px-2 py-1 text-zinc-800 focus:outline-none focus:border-stone-900 max-w-[130px] truncate shadow-2xs"
             >
               <option value="">Default ({facingMode === 'environment' ? 'Back' : 'Front'})</option>
               {cameras.map((c, idx) => (
@@ -210,7 +210,7 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
             className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-xl border transition-colors shadow-2xs ${
               isScanning
                 ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
-                : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                : 'bg-stone-900 text-white border-stone-800 hover:bg-black'
             }`}
           >
             {isScanning ? (
@@ -247,7 +247,7 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
       <div className="relative rounded-2xl overflow-hidden border border-stone-300 bg-stone-950 min-h-[280px] sm:min-h-[320px] flex items-center justify-center shadow-inner">
         {isInitializing && (
           <div className="absolute inset-0 z-10 bg-stone-950/80 backdrop-blur-xs flex flex-col items-center justify-center gap-2 text-stone-300 text-xs">
-            <RefreshCw className="w-6 h-6 animate-spin text-emerald-500" />
+            <RefreshCw className="w-6 h-6 animate-spin text-white" />
             <span>Connecting to camera stream...</span>
           </div>
         )}

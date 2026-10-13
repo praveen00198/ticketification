@@ -241,7 +241,7 @@ export const EventTeamManagerCard: React.FC<EventTeamManagerCardProps> = ({
           <div className="flex items-center gap-2">
             <Users className="w-5 h-5 text-brand-600" />
             <h2 className="text-base font-bold text-zinc-900">Team & Hackathon Cohort Management</h2>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-stone-100 text-stone-800 border border-stone-200">
               {teams.length} {teams.length === 1 ? 'Team' : 'Teams'}
             </span>
           </div>
@@ -279,13 +279,13 @@ export const EventTeamManagerCard: React.FC<EventTeamManagerCardProps> = ({
           <div className="text-[11px] font-semibold text-zinc-500">Total Registered</div>
           <div className="text-base font-bold text-zinc-900 mt-0.5">{teams.length}</div>
         </div>
-        <div className="p-3 bg-emerald-50/60 border border-emerald-200 rounded-xl">
-          <div className="text-[11px] font-semibold text-emerald-700">Projects Submitted</div>
-          <div className="text-base font-bold text-emerald-800 mt-0.5">{submittedCount}</div>
+        <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-xl">
+          <div className="text-[11px] font-semibold text-zinc-500">Projects Submitted</div>
+          <div className="text-base font-bold text-zinc-900 mt-0.5">{submittedCount}</div>
         </div>
-        <div className="p-3 bg-blue-50/60 border border-blue-200 rounded-xl">
-          <div className="text-[11px] font-semibold text-blue-700">Active Tracks</div>
-          <div className="text-base font-bold text-blue-800 mt-0.5">{distinctTracks.length || 1}</div>
+        <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-xl">
+          <div className="text-[11px] font-semibold text-zinc-500">Active Tracks</div>
+          <div className="text-base font-bold text-zinc-900 mt-0.5">{distinctTracks.length || 1}</div>
         </div>
         <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-xl">
           <div className="text-[11px] font-semibold text-zinc-500">Total Participants</div>
@@ -390,8 +390,8 @@ export const EventTeamManagerCard: React.FC<EventTeamManagerCardProps> = ({
                         </span>
                       )}
                       {team.tableNumber && (
-                        <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
-                          <MapPin className="w-3 h-3 text-emerald-600" />
+                        <span className="text-[10px] font-semibold text-stone-800 bg-stone-100 px-2 py-0.5 rounded-full border border-stone-200 flex items-center gap-1">
+                          <MapPin className="w-3 h-3 text-stone-500" />
                           {team.tableNumber}
                         </span>
                       )}
@@ -467,9 +467,9 @@ export const EventTeamManagerCard: React.FC<EventTeamManagerCardProps> = ({
                           href={team.demoUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-[11px] text-emerald-700 hover:text-emerald-900 font-semibold"
+                          className="inline-flex items-center gap-1 text-[11px] text-stone-800 hover:text-black font-semibold underline"
                         >
-                          <ExternalLink className="w-3.5 h-3.5 text-emerald-600" />
+                          <ExternalLink className="w-3.5 h-3.5 text-stone-500" />
                           <span>Live Demo</span>
                         </a>
                       )}

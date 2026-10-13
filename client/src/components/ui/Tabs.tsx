@@ -46,7 +46,7 @@ export const Tabs: React.FC<TabsProps> = ({
               {Icon && (
                 <Icon
                   className={`w-3.5 h-3.5 transition-colors ${
-                    isActive ? 'text-emerald-600' : 'text-stone-400'
+                    isActive ? 'text-stone-900' : 'text-stone-400'
                   }`}
                 />
               )}
@@ -55,7 +55,7 @@ export const Tabs: React.FC<TabsProps> = ({
                 <span
                   className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
                     isActive
-                      ? 'bg-emerald-100 text-emerald-800'
+                      ? 'bg-stone-900 text-white'
                       : 'bg-stone-200 text-stone-600'
                   }`}
                 >

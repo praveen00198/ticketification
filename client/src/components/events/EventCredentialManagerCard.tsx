@@ -288,7 +288,7 @@ export const EventCredentialManagerCard: React.FC<EventCredentialManagerCardProp
             </button>
             <button
               onClick={() => setIsIssueModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm shadow-emerald-600/20"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-stone-900 hover:bg-black text-white text-xs font-bold rounded-xl transition-all shadow-sm"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Issue Credential</span>
@@ -648,7 +648,7 @@ export const EventCredentialManagerCard: React.FC<EventCredentialManagerCardProp
                 <button
                   type="submit"
                   disabled={submittingIssue}
-                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-sm disabled:opacity-50"
+                  className="px-4 py-1.5 bg-stone-900 hover:bg-black text-white font-bold rounded-xl shadow-sm disabled:opacity-50"
                 >
                   {submittingIssue ? 'Issuing...' : 'Issue Credential'}
                 </button>
@@ -741,7 +741,7 @@ export const EventCredentialManagerCard: React.FC<EventCredentialManagerCardProp
                 <button
                   type="submit"
                   disabled={submittingBatch}
-                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-sm disabled:opacity-50"
+                  className="px-4 py-1.5 bg-stone-900 hover:bg-black text-white font-bold rounded-xl shadow-sm disabled:opacity-50"
                 >
                   {submittingBatch ? 'Generating Batch...' : `Generate ${batchQuantity} Passes`}
                 </button>
@@ -757,7 +757,7 @@ export const EventCredentialManagerCard: React.FC<EventCredentialManagerCardProp
           <div className="bg-white border border-surface-border w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-surface-border pb-3">
               <h3 className="text-sm font-bold text-zinc-900 flex items-center gap-1.5">
-                <UserCheck className="w-4 h-4 text-emerald-600" />
+                <UserCheck className="w-4 h-4 text-stone-700" />
                 <span>Assign Credential {assigningCredential.sequenceFormatted}</span>
               </h3>
               <button
@@ -777,7 +777,7 @@ export const EventCredentialManagerCard: React.FC<EventCredentialManagerCardProp
                   placeholder="e.g. Jordan Lee"
                   value={assignName}
                   onChange={(e) => setAssignName(e.target.value)}
-                  className="w-full bg-white border border-zinc-300 rounded-xl px-3 py-2 text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-white border border-zinc-300 rounded-xl px-3 py-2 text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-stone-900"
                 />
               </div>
 
@@ -788,7 +788,7 @@ export const EventCredentialManagerCard: React.FC<EventCredentialManagerCardProp
                   placeholder="e.g. jordan@example.com"
                   value={assignEmail}
                   onChange={(e) => setAssignEmail(e.target.value)}
-                  className="w-full bg-white border border-zinc-300 rounded-xl px-3 py-2 text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-white border border-zinc-300 rounded-xl px-3 py-2 text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-stone-900"
                 />
               </div>
 
@@ -799,7 +799,7 @@ export const EventCredentialManagerCard: React.FC<EventCredentialManagerCardProp
                   placeholder="e.g. WORKER, VOLUNTEER, CATERING"
                   value={assignRole}
                   onChange={(e) => setAssignRole(e.target.value)}
-                  className="w-full bg-white border border-zinc-300 rounded-xl px-3 py-2 text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-emerald-500 uppercase"
+                  className="w-full bg-white border border-zinc-300 rounded-xl px-3 py-2 text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-stone-900 uppercase"
                 />
               </div>
 
@@ -814,7 +814,7 @@ export const EventCredentialManagerCard: React.FC<EventCredentialManagerCardProp
                 <button
                   type="submit"
                   disabled={submittingAssign}
-                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-sm disabled:opacity-50"
+                  className="px-4 py-1.5 bg-stone-900 hover:bg-black text-white font-bold rounded-xl shadow-sm disabled:opacity-50"
                 >
                   {submittingAssign ? 'Assigning...' : 'Assign Pass'}
                 </button>

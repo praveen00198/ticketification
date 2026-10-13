@@ -56,11 +56,11 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
           {/* Left: Brand & Event Switcher */}
           <div className="flex items-center gap-4">
             <Link to="/" className="flex items-center gap-2 shrink-0">
-              <div className="bg-brand-600 p-2 rounded-full flex items-center justify-center text-white">
+              <div className="bg-stone-900 p-2 rounded-full flex items-center justify-center text-white border border-stone-800">
                 <Ticket className="w-5 h-5" />
               </div>
               <span className="font-extrabold text-xl tracking-wide hidden sm:inline">
-                Ticketification<span className="text-brand-500">.</span>
+                Ticketification<span className="text-stone-400">.</span>
               </span>
             </Link>
 
@@ -68,9 +68,9 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
             <div className="relative">
               <button
                 onClick={() => setEventMenuOpen(!eventMenuOpen)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-700/80 text-xs font-semibold text-zinc-200 hover:border-brand-500 hover:text-white transition-all max-w-[200px] sm:max-w-[260px]"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-700/80 text-xs font-semibold text-zinc-200 hover:border-stone-400 hover:text-white transition-all max-w-[200px] sm:max-w-[260px]"
               >
-                <Calendar className="w-3.5 h-3.5 text-brand-400 shrink-0" />
+                <Calendar className="w-3.5 h-3.5 text-stone-300 shrink-0" />
                 <span className="truncate">
                   {currentEvent ? currentEvent.name : 'Select Event'}
                 </span>
@@ -157,10 +157,10 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
             {user && !user.isOnboarded && (
               <button
                 onClick={() => navigate('/onboarding')}
-                className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-emerald-300 bg-emerald-950/60 border border-emerald-800/80 rounded hover:bg-emerald-900/60 transition-colors"
+                className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-stone-700 bg-stone-100 border border-stone-200/90 rounded-lg hover:bg-stone-200 hover:text-stone-900 transition-colors"
                 title="Initialize Organizer Workspace"
               >
-                <Building2 className="w-3.5 h-3.5 text-emerald-400" />
+                <Building2 className="w-3.5 h-3.5 text-stone-600" />
                 <span>Set up Organizer</span>
               </button>
             )}
@@ -168,10 +168,10 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
             {user && user.isOnboarded && (
               <button
                 onClick={() => navigate('/events/create')}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-300 bg-emerald-950/60 border border-emerald-800/80 rounded-md hover:bg-emerald-900/60 transition-colors"
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-stone-700 bg-stone-100 border border-stone-200/90 rounded-lg hover:bg-stone-200 hover:text-stone-900 transition-colors"
                 title="Create a new event"
               >
-                <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                <Plus className="w-3.5 h-3.5 text-stone-600" />
                 <span>Create Event</span>
               </button>
             )}

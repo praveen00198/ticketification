@@ -33,7 +33,7 @@ const PricingPage                = lazy(() => import('./pages/PricingPage').then
 const PageLoader: React.FC = () => (
   <div className="min-h-screen bg-[#FAFAF9] flex items-center justify-center">
     <div className="flex flex-col items-center gap-3">
-      <div className="w-8 h-8 rounded-full border-2 border-emerald-500/30 border-t-emerald-500 animate-spin" />
+      <div className="w-8 h-8 rounded-full border-2 border-stone-300 border-t-stone-900 animate-spin" />
       <span className="text-xs font-semibold text-zinc-500 tracking-wider uppercase">Loading</span>
     </div>
   </div>
@@ -102,7 +102,7 @@ const AppContent: React.FC = () => {
     return (
       <div className="min-h-screen bg-[#FAFAF9] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 rounded-full border-2 border-emerald-500/30 border-t-emerald-500 animate-spin" />
+          <div className="w-8 h-8 rounded-full border-2 border-stone-300 border-t-stone-900 animate-spin" />
           <span className="text-xs font-semibold text-zinc-500 tracking-wider uppercase">
             Initializing Ticketification
           </span>

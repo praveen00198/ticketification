@@ -92,7 +92,7 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
         {/* Modal Header */}
         <div className="p-5 border-b border-stone-200/90 flex items-center justify-between bg-stone-50/70">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200/80 flex items-center justify-center text-emerald-700">
+            <div className="w-10 h-10 rounded-xl bg-stone-100 border border-stone-200/80 flex items-center justify-center text-stone-700">
               <Ticket className="w-5 h-5" />
             </div>
             <div>
@@ -150,7 +150,7 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
           {!token && !error ? (
             /* Unauthenticated Prompt */
             <div className="py-6 text-center space-y-4">
-              <div className="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center mx-auto text-emerald-600 border border-emerald-200">
+              <div className="w-12 h-12 bg-stone-100 rounded-full flex items-center justify-center mx-auto text-stone-700 border border-stone-200">
                 <Ticket className="w-6 h-6" />
               </div>
               <div>
@@ -166,7 +166,7 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
                     onClose();
                     navigate(`/login?redirect=${currentRedirect}`);
                   }}
-                  className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition-all shadow-xs flex items-center justify-center gap-2"
+                  className="w-full py-2.5 px-4 bg-stone-900 hover:bg-black text-white text-xs font-semibold rounded-xl transition-all shadow-xs flex items-center justify-center gap-2"
                 >
                   <LogIn className="w-4 h-4" /> Sign In
                 </button>
@@ -199,7 +199,7 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
               <div className="p-4 rounded-xl bg-stone-50 border border-stone-200/90 text-left max-w-sm mx-auto space-y-2">
                 <div className="flex items-center justify-between text-xs text-stone-500 border-b border-stone-200/80 pb-2">
                   <span>Pass Identifier</span>
-                  <span className="font-mono font-bold text-emerald-700">
+                  <span className="font-mono font-bold text-zinc-900">
                     {issuedResult.credential?.formattedId || 'CONFIRMED'}
                   </span>
                 </div>
@@ -224,7 +224,7 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
                     onClose();
                     navigate('/wallet');
                   }}
-                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition-all flex items-center gap-1.5"
+                  className="px-5 py-2.5 rounded-xl bg-stone-900 hover:bg-black text-white font-semibold text-xs shadow-xs transition-all flex items-center gap-1.5"
                 >
                   <Sparkles className="w-3.5 h-3.5" /> Open My Wallet
                 </button>
@@ -250,7 +250,7 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
                     placeholder="+91 98765 43210"
                     value={formData.phone || ''}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-stone-50 border border-stone-200 text-zinc-900 text-xs placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                    className="w-full px-3 py-2 rounded-xl bg-stone-50 border border-stone-200 text-zinc-900 text-xs placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-400/20 focus:border-stone-900 transition-all"
                   />
                 </div>
 
@@ -263,7 +263,7 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
                     placeholder="e.g. IIT Bombay / Acme Corp"
                     value={formData.organization || ''}
                     onChange={(e) => setFormData({ ...formData, organization: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-stone-50 border border-stone-200 text-zinc-900 text-xs placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                    className="w-full px-3 py-2 rounded-xl bg-stone-50 border border-stone-200 text-zinc-900 text-xs placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-400/20 focus:border-stone-900 transition-all"
                   />
                 </div>
               </div>
@@ -277,15 +277,15 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
                   placeholder="e.g. Student / Full-Stack Engineer"
                   value={formData.designation || ''}
                   onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-stone-50 border border-stone-200 text-zinc-900 text-xs placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                  className="w-full px-3 py-2 rounded-xl bg-stone-50 border border-stone-200 text-zinc-900 text-xs placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-400/20 focus:border-stone-900 transition-all"
                 />
               </div>
 
               {/* Event-specific fields */}
               {isHackathon && (
                 <div className="p-4 rounded-xl bg-stone-50 border border-stone-200 space-y-3">
-                  <div className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-600" /> Hackathon Participation Details
+                  <div className="text-xs font-bold text-zinc-800 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-stone-600" /> Hackathon Participation Details
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -303,7 +303,7 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
                             responses: { ...formData.responses, github: e.target.value },
                           })
                         }
-                        className="w-full px-3 py-2 rounded-xl bg-white border border-stone-200 text-zinc-900 text-xs placeholder:text-stone-400 focus:outline-none focus:border-emerald-500"
+                        className="w-full px-3 py-2 rounded-xl bg-white border border-stone-200 text-zinc-900 text-xs placeholder:text-stone-400 focus:outline-none focus:border-stone-900 focus:ring-1 focus:ring-stone-400/20"
                       />
                     </div>
 
@@ -315,8 +315,9 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
                         type="text"
                         placeholder="e.g. CyberKnights"
                         value={formData.teamName || ''}
-                        onChange={(e) => setFormData({ ...formData, teamName: e.target.value })}
-                        className="w-full px-3 py-2 rounded-xl bg-white border border-stone-200 text-zinc-900 text-xs placeholder:text-stone-400 focus:outline-none focus:border-emerald-500"
+                        onChange={(e) =>
+                          setFormData({ ...formData, teamName: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl bg-white border border-stone-200 text-zinc-900 text-xs placeholder:text-stone-400 focus:outline-none focus:border-stone-900 focus:ring-1 focus:ring-stone-400/20"
                       />
                     </div>
                   </div>
@@ -336,7 +337,7 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
                         responses: { ...formData.responses, dietary: e.target.value },
                       })
                     }
-                    className="w-full px-3 py-2 rounded-xl bg-stone-50 border border-stone-200 text-zinc-900 text-xs focus:outline-none focus:border-emerald-500"
+                    className="w-full px-3 py-2 rounded-xl bg-stone-50 border border-stone-200 text-zinc-900 text-xs focus:outline-none focus:border-stone-900 focus:ring-1 focus:ring-stone-400/20"
                   >
                     <option value="None">Standard / No restrictions</option>
                     <option value="Vegetarian">Vegetarian</option>
@@ -359,7 +360,7 @@ export const EventRegistrationModal: React.FC<EventRegistrationModalProps> = ({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-stone-200 disabled:text-stone-400 text-white font-semibold text-xs shadow-xs transition-all flex items-center gap-1.5"
+                  className="px-5 py-2.5 rounded-xl bg-stone-900 hover:bg-black disabled:bg-stone-200 disabled:text-stone-400 text-white font-semibold text-xs shadow-xs transition-all flex items-center gap-1.5"
                 >
                   {loading ? (
                     <>

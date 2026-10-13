@@ -21,7 +21,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             className="block text-xs font-semibold text-zinc-700 select-none"
           >
             {label}
-            {props.required && <span className="text-emerald-600 ml-1 font-bold">*</span>}
+            {props.required && <span className="text-stone-900 ml-1 font-bold">*</span>}
           </label>
         )}
         <div className="relative rounded-xl shadow-2xs">
@@ -38,7 +38,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             } ${rightElement ? 'pr-10' : 'pr-3.5'} py-2 ${
               error
                 ? 'border-rose-300 focus:border-rose-500 focus:ring-3 focus:ring-rose-500/15'
-                : 'border-stone-200/90 hover:border-stone-300 focus:border-emerald-500 focus:ring-3 focus:ring-emerald-500/15'
+                : 'border-stone-200/90 hover:border-stone-300 focus:border-stone-900 focus:ring-3 focus:ring-stone-400/20'
             } disabled:bg-stone-50 disabled:text-stone-400 disabled:cursor-not-allowed ${className}`}
             {...props}
           />

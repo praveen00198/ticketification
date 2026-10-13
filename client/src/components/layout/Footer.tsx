@@ -265,29 +265,13 @@ export const Footer: React.FC<FooterProps> = ({
         </div>
       </div>
 
-      {/* ── Signature Atmospheric Gradient & Giant Brand Watermark ── */}
-      <div className="relative w-full overflow-hidden select-none pointer-events-none mt-0">
-        {/* Ambient Gradient Glow */}
-        <div
-          className="w-full h-28 sm:h-36 lg:h-48 flex items-end justify-center"
-          style={{
-            background:
-              'linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(245,245,244,0.3) 25%, rgba(209,250,229,0.35) 65%, rgba(167,243,208,0.55) 100%)',
-          }}
-        >
-          {/* Subtle radial center highlight */}
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom,_var(--tw-gradient-stops))] from-emerald-200/40 via-emerald-100/10 to-transparent" />
-
-          {/* Giant Ideogram-style Watermark Brand Text in Serif */}
+      {/* ── Signature Minimal Brand Watermark ── */}
+      <div className="relative w-full overflow-hidden select-none pointer-events-none mt-2 sm:mt-4 -mb-2">
+        <div className="flex items-end justify-center w-full">
           <span
-            className="text-[14vw] sm:text-[13.5vw] lg:text-[13vw] font-serif font-medium text-center tracking-wide leading-none translate-y-[15%] sm:translate-y-[18%] text-transparent transition-all"
+            className="text-[14vw] sm:text-[13vw] font-serif font-medium text-center tracking-tight leading-none translate-y-[8%] sm:translate-y-[10%] bg-gradient-to-b from-stone-900/[0.22] via-stone-900/[0.16] to-stone-900/[0.08] bg-clip-text text-transparent transition-all select-none"
             style={{
-              fontFamily: 'ui-serif, Georgia, Cambria, "Times New Roman", Times, serif',
-              WebkitTextStroke: '1.2px rgba(5, 150, 104, 0.15)',
-              background:
-                'linear-gradient(180deg, rgba(16, 185, 129, 0.12) 0%, rgba(5, 150, 105, 0.25) 100%)',
-              WebkitBackgroundClip: 'text',
-              backgroundClip: 'text',
+              fontFamily: '"Libre Baskerville", Georgia, Cambria, serif',
             }}
           >
             Ticketification

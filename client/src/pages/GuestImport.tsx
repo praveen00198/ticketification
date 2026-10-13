@@ -360,7 +360,7 @@ export const GuestImport: React.FC = () => {
               dragActive
                 ? 'border-brand-500 bg-brand-50/50 scale-[0.99]'
                 : file
-                ? 'border-emerald-500 bg-emerald-50/40'
+                ? 'border-stone-900 bg-stone-50'
                 : 'border-zinc-300 hover:border-brand-400 hover:bg-zinc-50'
             }`}
           >
@@ -374,7 +374,7 @@ export const GuestImport: React.FC = () => {
 
             <div className="w-14 h-14 rounded-2xl bg-zinc-100 flex items-center justify-center mx-auto mb-4 text-brand-600 shadow-inner">
               {file ? (
-                <FileSpreadsheet className="w-7 h-7 text-emerald-600" />
+                <FileSpreadsheet className="w-7 h-7 text-stone-900" />
               ) : (
                 <Upload className="w-7 h-7" />
               )}
@@ -386,7 +386,7 @@ export const GuestImport: React.FC = () => {
                 <p className="text-xs text-zinc-500">
                   {(file.size / 1024).toFixed(1)} KB • Ready for automated header analysis
                 </p>
-                <span className="inline-block mt-3 px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-semibold">
+                <span className="inline-block mt-3 px-3 py-1 bg-stone-100 text-stone-800 border border-stone-200 rounded-full text-xs font-semibold">
                   File Selected — Click to change
                 </span>
               </div>
@@ -842,7 +842,7 @@ export const GuestImport: React.FC = () => {
           <div className="grid grid-cols-2 gap-4 max-w-sm mx-auto bg-zinc-50 border border-zinc-200 p-4 rounded-xl">
             <div>
               <div className="text-[11px] text-zinc-500">Imported Records</div>
-              <div className="text-2xl font-black text-emerald-600">{confirmResult.importedCount}</div>
+              <div className="text-2xl font-black text-zinc-900">{confirmResult.importedCount}</div>
             </div>
             <div>
               <div className="text-[11px] text-zinc-500">Skipped Records</div>

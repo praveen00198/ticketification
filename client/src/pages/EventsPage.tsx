@@ -89,12 +89,12 @@ export const EventsPage: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Top Banner */}
+      {/* Top Banner (Seamless in single container box) */}
       <InView direction="up" distance={12}>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white border border-stone-200/90 p-5 sm:p-6 rounded-2xl shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-stone-100">
           <div>
             <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-              <Badge variant="emerald">Event Management</Badge>
+              <Badge variant="neutral">Event Management</Badge>
               <span className="text-xs text-stone-300">•</span>
               <span className="text-xs text-stone-500 font-semibold">{events.length} Total Events</span>
             </div>
@@ -109,7 +109,7 @@ export const EventsPage: React.FC = () => {
               variant="primary"
               size="sm"
               onClick={() => navigate('/events/create')}
-              iconLeft={<Sparkles className="w-4 h-4 text-emerald-100" />}
+              iconLeft={<Sparkles className="w-4 h-4 text-white" />}
             >
               Create Event Wizard
             </Button>
@@ -127,15 +127,15 @@ export const EventsPage: React.FC = () => {
 
       {/* Events Grid */}
       {loading ? (
-        <div className="text-center py-16 text-stone-400 text-xs font-medium bg-white border border-stone-200/90 rounded-2xl p-8 shadow-xs">
-          <div className="w-7 h-7 rounded-full border-2 border-emerald-500/30 border-t-emerald-600 animate-spin mx-auto mb-2" />
+        <div className="text-center py-16 text-stone-400 text-xs font-medium p-8">
+          <div className="w-7 h-7 rounded-full border-2 border-stone-300 border-t-stone-900 animate-spin mx-auto mb-2" />
           Loading your events...
         </div>
       ) : events.length === 0 ? (
-        <div className="bg-white border border-stone-200/90 rounded-2xl p-6 sm:p-10 shadow-xs space-y-6">
+        <div className="py-6 sm:py-8 space-y-6">
           <div className="text-center max-w-lg mx-auto space-y-2">
-            <div className="w-14 h-14 bg-emerald-50 text-emerald-700 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-emerald-100/80 shadow-2xs">
-              <Calendar className="w-7 h-7" />
+            <div className="w-12 h-12 bg-stone-100 text-stone-900 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-stone-200/80 shadow-2xs">
+              <Calendar className="w-6 h-6" />
             </div>
             <h3 className="text-lg font-bold text-zinc-900 tracking-tight">You Haven&apos;t Created Any Events Yet</h3>
             <p className="text-xs text-stone-500 leading-relaxed">
@@ -144,9 +144,9 @@ export const EventsPage: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-            <div className="p-5 rounded-2xl border border-stone-200/90 hover:border-emerald-500/60 transition-all flex flex-col justify-between space-y-4 bg-stone-50/50 hover:bg-white shadow-2xs group">
+            <div className="p-5 rounded-2xl border border-stone-200/90 hover:border-stone-900 transition-all flex flex-col justify-between space-y-4 bg-stone-50/50 hover:bg-white shadow-2xs group">
               <div>
-                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center mb-3 border border-emerald-200/80 group-hover:scale-105 transition-transform">
+                <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-900 flex items-center justify-center mb-3 border border-stone-200 group-hover:scale-105 transition-transform">
                   <Sparkles className="w-5 h-5" />
                 </div>
                 <h4 className="text-sm font-bold text-zinc-900">Host an Event</h4>
@@ -165,9 +165,9 @@ export const EventsPage: React.FC = () => {
               </Button>
             </div>
 
-            <div className="p-5 rounded-2xl border border-stone-200/90 hover:border-emerald-500/60 transition-all flex flex-col justify-between space-y-4 bg-stone-50/50 hover:bg-white shadow-2xs group">
+            <div className="p-5 rounded-2xl border border-stone-200/90 hover:border-stone-900 transition-all flex flex-col justify-between space-y-4 bg-stone-50/50 hover:bg-white shadow-2xs group">
               <div>
-                <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center mb-3 border border-sky-200/80 group-hover:scale-105 transition-transform">
+                <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-900 flex items-center justify-center mb-3 border border-stone-200 group-hover:scale-105 transition-transform">
                   <Calendar className="w-5 h-5" />
                 </div>
                 <h4 className="text-sm font-bold text-zinc-900">Discover Events to Attend</h4>
@@ -186,9 +186,9 @@ export const EventsPage: React.FC = () => {
               </Button>
             </div>
 
-            <div className="p-5 rounded-2xl border border-stone-200/90 hover:border-emerald-500/60 transition-all flex flex-col justify-between space-y-4 bg-stone-50/50 hover:bg-white shadow-2xs group">
+            <div className="p-5 rounded-2xl border border-stone-200/90 hover:border-stone-900 transition-all flex flex-col justify-between space-y-4 bg-stone-50/50 hover:bg-white shadow-2xs group">
               <div>
-                <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center mb-3 border border-amber-200/80 group-hover:scale-105 transition-transform">
+                <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-900 flex items-center justify-center mb-3 border border-stone-200 group-hover:scale-105 transition-transform">
                   <TicketIcon className="w-5 h-5" />
                 </div>
                 <h4 className="text-sm font-bold text-zinc-900">Access Your Passes</h4>
@@ -218,7 +218,7 @@ export const EventsPage: React.FC = () => {
                 onClick={() => setCurrentEvent(event)}
                 className={`group relative bg-white border rounded-2xl p-5 transition-all cursor-pointer flex flex-col justify-between shadow-xs ${
                   isSelected
-                    ? 'border-emerald-500/80 ring-2 ring-emerald-500/20 shadow-md bg-emerald-50/20'
+                    ? 'border-stone-900 ring-2 ring-stone-900/10 shadow-md bg-stone-50/60'
                     : 'border-stone-200/90 hover:border-stone-300 hover:shadow-sm'
                 }`}
               >
@@ -248,15 +248,15 @@ export const EventsPage: React.FC = () => {
                     </div>
 
                     {isSelected && (
-                      <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80 shadow-2xs">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      <span className="flex items-center gap-1 text-[11px] font-bold text-white bg-stone-900 px-2 py-0.5 rounded-full border border-stone-800 shadow-2xs">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-white" />
                         <span>Active</span>
                       </span>
                     )}
                   </div>
 
                   {/* Event Name */}
-                  <h3 className="text-base sm:text-lg font-bold text-zinc-900 group-hover:text-emerald-700 transition-colors line-clamp-1 mb-2">
+                  <h3 className="text-base sm:text-lg font-bold text-zinc-900 group-hover:text-black transition-colors line-clamp-1 mb-2">
                     {event.name}
                   </h3>
 
@@ -293,8 +293,8 @@ export const EventsPage: React.FC = () => {
                     )}
                     {event.credentialTerminology && (
                       <div className="flex items-center gap-2">
-                        <TicketIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                        <span className="text-emerald-700 font-semibold">{event.credentialTerminology}</span>
+                        <TicketIcon className="w-3.5 h-3.5 text-stone-600 shrink-0" />
+                        <span className="text-stone-800 font-semibold">{event.credentialTerminology}</span>
                       </div>
                     )}
                   </div>
@@ -415,7 +415,7 @@ export const EventsPage: React.FC = () => {
               placeholder="Brief overview of event details..."
               value={formData.description || ''}
               onChange={handleInputChange}
-              className="w-full bg-white border border-stone-200/90 rounded-xl px-3.5 py-2 text-xs text-zinc-900 placeholder:text-stone-400 focus:outline-none focus:border-emerald-500 focus:ring-3 focus:ring-emerald-500/15 shadow-2xs resize-none"
+              className="w-full bg-white border border-stone-200/90 rounded-xl px-3.5 py-2 text-xs text-zinc-900 placeholder:text-stone-400 focus:outline-none focus:border-stone-900 focus:ring-3 focus:ring-stone-400/20 shadow-2xs resize-none"
             />
           </div>
 

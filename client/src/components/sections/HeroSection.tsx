@@ -23,10 +23,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   const navigate = useNavigate();
 
   return (
-    <section className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 sm:pt-12 pb-12 lg:pb-16">
+    <section className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 sm:pt-24 pb-12 lg:pb-12">
       {/* Monumental Headline Layout */}
       <div className="relative text-center">
-        <div className="flex flex-col items-center gap-2">
+        <div className="flex flex-col items-center gap-6">
           {/* Row 1: 'Where' + Description Paragraph Centered & Next to Each Other */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-7 sm:gap-10">
             <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-[7rem] xl:text-[8rem] font-serif font-normal tracking-tight text-stone-950 leading-none">
@@ -45,7 +45,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               </h2>
 
               {/* Right: Circular Rotating 'SCROLL DOWN' Stamp + Delicate Arrow */}
-              <div className="hidden lg:flex absolute left-full ml-20 xl:ml-32 top-1/2 -translate-y-1/2 flex-col items-center gap-1 pointer-events-none select-none">
+              <div className="hidden lg:flex absolute left-full ml-16 xl:ml-20 top-1/2 -translate-y-1/2 flex-col items-center gap-1 pointer-events-none select-none">
                 <div className="relative w-16 h-16 xl:w-20 xl:h-20 flex items-center justify-center animate-[spin_20s_linear_infinite]">
                   <svg className="w-full h-full" viewBox="0 0 100 100">
                     <path

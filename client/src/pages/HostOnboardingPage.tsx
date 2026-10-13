@@ -192,7 +192,7 @@ export const HostOnboardingPage: React.FC<HostOnboardingPageProps> = ({ onOnboar
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="flex items-center gap-2 text-zinc-500 text-sm">
-          <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+          <Loader2 className="w-4 h-4 animate-spin text-stone-900" />
           <span>Loading organizer workspace...</span>
         </div>
       </div>
@@ -223,7 +223,7 @@ export const HostOnboardingPage: React.FC<HostOnboardingPageProps> = ({ onOnboar
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
             <button
               onClick={() => navigate('/events')}
-              className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-sm font-medium transition-colors shadow-sm flex items-center justify-center gap-2"
+              className="w-full sm:w-auto px-5 py-2.5 bg-stone-900 hover:bg-black text-white rounded-md text-sm font-medium transition-colors shadow-sm flex items-center justify-center gap-2"
             >
               <span>Manage Events</span>
               <ArrowRight className="w-4 h-4" />
@@ -293,7 +293,7 @@ export const HostOnboardingPage: React.FC<HostOnboardingPageProps> = ({ onOnboar
         {/* Section A: Organization Details */}
         <section className="bg-white rounded-md p-6 sm:p-8 border border-zinc-200 shadow-sm">
           <div className="flex items-center gap-2.5 pb-4 border-b border-zinc-100">
-            <Building2 className="w-5 h-5 text-emerald-600" />
+            <Building2 className="w-5 h-5 text-stone-900" />
             <h2 className="text-base font-semibold text-zinc-900">
               Organization Details
             </h2>
@@ -315,7 +315,7 @@ export const HostOnboardingPage: React.FC<HostOnboardingPageProps> = ({ onOnboar
                 className={`w-full px-3 py-2 text-sm text-zinc-900 bg-white border rounded-md focus:outline-none focus:ring-1 transition-colors ${
                   fieldErrors.organizationName
                     ? 'border-red-400 focus:ring-red-400'
-                    : 'border-zinc-300 focus:ring-emerald-500 focus:border-emerald-500'
+                    : 'border-zinc-300 focus:ring-stone-900 focus:border-stone-900'
                 }`}
               />
               {fieldErrors.organizationName && (
@@ -338,7 +338,7 @@ export const HostOnboardingPage: React.FC<HostOnboardingPageProps> = ({ onOnboar
                 className={`w-full px-3 py-2 text-sm text-zinc-900 bg-white border rounded-md focus:outline-none focus:ring-1 transition-colors ${
                   fieldErrors.bio
                     ? 'border-red-400 focus:ring-red-400'
-                    : 'border-zinc-300 focus:ring-emerald-500 focus:border-emerald-500'
+                    : 'border-zinc-300 focus:ring-stone-900 focus:border-stone-900'
                 }`}
               />
               <div className="flex justify-between mt-1 text-[11px] text-zinc-400">
@@ -368,7 +368,7 @@ export const HostOnboardingPage: React.FC<HostOnboardingPageProps> = ({ onOnboar
                     className={`w-full pl-9 pr-3 py-2 text-sm text-zinc-900 bg-white border rounded-md focus:outline-none focus:ring-1 transition-colors ${
                       fieldErrors.website
                         ? 'border-red-400 focus:ring-red-400'
-                        : 'border-zinc-300 focus:ring-emerald-500 focus:border-emerald-500'
+                        : 'border-zinc-300 focus:ring-stone-900 focus:border-stone-900'
                     }`}
                   />
                 </div>
@@ -395,7 +395,7 @@ export const HostOnboardingPage: React.FC<HostOnboardingPageProps> = ({ onOnboar
                     className={`w-full pl-9 pr-3 py-2 text-sm text-zinc-900 bg-white border rounded-md focus:outline-none focus:ring-1 transition-colors ${
                       fieldErrors.phone
                         ? 'border-red-400 focus:ring-red-400'
-                        : 'border-zinc-300 focus:ring-emerald-500 focus:border-emerald-500'
+                        : 'border-zinc-300 focus:ring-stone-900 focus:border-stone-900'
                     }`}
                   />
                 </div>
@@ -435,7 +435,7 @@ export const HostOnboardingPage: React.FC<HostOnboardingPageProps> = ({ onOnboar
                 <div className="border border-dashed border-zinc-300 rounded-md p-5 text-center bg-zinc-50/50 hover:bg-zinc-50 transition-colors">
                   {isUploadingLogo ? (
                     <div className="flex items-center justify-center gap-2 text-xs text-zinc-500">
-                      <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+                      <Loader2 className="w-4 h-4 animate-spin text-stone-900" />
                       <span>Uploading asset to object storage...</span>
                     </div>
                   ) : (
@@ -443,7 +443,7 @@ export const HostOnboardingPage: React.FC<HostOnboardingPageProps> = ({ onOnboar
                       <Upload className="w-6 h-6 text-zinc-400 mx-auto mb-1.5" />
                       <label
                         htmlFor="logo-file-input"
-                        className="cursor-pointer text-xs font-medium text-emerald-600 hover:text-emerald-700"
+                        className="cursor-pointer text-xs font-medium text-stone-900 hover:text-black underline"
                       >
                         Click to upload an image
                       </label>
@@ -469,7 +469,7 @@ export const HostOnboardingPage: React.FC<HostOnboardingPageProps> = ({ onOnboar
         {/* Section B: Institution Affiliation */}
         <section className="bg-white rounded-md p-6 sm:p-8 border border-zinc-200 shadow-sm">
           <div className="flex items-center gap-2.5 pb-4 border-b border-zinc-100">
-            <GraduationCap className="w-5 h-5 text-emerald-600" />
+            <GraduationCap className="w-5 h-5 text-stone-900" />
             <h2 className="text-base font-semibold text-zinc-900">
               Institution Affiliation
             </h2>
@@ -491,12 +491,12 @@ export const HostOnboardingPage: React.FC<HostOnboardingPageProps> = ({ onOnboar
                       onClick={() => setInstitutionType(opt.id as InstitutionType)}
                       className={`p-3.5 rounded-md border cursor-pointer transition-all ${
                         isSelected
-                          ? 'border-emerald-600 bg-emerald-50/40 ring-1 ring-emerald-600'
+                          ? 'border-stone-900 bg-stone-50 ring-1 ring-stone-900'
                           : 'border-zinc-200 hover:border-zinc-300 bg-white'
                       }`}
                     >
                       <div className="flex items-center gap-2.5">
-                        <Icon className={`w-4 h-4 ${isSelected ? 'text-emerald-600' : 'text-zinc-400'}`} />
+                        <Icon className={`w-4 h-4 ${isSelected ? 'text-stone-900' : 'text-zinc-400'}`} />
                         <span className="text-xs font-semibold text-zinc-900">{opt.label}</span>
                       </div>
                       <p className="mt-1 text-[11px] text-zinc-500 pl-6.5">
@@ -533,7 +533,7 @@ export const HostOnboardingPage: React.FC<HostOnboardingPageProps> = ({ onOnboar
                     className={`w-full pl-9 pr-3 py-2 text-sm text-zinc-900 bg-white border rounded-md focus:outline-none focus:ring-1 transition-colors ${
                       fieldErrors.institutionName
                         ? 'border-red-400 focus:ring-red-400'
-                        : 'border-zinc-300 focus:ring-emerald-500 focus:border-emerald-500'
+                        : 'border-zinc-300 focus:ring-stone-900 focus:border-stone-900'
                     }`}
                   />
                 </div>
@@ -554,7 +554,7 @@ export const HostOnboardingPage: React.FC<HostOnboardingPageProps> = ({ onOnboar
           <button
             type="submit"
             disabled={isSubmitting || isUploadingLogo}
-            className="w-full sm:w-auto px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-md text-sm font-medium transition-colors shadow-sm flex items-center justify-center gap-2"
+            className="w-full sm:w-auto px-6 py-2.5 bg-stone-900 hover:bg-black disabled:opacity-60 text-white rounded-md text-sm font-medium transition-colors shadow-sm flex items-center justify-center gap-2"
           >
             {isSubmitting ? (
               <>

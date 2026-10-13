@@ -120,7 +120,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
   const estimatedRasterSec = Math.max(2, Math.round(attendeeCount * 0.035));
 
   return (
-    <div className="min-h-screen bg-[#FAFAF9] text-[#111827] font-sans selection:bg-stone-200 selection:text-stone-900 relative overflow-hidden flex flex-col justify-between">
+    <div className="min-h-screen bg-[#FAFAF9] text-[#111827] font-sans selection:bg-stone-200 selection:text-stone-900 relative overflow-x-clip flex flex-col justify-between">
       {/* ── Soft Ambient Background Glows (Neutral Light) ── */}
       <div
         className="pointer-events-none absolute top-0 right-0 w-[600px] h-[550px] rounded-full opacity-30 blur-3xl z-0"
@@ -146,7 +146,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
       {/* ══════════════════════════════════════════════════════════
           2. PRICING HERO & CONTROLS
       ══════════════════════════════════════════════════════════ */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-12 sm:pt-16 pb-16 relative z-10">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-24 sm:pt-28 pb-16 relative z-10">
         <div className="text-center max-w-3xl mx-auto space-y-4">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-stone-100 text-stone-800 border border-stone-200/80 shadow-2xs">
             <Sparkles className="w-3.5 h-3.5 text-stone-600" />

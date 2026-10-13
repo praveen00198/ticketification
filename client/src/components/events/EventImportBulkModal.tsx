@@ -282,7 +282,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-900/90">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+            <div className="p-2 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-100">
               <FileSpreadsheet className="w-5 h-5" />
             </div>
             <div>
@@ -290,7 +290,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
                 <h2 className="text-base font-bold text-zinc-100">
                   Bulk Operations Engine
                 </h2>
-                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 border border-zinc-700">
                   Phase 15, 16 & 17
                 </span>
               </div>
@@ -313,7 +313,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
             onClick={() => setActiveTab('IMPORT')}
             className={`py-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 ${
               activeTab === 'IMPORT'
-                ? 'border-emerald-500 text-emerald-400'
+                ? 'border-white text-white'
                 : 'border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
@@ -324,7 +324,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
             onClick={() => setActiveTab('EXPORT')}
             className={`py-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 ${
               activeTab === 'EXPORT'
-                ? 'border-emerald-500 text-emerald-400'
+                ? 'border-white text-white'
                 : 'border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
@@ -335,7 +335,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
             onClick={() => setActiveTab('STORAGE')}
             className={`py-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 ${
               activeTab === 'STORAGE'
-                ? 'border-emerald-500 text-emerald-400'
+                ? 'border-white text-white'
                 : 'border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
@@ -346,7 +346,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
             onClick={() => setActiveTab('QUEUE')}
             className={`py-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 ${
               activeTab === 'QUEUE'
-                ? 'border-emerald-500 text-emerald-400'
+                ? 'border-white text-white'
                 : 'border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
@@ -369,7 +369,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
                 onClick={() => fileInputRef.current?.click()}
                 className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${
                   selectedFile
-                    ? 'border-emerald-500/50 bg-emerald-500/5'
+                    ? 'border-zinc-500 bg-zinc-800/40'
                     : 'border-zinc-800 hover:border-zinc-700 bg-zinc-950/30'
                 }`}
               >
@@ -382,7 +382,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
                 />
 
                 <div className="flex flex-col items-center gap-3">
-                  <div className="p-3 rounded-2xl bg-zinc-800 text-emerald-400 border border-zinc-700">
+                  <div className="p-3 rounded-2xl bg-zinc-800 text-zinc-100 border border-zinc-700">
                     <UploadCloud className="w-6 h-6" />
                   </div>
                   <div>
@@ -394,7 +394,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
                     </p>
                   </div>
                   {parsing && (
-                    <div className="flex items-center gap-2 text-xs text-emerald-400 mt-2">
+                    <div className="flex items-center gap-2 text-xs text-zinc-300 mt-2">
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                       <span>Parsing & auto-detecting column mappings...</span>
                     </div>
@@ -414,11 +414,11 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
                 <div className="bg-zinc-950/60 border border-zinc-800 rounded-2xl p-5 space-y-4">
                   <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
                     <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-emerald-400" />
+                      <Sparkles className="w-4 h-4 text-zinc-200" />
                       <span>Spreadsheet Ingestion Preview</span>
                     </h3>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-zinc-800 text-zinc-200 border border-zinc-700">
                         {previewResult.validCount} Valid Records
                       </span>
                       {previewResult.invalidCount > 0 && (
@@ -440,7 +440,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
                           key={field}
                           className="px-2.5 py-1 rounded-lg bg-zinc-800/80 border border-zinc-700/80 flex items-center gap-1.5"
                         >
-                          <span className="font-bold text-emerald-400 uppercase text-[10px]">
+                          <span className="font-bold text-zinc-200 uppercase text-[10px]">
                             {field}:
                           </span>
                           <span className="text-zinc-300">{rawHeader}</span>
@@ -506,7 +506,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
                           type="checkbox"
                           checked={renderAfterImport}
                           onChange={(e) => setRenderAfterImport(e.target.checked)}
-                          className="w-4 h-4 rounded border-zinc-700 text-emerald-500 focus:ring-emerald-500 bg-zinc-800"
+                          className="w-4 h-4 rounded border-zinc-700 text-zinc-900 focus:ring-zinc-400 bg-zinc-800"
                         />
                         <span>Render PNG assets after import (Async queue)</span>
                       </label>
@@ -516,7 +516,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
                         <select
                           value={credentialType}
                           onChange={(e) => setCredentialType(e.target.value)}
-                          className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-zinc-200 text-xs focus:outline-none focus:border-emerald-500"
+                          className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-zinc-200 text-xs focus:outline-none focus:border-zinc-400"
                         >
                           <option value="ATTENDEE_PASS">Attendee Pass</option>
                           <option value="VIP_PASS">VIP Pass</option>
@@ -529,7 +529,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
                     <button
                       onClick={handleStartImport}
                       disabled={enqueuingJob || previewResult.validCount === 0}
-                      className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-zinc-950 text-xs font-bold rounded-xl transition-all flex items-center gap-2 justify-center shadow-lg shadow-emerald-500/10"
+                      className="px-5 py-2.5 bg-white hover:bg-zinc-200 disabled:opacity-50 text-black text-xs font-bold rounded-xl transition-all flex items-center gap-2 justify-center shadow-lg"
                     >
                       {enqueuingJob ? (
                         <>
@@ -559,7 +559,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
                 <select
                   value={exportStatusFilter}
                   onChange={(e) => setExportStatusFilter(e.target.value as any)}
-                  className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-zinc-200 text-xs focus:outline-none focus:border-emerald-500"
+                  className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-zinc-200 text-xs focus:outline-none focus:border-zinc-400"
                 >
                   <option value="ALL">All Credentials (Active & Checked-in)</option>
                   <option value="ACTIVE">Active Unused Passes</option>
@@ -572,7 +572,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
                 {/* 1. Visual Passes ZIP */}
                 <div className="bg-zinc-950/60 border border-zinc-800 hover:border-zinc-700 rounded-2xl p-5 flex flex-col justify-between space-y-4 transition-all">
                   <div className="space-y-3">
-                    <div className="p-2.5 w-fit rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                    <div className="p-2.5 w-fit rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-100">
                       <Package className="w-5 h-5" />
                     </div>
                     <div>
@@ -587,7 +587,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
                   <button
                     onClick={() => handleStartExport('ZIP_PASSES')}
                     disabled={enqueuingExport}
-                    className="w-full py-2.5 bg-zinc-800 hover:bg-emerald-500 hover:text-zinc-950 text-zinc-200 text-xs font-bold rounded-xl border border-zinc-700 transition-all flex items-center justify-center gap-2"
+                    className="w-full py-2.5 bg-zinc-800 hover:bg-white hover:text-black text-zinc-200 text-xs font-bold rounded-xl border border-zinc-700 transition-all flex items-center justify-center gap-2"
                   >
                     <DownloadCloud className="w-4 h-4" />
                     <span>Generate Passes ZIP</span>
@@ -597,7 +597,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
                 {/* 2. Attendee Roster XLSX */}
                 <div className="bg-zinc-950/60 border border-zinc-800 hover:border-zinc-700 rounded-2xl p-5 flex flex-col justify-between space-y-4 transition-all">
                   <div className="space-y-3">
-                    <div className="p-2.5 w-fit rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400">
+                    <div className="p-2.5 w-fit rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-100">
                       <FileSpreadsheet className="w-5 h-5" />
                     </div>
                     <div>
@@ -612,7 +612,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
                   <button
                     onClick={() => handleStartExport('ROSTER_XLSX')}
                     disabled={enqueuingExport}
-                    className="w-full py-2.5 bg-zinc-800 hover:bg-blue-500 hover:text-zinc-950 text-zinc-200 text-xs font-bold rounded-xl border border-zinc-700 transition-all flex items-center justify-center gap-2"
+                    className="w-full py-2.5 bg-zinc-800 hover:bg-white hover:text-black text-zinc-200 text-xs font-bold rounded-xl border border-zinc-700 transition-all flex items-center justify-center gap-2"
                   >
                     <FileSpreadsheet className="w-4 h-4" />
                     <span>Generate Excel Roster</span>
@@ -622,7 +622,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
                 {/* 3. Audit Telemetry CSV */}
                 <div className="bg-zinc-950/60 border border-zinc-800 hover:border-zinc-700 rounded-2xl p-5 flex flex-col justify-between space-y-4 transition-all">
                   <div className="space-y-3">
-                    <div className="p-2.5 w-fit rounded-xl bg-purple-500/10 border border-purple-500/20 text-zinc-300">
+                    <div className="p-2.5 w-fit rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-100">
                       <FileText className="w-5 h-5" />
                     </div>
                     <div>
@@ -637,7 +637,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
                   <button
                     onClick={() => handleStartExport('ROSTER_CSV')}
                     disabled={enqueuingExport}
-                    className="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-bold rounded-xl border border-zinc-700 transition-all flex items-center justify-center gap-2"
+                    className="w-full py-2.5 bg-zinc-800 hover:bg-white hover:text-black text-zinc-200 text-xs font-bold rounded-xl border border-zinc-700 transition-all flex items-center justify-center gap-2"
                   >
                     <FileText className="w-4 h-4" />
                     <span>Generate CSV Telemetry</span>
@@ -653,7 +653,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
               <div className="bg-zinc-950/70 border border-zinc-800 rounded-2xl p-6 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                    <div className="p-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-100">
                       <HardDrive className="w-5 h-5" />
                     </div>
                     <div>
@@ -722,7 +722,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
                 <div className="p-4 bg-zinc-950/60 border border-zinc-800 rounded-xl space-y-2">
                   <div className="flex items-center justify-between text-zinc-400 text-xs">
                     <span className="font-semibold text-zinc-300">Pass & Ticket Images</span>
-                    <Package className="w-4 h-4 text-emerald-400" />
+                    <Package className="w-4 h-4 text-zinc-300" />
                   </div>
                   <div className="text-xl font-bold text-zinc-100">
                     {storageMetrics?.breakdown.credentials.formatted || '0 B'}
@@ -735,7 +735,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
                 <div className="p-4 bg-zinc-950/60 border border-zinc-800 rounded-xl space-y-2">
                   <div className="flex items-center justify-between text-zinc-400 text-xs">
                     <span className="font-semibold text-zinc-300">Export ZIP & Reports</span>
-                    <DownloadCloud className="w-4 h-4 text-blue-400" />
+                    <DownloadCloud className="w-4 h-4 text-zinc-300" />
                   </div>
                   <div className="text-xl font-bold text-zinc-100">
                     {storageMetrics?.breakdown.exports.formatted || '0 B'}
@@ -748,7 +748,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
                 <div className="p-4 bg-zinc-950/60 border border-zinc-800 rounded-xl space-y-2">
                   <div className="flex items-center justify-between text-zinc-400 text-xs">
                     <span className="font-semibold text-zinc-300">Custom Templates</span>
-                    <Database className="w-4 h-4 text-purple-400" />
+                    <Database className="w-4 h-4 text-zinc-300" />
                   </div>
                   <div className="text-xl font-bold text-zinc-100">
                     {storageMetrics?.breakdown.templates.formatted || '0 B'}
@@ -901,14 +901,14 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-zinc-400 font-medium">Progress</span>
-                      <span className="font-bold text-emerald-400 font-mono">
+                      <span className="font-bold text-zinc-100 font-mono">
                         {activeJob.progress.percentage}% ({activeJob.progress.processed} /{' '}
                         {activeJob.progress.total})
                       </span>
                     </div>
                     <div className="w-full h-2.5 bg-zinc-800 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-300 rounded-full"
+                        className="h-full bg-white transition-all duration-300 rounded-full"
                         style={{ width: `${activeJob.progress.percentage}%` }}
                       />
                     </div>
@@ -916,13 +916,13 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
 
                   {/* Ready Download Banner */}
                   {activeJob.result?.downloadUrl && (
-                    <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center justify-between gap-4">
+                    <div className="p-4 bg-zinc-800/80 border border-zinc-700 rounded-xl flex items-center justify-between gap-4">
                       <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-xl bg-emerald-500 text-zinc-950 font-bold">
+                        <div className="p-2 rounded-xl bg-white text-black font-bold">
                           <DownloadCloud className="w-5 h-5" />
                         </div>
                         <div>
-                          <p className="text-xs font-bold text-emerald-400">
+                          <p className="text-xs font-bold text-zinc-100">
                             Export File Ready for Direct Download
                           </p>
                           <p className="text-[11px] text-zinc-400">
@@ -938,7 +938,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
                         target="_blank"
                         rel="noreferrer"
                         download
-                        className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-emerald-500/20 shrink-0"
+                        className="px-4 py-2 bg-white hover:bg-zinc-200 text-black text-xs font-bold rounded-xl transition-all flex items-center gap-2 shadow-sm shrink-0"
                       >
                         <span>Download Export</span>
                         <ExternalLink className="w-3.5 h-3.5" />
@@ -955,8 +955,8 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
                       </p>
                     </div>
                     <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-xl text-center">
-                      <p className="text-[11px] text-emerald-400 font-semibold">Succeeded</p>
-                      <p className="text-base font-bold text-emerald-400 mt-0.5">
+                      <p className="text-[11px] text-zinc-300 font-semibold">Succeeded</p>
+                      <p className="text-base font-bold text-zinc-100 mt-0.5">
                         {activeJob.progress.succeeded}
                       </p>
                     </div>
@@ -1021,7 +1021,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
                     disabled={enqueuingJob}
                     className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-bold rounded-xl border border-zinc-700 transition-all flex items-center gap-1.5"
                   >
-                    <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
+                    <RefreshCw className="w-3.5 h-3.5 text-zinc-300" />
                     <span>Trigger Bulk Render for All</span>
                   </button>
                 </div>
@@ -1033,7 +1033,7 @@ export const EventImportBulkModal: React.FC<EventImportBulkModalProps> = ({
                       onClick={() => setActiveJob(job)}
                       className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center justify-between text-xs ${
                         activeJob?._id === job._id
-                          ? 'border-emerald-500/40 bg-zinc-900'
+                          ? 'border-zinc-500 bg-zinc-900'
                           : 'border-zinc-800 hover:border-zinc-700 bg-zinc-950/40'
                       }`}
                     >

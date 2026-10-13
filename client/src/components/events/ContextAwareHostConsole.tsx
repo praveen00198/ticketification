@@ -455,7 +455,7 @@ export const ContextAwareHostConsole: React.FC<ContextAwareHostConsoleProps> = (
                       rows={3}
                       value={formData.description || ''}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      className="w-full bg-[#FAFAF9] border border-stone-200 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all resize-none"
+                      className="w-full bg-[#FAFAF9] border border-stone-200 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-stone-400/20 focus:border-stone-900 transition-all resize-none"
                     />
                   </div>
 
@@ -463,7 +463,7 @@ export const ContextAwareHostConsole: React.FC<ContextAwareHostConsoleProps> = (
                     <button
                       type="submit"
                       disabled={saving}
-                      className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm disabled:opacity-50"
+                      className="px-5 py-2 bg-stone-900 hover:bg-black text-white text-xs font-bold rounded-xl transition-all shadow-sm disabled:opacity-50"
                     >
                       {saving ? 'Saving...' : 'Save Changes'}
                     </button>

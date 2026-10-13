@@ -52,7 +52,7 @@ export const CreateEventPage: React.FC = () => {
           </button>
           <div>
             <div className="flex items-center gap-2 text-xs text-stone-400">
-              <Link to="/events" className="hover:text-emerald-700 transition-colors">
+              <Link to="/events" className="hover:text-stone-900 transition-colors">
                 Events
               </Link>
               <span>/</span>
@@ -64,8 +64,8 @@ export const CreateEventPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/80 text-xs font-semibold">
-          <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-stone-100 text-stone-700 border border-stone-200/80 text-xs font-semibold">
+          <Sparkles className="w-3.5 h-3.5 text-stone-600" />
           <span>Event Wizard</span>
         </div>
       </div>

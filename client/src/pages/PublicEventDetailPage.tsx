@@ -96,7 +96,7 @@ export const PublicEventDetailPage: React.FC = () => {
     return (
       <div className="min-h-screen bg-[#FAFAF9] flex items-center justify-center p-4">
         <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <div className="w-8 h-8 border-2 border-stone-900 border-t-transparent rounded-full animate-spin mx-auto" />
           <p className="text-xs font-semibold text-stone-500 tracking-wider uppercase">Loading Event Details</p>
         </div>
       </div>
@@ -116,7 +116,7 @@ export const PublicEventDetailPage: React.FC = () => {
           </div>
           <button
             onClick={() => navigate('/explore')}
-            className="px-4 py-2 rounded-lg bg-[#10B981] hover:bg-[#059669] text-white font-semibold text-xs transition-colors shadow-sm"
+            className="px-4 py-2 rounded-lg bg-stone-900 hover:bg-black text-white font-semibold text-xs transition-colors shadow-xs border border-stone-800"
           >
             Explore Other Events
           </button>
@@ -209,7 +209,7 @@ export const PublicEventDetailPage: React.FC = () => {
             {!timeLeft.isPast && (
               <div className="p-4 rounded-xl bg-stone-50 border border-stone-200 max-w-xl">
                 <div className="text-[11px] font-bold text-stone-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-emerald-600" />
+                  <Clock className="w-3.5 h-3.5 text-stone-600" />
                   Event Commences In
                 </div>
                 <div className="grid grid-cols-4 gap-2 text-center">
@@ -251,7 +251,7 @@ export const PublicEventDetailPage: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Schedule Card */}
               <div className="bg-white border border-stone-200/90 rounded-2xl p-5 space-y-3 shadow-sm">
-                <div className="p-2 w-fit rounded-lg bg-emerald-50 text-emerald-700">
+                <div className="p-2 w-fit rounded-lg bg-stone-100 text-stone-700">
                   <Calendar className="w-5 h-5" />
                 </div>
                 <h3 className="text-sm font-bold text-stone-900">Date & Schedule</h3>
@@ -273,7 +273,7 @@ export const PublicEventDetailPage: React.FC = () => {
 
               {/* Venue Card */}
               <div className="bg-white border border-stone-200/90 rounded-2xl p-5 space-y-3 shadow-sm">
-                <div className="p-2 w-fit rounded-lg bg-teal-50 text-teal-700">
+                <div className="p-2 w-fit rounded-lg bg-stone-100 text-stone-700">
                   {event.venue?.type === 'ONLINE' ? <Video className="w-5 h-5" /> : <MapPin className="w-5 h-5" />}
                 </div>
                 <h3 className="text-sm font-bold text-stone-900">
@@ -312,7 +312,7 @@ export const PublicEventDetailPage: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <h3 className="text-sm font-bold text-stone-900">{host.organizationName}</h3>
                     {host.hostVerificationStatus === 'HIGH' && (
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-semibold border border-emerald-200">
+                      <span className="px-2 py-0.5 rounded-full bg-stone-100 text-stone-800 text-[10px] font-semibold border border-stone-200">
                         Institutional Host
                       </span>
                     )}
@@ -328,7 +328,7 @@ export const PublicEventDetailPage: React.FC = () => {
                   href={host.website}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs text-emerald-700 hover:text-emerald-800 font-medium transition-colors"
+                  className="inline-flex items-center gap-1.5 text-xs text-stone-900 hover:text-black font-semibold underline transition-colors"
                 >
                   <Globe className="w-3.5 h-3.5" />
                   Visit Official Website
@@ -356,13 +356,13 @@ export const PublicEventDetailPage: React.FC = () => {
                 <div className="space-y-2 pt-2 border-t border-stone-100">
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-stone-500">Available Capacity</span>
-                    <span className="font-semibold text-emerald-700">
+                    <span className="font-semibold text-stone-900">
                       {metrics.remainingCapacity} spots remaining
                     </span>
                   </div>
                   <div className="w-full h-1.5 rounded-full bg-stone-100 overflow-hidden">
                     <div
-                      className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                      className="h-full bg-stone-900 rounded-full transition-all duration-500"
                       style={{
                         width: `${Math.min(
                           100,
@@ -378,7 +378,7 @@ export const PublicEventDetailPage: React.FC = () => {
               <button
                 disabled={metrics.isSoldOut || timeLeft.isPast}
                 onClick={() => setIsRegisterOpen(true)}
-                className="w-full py-3.5 rounded-xl bg-[#10B981] hover:bg-[#059669] disabled:bg-stone-200 disabled:text-stone-400 text-white font-semibold text-sm transition-all flex items-center justify-center gap-2 shadow-sm"
+                className="w-full py-3.5 rounded-xl bg-stone-900 hover:bg-black disabled:bg-stone-200 disabled:text-stone-400 text-white font-semibold text-sm transition-all flex items-center justify-center gap-2 shadow-xs border border-stone-800"
               >
                 <Ticket className="w-4 h-4" />
                 {timeLeft.isPast
@@ -390,15 +390,15 @@ export const PublicEventDetailPage: React.FC = () => {
 
               <div className="space-y-2 text-xs text-stone-600">
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-stone-700 shrink-0" />
                   <span>Instant verifiable pass issuance</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-stone-700 shrink-0" />
                   <span>Dynamic tamper-proof QR code</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-stone-700 shrink-0" />
                   <span>Stored automatically in your pass wallet</span>
                 </div>
               </div>

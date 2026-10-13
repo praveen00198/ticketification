@@ -145,7 +145,7 @@ export const EventAssignmentCard: React.FC<EventAssignmentCardProps> = ({
               resetModal();
               setIsModalOpen(true);
             }}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-black font-semibold text-sm rounded-xl transition duration-150 shadow-sm"
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-white hover:bg-zinc-200 text-black font-semibold text-sm rounded-xl transition duration-150 shadow-sm"
           >
             <Plus className="w-4 h-4" />
             Assign Mentor / Judge
@@ -161,7 +161,7 @@ export const EventAssignmentCard: React.FC<EventAssignmentCardProps> = ({
             onClick={() => setRoleFilter(r)}
             className={`px-3 py-1.5 rounded-xl text-xs font-medium transition ${
               roleFilter === r
-                ? 'bg-zinc-800 text-emerald-400 border border-emerald-500/40 shadow-sm'
+                ? 'bg-zinc-800 text-white border border-zinc-700 shadow-sm'
                 : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 border border-transparent'
             }`}
           >
@@ -385,7 +385,7 @@ export const EventAssignmentCard: React.FC<EventAssignmentCardProps> = ({
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Review guidelines, rubric criteria or mentorship goals..."
-                  className="w-full px-3.5 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500 transition resize-none"
+                  className="w-full px-3.5 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-400 transition resize-none"
                 />
               </div>
 
@@ -400,7 +400,7 @@ export const EventAssignmentCard: React.FC<EventAssignmentCardProps> = ({
                 <button
                   type="submit"
                   disabled={submitting || !selectedMemberId}
-                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-black font-semibold text-xs rounded-xl flex items-center gap-1.5 transition"
+                  className="px-4 py-2 bg-white hover:bg-zinc-200 disabled:opacity-50 text-black font-semibold text-xs rounded-xl flex items-center gap-1.5 transition"
                 >
                   {submitting ? 'Assigning...' : 'Assign'}
                 </button>

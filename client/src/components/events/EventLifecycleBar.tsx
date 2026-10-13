@@ -168,9 +168,9 @@ export const EventLifecycleBar: React.FC<EventLifecycleBarProps> = ({
                   <div
                     className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${
                       active
-                        ? 'bg-emerald-600 text-white ring-2 ring-emerald-600/30 ring-offset-1'
+                        ? 'bg-stone-900 text-white ring-2 ring-stone-900/20 ring-offset-1'
                         : passed
-                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                        ? 'bg-stone-200 text-stone-900 border border-stone-300'
                         : 'bg-zinc-100 text-zinc-400 border border-zinc-200'
                     }`}
                   >
@@ -187,7 +187,7 @@ export const EventLifecycleBar: React.FC<EventLifecycleBarProps> = ({
                 {idx < LIFECYCLE_STEPS.length - 1 && (
                   <div
                     className={`w-4 sm:w-8 h-0.5 flex-shrink-0 ${
-                      passed && !active ? 'bg-emerald-300' : 'bg-zinc-200'
+                      passed && !active ? 'bg-stone-300' : 'bg-zinc-200'
                     }`}
                   />
                 )}
@@ -287,7 +287,7 @@ export const EventLifecycleBar: React.FC<EventLifecycleBarProps> = ({
                 type="button"
                 disabled={loading}
                 onClick={handlePublish}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-stone-900 hover:bg-black disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
               >
                 {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe className="w-3.5 h-3.5" />}
                 <span>Publish Event</span>
@@ -302,14 +302,14 @@ export const EventLifecycleBar: React.FC<EventLifecycleBarProps> = ({
                   onClick={handleOpenRegistrations}
                   className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-zinc-50 text-zinc-800 text-xs font-bold rounded-xl border border-zinc-300 transition-all shadow-sm"
                 >
-                  <FileCheck2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <FileCheck2 className="w-3.5 h-3.5 text-stone-700" />
                   <span>Open Registrations</span>
                 </button>
                 <button
                   type="button"
                   disabled={loading}
                   onClick={handleStartLive}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-stone-900 hover:bg-black text-white text-xs font-bold rounded-xl transition-all shadow-sm"
                 >
                   <Radio className="w-3.5 h-3.5" />
                   <span>Go Live</span>
@@ -340,7 +340,7 @@ export const EventLifecycleBar: React.FC<EventLifecycleBarProps> = ({
                   type="button"
                   disabled={loading}
                   onClick={handleStartLive}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-stone-900 hover:bg-black text-white text-xs font-bold rounded-xl transition-all shadow-sm"
                 >
                   <Radio className="w-3.5 h-3.5" />
                   <span>Go Live</span>
@@ -356,14 +356,14 @@ export const EventLifecycleBar: React.FC<EventLifecycleBarProps> = ({
                   onClick={handleOpenRegistrations}
                   className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-zinc-50 text-zinc-800 text-xs font-bold rounded-xl border border-zinc-300 transition-all shadow-sm"
                 >
-                  <FileCheck2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <FileCheck2 className="w-3.5 h-3.5 text-stone-700" />
                   <span>Reopen Registrations</span>
                 </button>
                 <button
                   type="button"
                   disabled={loading}
                   onClick={handleStartLive}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-stone-900 hover:bg-black text-white text-xs font-bold rounded-xl transition-all shadow-sm"
                 >
                   <Radio className="w-3.5 h-3.5" />
                   <span>Go Live</span>
@@ -419,7 +419,7 @@ export const EventLifecycleBar: React.FC<EventLifecycleBarProps> = ({
           <div className="bg-white border border-surface-border w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between border-b border-surface-border pb-3">
               <div className="flex items-center gap-2 font-bold text-zinc-900 text-sm">
-                <History className="w-4 h-4 text-emerald-600" />
+                <History className="w-4 h-4 text-zinc-900" />
                 <span>Lifecycle Transition History</span>
               </div>
               <button
@@ -433,7 +433,7 @@ export const EventLifecycleBar: React.FC<EventLifecycleBarProps> = ({
 
             {historyLoading ? (
               <div className="py-8 flex items-center justify-center gap-2 text-zinc-500 text-xs">
-                <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+                <Loader2 className="w-4 h-4 animate-spin text-zinc-900" />
                 <span>Loading transition history...</span>
               </div>
             ) : historyItems.length > 0 ? (
@@ -449,7 +449,7 @@ export const EventLifecycleBar: React.FC<EventLifecycleBarProps> = ({
                           {item.fromStatus}
                         </span>
                         <ArrowRight className="w-3 h-3 text-zinc-400" />
-                        <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded text-[10px]">
+                        <span className="px-1.5 py-0.5 bg-zinc-900 text-white rounded text-[10px]">
                           {item.toStatus}
                         </span>
                       </div>

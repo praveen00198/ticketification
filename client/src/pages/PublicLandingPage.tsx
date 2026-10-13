@@ -70,7 +70,7 @@ export const PublicLandingPage: React.FC<PublicLandingPageProps> = ({
   const featuredEvent = events && events.length > 0 ? events[0] : null;
 
   return (
-    <div className="min-h-screen bg-[#FAFAF9] text-[#111827] font-sans selection:bg-stone-200 selection:text-stone-900 relative overflow-hidden">
+    <div className="min-h-screen bg-[#FAFAF9] text-[#111827] font-sans selection:bg-stone-200 selection:text-stone-900 relative overflow-x-clip">
       {/* ── Neutral Atmospheric Background Glows ── */}
       <div
         className="pointer-events-none absolute top-[-60px] left-[-80px] w-[600px] h-[550px] rounded-full opacity-60 blur-3xl z-0"

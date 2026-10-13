@@ -28,7 +28,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     <div
       className={`border border-stone-200/90 rounded-2xl bg-white p-8 sm:p-12 text-center max-w-xl mx-auto shadow-xs ${className}`}
     >
-      <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center mx-auto mb-4 border border-emerald-100/80 shadow-2xs">
+      <div className="w-14 h-14 rounded-2xl bg-stone-100 text-stone-900 flex items-center justify-center mx-auto mb-4 border border-stone-200/80 shadow-2xs">
         {icon}
       </div>
       <h3 className="text-base sm:text-lg font-bold text-zinc-900 tracking-tight">

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Ticket, Menu, X, ArrowRight } from 'lucide-react';
 
@@ -16,6 +16,17 @@ export const Navbar: React.FC<NavbarProps> = ({
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 15);
+    };
+
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const handleAnchorClick = (anchorId: string) => {
     setMobileMenuOpen(false);
@@ -48,7 +59,13 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-stone-200/80 transition-all">
+    <header
+      className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
+        isScrolled || mobileMenuOpen
+          ? 'bg-[#FAFAF9]/85 backdrop-blur-md border-b border-stone-200/80 shadow-xs'
+          : 'bg-transparent border-b border-transparent'
+      }`}
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         {/* Logo & Brand */}
         <Link to="/" className="flex items-center gap-2.5 shrink-0 group">
@@ -146,7 +163,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Mobile Dropdown Menu */}
       {mobileMenuOpen && (
-        <div className="md:hidden px-6 py-4 bg-white border-b border-stone-200 space-y-3">
+        <div className="md:hidden px-6 py-4 bg-[#FAFAF9]/95 backdrop-blur-md border-b border-stone-200/90 shadow-sm space-y-3">
           <Link
             to="/explore"
             onClick={() => setMobileMenuOpen(false)}

@@ -80,7 +80,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         { label: 'Import Guests', path: '/import', icon: FileSpreadsheet },
         { label: 'Issued Tickets', path: '/tickets', icon: Ticket },
-        { label: 'Scan & Turnstiles', path: '/scan', icon: QrCode, badge: 'Live', badgeColor: 'bg-emerald-100 text-emerald-800' },
+        { label: 'Scan & Turnstiles', path: '/scan', icon: QrCode, badge: 'Live', badgeColor: 'bg-stone-100 text-stone-800 border border-stone-200' },
         ...(currentEvent
           ? [
               {
@@ -129,30 +129,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <>
       <aside
-        className={`bg-white border-r border-stone-200/90 flex flex-col transition-all duration-300 select-none z-30 ${
+        className={`flex flex-col transition-all duration-300 select-none z-30 ${
           isMobile
-            ? 'w-72 h-full'
+            ? 'w-64 h-full bg-[#FAFAF9]'
             : isCollapsed
-            ? 'w-20 h-screen sticky top-0'
-            : 'w-64 h-screen sticky top-0'
+            ? 'w-20 h-screen sticky top-0 bg-transparent border-none'
+            : 'w-64 h-screen sticky top-0 bg-transparent border-none'
         }`}
       >
-        {/* ── Brand Header ── */}
-        <div className="h-16 flex items-center justify-between px-4 border-b border-stone-200/80 shrink-0">
+        {/* ── Brand Header (No Separation Line) ── */}
+        <div className="h-14 sm:h-16 flex items-center justify-between px-2 shrink-0">
           <Link
             to="/dashboard"
             onClick={handleLinkClick}
             className="flex items-center gap-2.5 overflow-hidden group"
           >
-            <div className="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-sm shadow-emerald-600/30 shrink-0 group-hover:scale-105 transition-transform">
-              <Ticket className="w-5 h-5 stroke-[2.2]" />
+            <div className="w-8 h-8 rounded-lg bg-stone-900 flex items-center justify-center text-white shadow-2xs shrink-0 group-hover:scale-105 transition-transform">
+              <Ticket className="w-4 h-4 stroke-[2.2]" />
             </div>
             {(!isCollapsed || isMobile) && (
               <div className="truncate">
                 <span className="font-extrabold text-base tracking-tight text-zinc-900">
-                  Ticketification<span className="text-emerald-500">.</span>
+                  Ticketification
                 </span>
-                <span className="block text-[10px] font-semibold text-emerald-700 tracking-wider uppercase">
+                <span className="block text-[10px] font-semibold text-stone-500 tracking-wider uppercase font-mono">
                   Event OS
                 </span>
               </div>
@@ -162,7 +162,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {!isMobile && (
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-stone-100 transition-colors"
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-stone-200/50 transition-colors cursor-pointer"
               title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
               aria-label={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
             >
@@ -175,28 +175,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
 
-        {/* ── Active Event Switcher Card ── */}
+        {/* ── Active Event Switcher (Seamless, No Box, No Separation Line) ── */}
         {(!isCollapsed || isMobile) ? (
-          <div className="p-3 border-b border-stone-200/80 bg-stone-50/60 shrink-0">
+          <div className="px-3 py-1.5 shrink-0">
             <div className="relative">
               <button
                 onClick={() => setEventMenuOpen(!eventMenuOpen)}
-                className="w-full flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white border border-stone-200/90 text-left hover:border-emerald-500 shadow-xs transition-all"
+                className="w-full flex items-center justify-between gap-2.5 px-2 py-2 rounded-lg text-left hover:bg-stone-200/50 transition-all cursor-pointer group"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200/60 flex items-center justify-center text-emerald-600 shrink-0">
+                  <div className="w-7 h-7 rounded bg-stone-200/70 flex items-center justify-center text-stone-700 shrink-0 group-hover:bg-stone-300/60 transition-colors">
                     <Calendar className="w-3.5 h-3.5" />
                   </div>
+
                   <div className="min-w-0">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                    <div className="text-[10px] font-semibold tracking-wider text-stone-400">
                       Active Event
                     </div>
-                    <div className="text-xs font-bold text-zinc-800 truncate">
+                    <div className="text-[13px] font-semibold leading-tight text-stone-900 truncate">
                       {currentEvent ? currentEvent.name : 'Select Event'}
                     </div>
                   </div>
                 </div>
-                <ChevronDown className="w-3.5 h-3.5 text-stone-400 shrink-0 ml-1" />
+                <ChevronDown className="w-3.5 h-3.5 text-stone-400 group-hover:text-stone-700 shrink-0 ml-1 transition-colors" />
               </button>
 
               {/* Event Selector Dropdown */}
@@ -206,10 +207,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     className="fixed inset-0 z-40"
                     onClick={() => setEventMenuOpen(false)}
                   />
-                  <div className="absolute left-0 top-full mt-1.5 w-full bg-white border border-stone-200 rounded-xl shadow-xl p-2 z-50 animate-in fade-in zoom-in-95">
-                    <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-stone-400 border-b border-stone-100 flex items-center justify-between">
-                      <span>Switch Active Event</span>
-                      <span className="text-emerald-600">{events.length}</span>
+                  <div className="absolute left-0 top-full mt-1 w-full bg-white border border-stone-200 rounded-lg shadow-xl pt-0.5 z-50 animate-in fade-in zoom-in-95">
+                    <div className="px-2 py-1 text-[10px] font-semibold tracking-wider text-stone-400 border-b border-stone-100 flex items-center justify-between">
+                      <span>Active Events</span>
+                      <span className="text-stone-700 font-mono">{events.length}</span>
                     </div>
                     <div className="max-h-52 overflow-y-auto py-1 space-y-0.5">
                       {events.length === 0 ? (
@@ -228,27 +229,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
                               }}
                               className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center justify-between transition-colors ${
                                 isSelected
-                                  ? 'bg-emerald-50 text-emerald-800 font-bold border border-emerald-200/80'
-                                  : 'text-zinc-700 hover:bg-stone-50 hover:text-zinc-900'
+                                  ? 'bg-stone-900 text-white font-semibold'
+                                  : 'text-stone-700 hover:bg-stone-100 hover:text-stone-900'
                               }`}
                             >
                               <span className="truncate">{e.name}</span>
                               {isSelected && (
-                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 ml-1" />
+                                <CheckCircle2 className="w-3.5 h-3.5 text-white shrink-0 ml-1" />
                               )}
                             </button>
                           );
                         })
                       )}
                     </div>
-                    <div className="pt-1 mt-1 border-t border-stone-100">
+                    <div className="border-t border-stone-100">
                       <button
                         onClick={() => {
                           setEventMenuOpen(false);
                           handleLinkClick();
                           navigate('/events/create');
                         }}
-                        className="w-full text-left px-2 py-1.5 rounded-lg text-xs font-bold text-emerald-700 hover:bg-emerald-50 flex items-center gap-1.5 transition-colors"
+                        className="w-full text-left px-2 py-1.5 rounded-lg text-xs font-bold text-stone-900 hover:bg-stone-100 flex items-center gap-1.5 transition-colors"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>Create New Event</span>
@@ -260,11 +261,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
         ) : (
-          <div className="p-3 border-b border-stone-200/80 flex justify-center shrink-0">
+          <div className=" py-2 flex justify-center shrink-0">
             <button
               onClick={() => navigate('/events')}
               title={currentEvent ? currentEvent.name : 'Select Event'}
-              className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700 hover:bg-emerald-100 transition-colors"
+              className="w-9 h-9 rounded-xl text-stone-700 hover:bg-stone-200/50 flex items-center justify-center transition-colors cursor-pointer"
             >
               <Calendar className="w-4 h-4" />
             </button>
@@ -272,11 +273,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
 
         {/* ── Category-wise Navigation List ── */}
-        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
+        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-5">
           {categories.map((category, catIdx) => (
             <div key={catIdx} className="space-y-1">
               {(!isCollapsed || isMobile) && (
-                <div className="px-2.5 pb-1 text-[10px] font-bold tracking-wider text-stone-400 uppercase">
+                <div className="pb-1 text-[10px] font-bold tracking-wider text-stone-400 uppercase">
                   {category.title}
                 </div>
               )}
@@ -293,17 +294,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       to={item.path}
                       onClick={handleLinkClick}
                       title={isCollapsed && !isMobile ? item.label : undefined}
-                      className={`group flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-all ${
+                      className={`group flex items-center gap-2.5 px-3 py-2 rounded text-xs font-medium transition-all ${
                         isActive
-                          ? 'bg-emerald-50 text-emerald-800 font-semibold shadow-xs border border-emerald-200/60'
-                          : 'text-zinc-600 hover:text-zinc-900 hover:bg-stone-50'
+                          ? 'bg-stone-900 text-white font-semibold shadow-2xs'
+                          : 'text-stone-600 hover:text-stone-950 hover:bg-stone-200/50'
                       } ${isCollapsed && !isMobile ? 'justify-center px-0' : ''}`}
                     >
                       <Icon
                         className={`w-4 h-4 shrink-0 transition-colors ${
                           isActive
-                            ? 'text-emerald-600'
-                            : 'text-stone-400 group-hover:text-zinc-600'
+                            ? 'text-white'
+                            : 'text-stone-400 group-hover:text-stone-700'
                         }`}
                       />
                       {(!isCollapsed || isMobile) && (
@@ -312,7 +313,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           {item.badge && (
                             <span
                               className={`ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
-                                item.badgeColor || 'bg-stone-100 text-stone-600'
+                                item.badgeColor || 'bg-stone-200/60 text-stone-700'
                               }`}
                             >
                               {item.badge}
@@ -328,19 +329,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
           ))}
         </div>
 
-        {/* ── User & Workspace Bottom Footer ── */}
-        <div className="p-3 border-t border-stone-200/90 bg-stone-50/50 shrink-0 space-y-2">
+        {/* ── User & Workspace Bottom Footer (No Box, No Line) ── */}
+        <div className="px-3 py-3 shrink-0">
           {user && (!isCollapsed || isMobile) ? (
-            <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white border border-stone-200/80 shadow-xs">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-8 h-8 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs">
+            <div className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl hover:bg-stone-200/40 transition-colors">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-full bg-stone-900 text-white font-bold text-xs flex items-center justify-center shrink-0">
                   {user.name.charAt(0).toUpperCase()}
                 </div>
                 <div className="min-w-0">
-                  <div className="text-xs font-bold text-zinc-800 truncate">
+                  <div className="text-xs font-semibold text-stone-900 truncate">
                     {user.organizationName || user.name}
                   </div>
-                  <div className="text-[10px] text-stone-400 truncate flex items-center gap-1">
+                  <div className="text-[10px] text-stone-500 truncate flex items-center gap-1">
                     <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
                     <span>
                       {user.role === 'SUPER_ADMIN'
@@ -359,14 +360,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <button
                   onClick={() => setIsChangePasswordOpen(true)}
                   title="Change Password"
-                  className="p-1.5 text-stone-400 hover:text-zinc-700 hover:bg-stone-100 rounded-lg transition-colors"
+                  className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 rounded-lg transition-colors cursor-pointer"
                 >
                   <KeyRound className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={onLogout}
                   title="Sign Out"
-                  className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
+                  className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                 </button>
@@ -377,14 +378,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 onClick={() => setIsChangePasswordOpen(true)}
                 title="Change Password"
-                className="w-9 h-9 rounded-xl text-stone-400 hover:text-zinc-700 hover:bg-stone-100 flex items-center justify-center transition-colors"
+                className="w-9 h-9 rounded-xl text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 flex items-center justify-center transition-colors cursor-pointer"
               >
                 <KeyRound className="w-4 h-4" />
               </button>
               <button
                 onClick={onLogout}
                 title="Sign Out"
-                className="w-9 h-9 rounded-xl text-rose-500 hover:bg-rose-50 flex items-center justify-center transition-colors"
+                className="w-9 h-9 rounded-xl text-stone-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-colors cursor-pointer"
               >
                 <LogOut className="w-4 h-4" />
               </button>

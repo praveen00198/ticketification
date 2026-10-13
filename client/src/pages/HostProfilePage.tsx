@@ -168,7 +168,7 @@ export const HostProfilePage: React.FC = () => {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="flex items-center gap-2 text-zinc-500 text-sm">
-          <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+          <Loader2 className="w-4 h-4 animate-spin text-stone-900" />
           <span>Loading organizer settings...</span>
         </div>
       </div>
@@ -186,7 +186,7 @@ export const HostProfilePage: React.FC = () => {
           </p>
           <button
             onClick={() => navigate('/onboarding')}
-            className="mt-6 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-sm font-medium transition-colors"
+            className="mt-6 px-4 py-2 bg-stone-900 hover:bg-black text-white rounded-md text-sm font-medium transition-colors"
           >
             Start Organizer Onboarding
           </button>
@@ -254,7 +254,7 @@ export const HostProfilePage: React.FC = () => {
               className={`w-full px-3 py-2 text-sm text-zinc-900 bg-white border rounded-md focus:outline-none focus:ring-1 transition-colors ${
                 fieldErrors.organizationName
                   ? 'border-red-400 focus:ring-red-400'
-                  : 'border-zinc-300 focus:ring-emerald-500 focus:border-emerald-500'
+                  : 'border-zinc-300 focus:ring-stone-900 focus:border-stone-900'
               }`}
             />
             {fieldErrors.organizationName && (
@@ -270,7 +270,7 @@ export const HostProfilePage: React.FC = () => {
             <select
               value={institutionType}
               onChange={(e) => setInstitutionType(e.target.value as InstitutionType)}
-              className="w-full px-3 py-2 text-sm text-zinc-900 bg-white border border-zinc-300 rounded-md focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="w-full px-3 py-2 text-sm text-zinc-900 bg-white border border-zinc-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900"
             >
               <option value="COLLEGE_UNIVERSITY">College or University</option>
               <option value="CORPORATE">Company or Enterprise</option>
@@ -289,7 +289,7 @@ export const HostProfilePage: React.FC = () => {
               value={institutionName}
               onChange={(e) => setInstitutionName(e.target.value)}
               placeholder="e.g. Stanford University, Acme Corp"
-              className="w-full px-3 py-2 text-sm text-zinc-900 bg-white border border-zinc-300 rounded-md focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="w-full px-3 py-2 text-sm text-zinc-900 bg-white border border-zinc-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900"
             />
           </div>
 
@@ -307,7 +307,7 @@ export const HostProfilePage: React.FC = () => {
                   type="text"
                   value={website}
                   onChange={(e) => setWebsite(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-sm text-zinc-900 bg-white border border-zinc-300 rounded-md focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  className="w-full pl-9 pr-3 py-2 text-sm text-zinc-900 bg-white border border-zinc-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900"
                 />
               </div>
               {fieldErrors.website && (
@@ -327,7 +327,7 @@ export const HostProfilePage: React.FC = () => {
                   type="text"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-sm text-zinc-900 bg-white border border-zinc-300 rounded-md focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  className="w-full pl-9 pr-3 py-2 text-sm text-zinc-900 bg-white border border-zinc-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900"
                 />
               </div>
               {fieldErrors.phone && (
@@ -345,7 +345,7 @@ export const HostProfilePage: React.FC = () => {
               rows={3}
               value={bio}
               onChange={(e) => setBio(e.target.value)}
-              className="w-full px-3 py-2 text-sm text-zinc-900 bg-white border border-zinc-300 rounded-md focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="w-full px-3 py-2 text-sm text-zinc-900 bg-white border border-zinc-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900"
             />
           </div>
 
@@ -365,7 +365,7 @@ export const HostProfilePage: React.FC = () => {
                   <p className="text-xs font-medium text-zinc-900">Current Logo Asset</p>
                   <label
                     htmlFor="replace-logo-input"
-                    className="text-[11px] text-emerald-600 hover:text-emerald-700 cursor-pointer font-medium"
+                    className="text-[11px] text-stone-900 hover:text-black underline cursor-pointer font-medium"
                   >
                     Replace Image
                   </label>
@@ -390,7 +390,7 @@ export const HostProfilePage: React.FC = () => {
               <div className="border border-dashed border-zinc-300 rounded-md p-4 text-center bg-zinc-50/50">
                 <label
                   htmlFor="upload-logo-input"
-                  className="cursor-pointer text-xs font-medium text-emerald-600 hover:text-emerald-700"
+                  className="cursor-pointer text-xs font-medium text-stone-900 hover:text-black underline"
                 >
                   Upload Organization Logo
                 </label>
@@ -418,7 +418,7 @@ export const HostProfilePage: React.FC = () => {
           <button
             type="submit"
             disabled={saving || isUploadingLogo}
-            className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-md text-sm font-medium transition-colors shadow-sm flex items-center gap-2"
+            className="px-5 py-2 bg-stone-900 hover:bg-black disabled:opacity-60 text-white rounded-md text-sm font-medium transition-colors shadow-sm flex items-center gap-2"
           >
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
             <span>Save Settings</span>

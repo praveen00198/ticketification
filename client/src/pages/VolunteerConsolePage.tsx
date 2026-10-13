@@ -77,7 +77,7 @@ export const VolunteerConsolePage: React.FC = () => {
           {canScan && (
             <button
               onClick={() => navigate('/scan')}
-              className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-black font-semibold text-xs rounded-xl flex items-center gap-1.5 transition shadow-sm"
+              className="px-3.5 py-1.5 bg-white hover:bg-stone-200 text-black font-semibold text-xs rounded-xl flex items-center gap-1.5 transition shadow-sm"
             >
               <QrCode className="w-3.5 h-3.5" />
               Launch Scanner
@@ -90,7 +90,7 @@ export const VolunteerConsolePage: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-emerald-400" />
+                <Shield className="w-5 h-5 text-white" />
                 <h1 className="text-lg font-bold text-white">Staff Operational Console</h1>
               </div>
               <p className="text-xs text-zinc-400">
@@ -100,7 +100,7 @@ export const VolunteerConsolePage: React.FC = () => {
 
             <div className="flex items-center gap-2">
               {canScan ? (
-                <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono rounded-full">
+                <span className="flex items-center gap-1.5 px-3 py-1 bg-white/10 border border-white/20 text-white text-xs font-mono rounded-full">
                   <QrCode className="w-3.5 h-3.5" /> Scanner Active
                 </span>
               ) : (
@@ -179,7 +179,7 @@ export const VolunteerConsolePage: React.FC = () => {
                           </span>
                         </div>
                         <div className="flex items-center gap-3 text-xs text-zinc-400 mt-1">
-                          <span className="flex items-center gap-1 text-emerald-400 font-medium">
+                          <span className="flex items-center gap-1 text-zinc-300 font-medium">
                             <MapPin className="w-3.5 h-3.5" /> Station: {task.station}
                           </span>
                           <span>Category: {task.category}</span>
@@ -192,7 +192,7 @@ export const VolunteerConsolePage: React.FC = () => {
                           <button
                             onClick={() => handleStatusChange(task._id, 'IN_PROGRESS')}
                             disabled={updatingId === task._id}
-                            className="px-3.5 py-1.5 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/30 text-blue-300 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition"
+                            className="px-3.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition"
                           >
                             <Play className="w-3.5 h-3.5" />
                             Start Shift
@@ -203,7 +203,7 @@ export const VolunteerConsolePage: React.FC = () => {
                           <button
                             onClick={() => handleStatusChange(task._id, 'COMPLETED')}
                             disabled={updatingId === task._id}
-                            className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-black text-xs font-semibold rounded-xl flex items-center gap-1.5 transition shadow-sm"
+                            className="px-3.5 py-1.5 bg-white hover:bg-stone-200 text-black text-xs font-semibold rounded-xl flex items-center gap-1.5 transition shadow-sm"
                           >
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             Finish Shift

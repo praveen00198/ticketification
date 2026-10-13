@@ -47,7 +47,7 @@ export const AcceptInvitationPage: React.FC<AcceptInvitationPageProps> = ({ curr
   return (
     <div className="min-h-screen bg-[#09090b] flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-md bg-[#121215] border border-zinc-800 rounded-2xl p-6 sm:p-8 shadow-2xl text-center">
-        <div className="w-14 h-14 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-center mx-auto mb-5 text-emerald-400">
+        <div className="w-14 h-14 bg-zinc-800 border border-zinc-700 rounded-2xl flex items-center justify-center mx-auto mb-5 text-white">
           <ShieldCheck className="w-7 h-7" />
         </div>
 
@@ -79,7 +79,7 @@ export const AcceptInvitationPage: React.FC<AcceptInvitationPageProps> = ({ curr
 
             <button
               onClick={() => navigate(`/events/${successMember.eventId}`)}
-              className="w-full py-2.5 px-4 bg-emerald-500 hover:bg-emerald-600 text-black font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition shadow-sm"
+              className="w-full py-2.5 px-4 bg-white hover:bg-zinc-200 text-black font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition shadow-sm"
             >
               <span>Go to Event Console</span>
               <ArrowRight className="w-4 h-4" />
@@ -95,7 +95,7 @@ export const AcceptInvitationPage: React.FC<AcceptInvitationPageProps> = ({ curr
               <button
                 onClick={handleAccept}
                 disabled={loading}
-                className="w-full py-2.5 px-4 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-black font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition shadow-sm"
+                className="w-full py-2.5 px-4 bg-white hover:bg-zinc-200 disabled:opacity-50 text-black font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition shadow-sm"
               >
                 {loading ? (
                   <>

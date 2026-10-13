@@ -48,18 +48,18 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToRegist
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#FAFAF9] text-[#111827] px-4 sm:px-6 lg:px-12 py-12 relative overflow-hidden font-sans selection:bg-emerald-100 selection:text-emerald-900">
+    <div className="min-h-screen flex items-center justify-center bg-[#FAFAF9] text-[#111827] px-4 sm:px-6 lg:px-12 py-12 relative overflow-hidden font-sans selection:bg-stone-200 selection:text-stone-900">
       {/* ── Soft Ambient Background Glows ── */}
       <div
-        className="pointer-events-none absolute top-0 right-0 w-[550px] h-[500px] rounded-full opacity-50 blur-3xl z-0"
+        className="pointer-events-none absolute top-0 right-0 w-[550px] h-[500px] rounded-full opacity-40 blur-3xl z-0"
         style={{
-          background: 'radial-gradient(circle at 75% 25%, rgba(110, 231, 183, 0.4), rgba(167, 243, 208, 0.2) 50%, transparent 75%)',
+          background: 'radial-gradient(circle at 75% 25%, rgba(228, 228, 231, 0.5), rgba(244, 244, 245, 0.2) 50%, transparent 75%)',
         }}
       />
       <div
         className="pointer-events-none absolute bottom-0 left-[-100px] w-[450px] h-[400px] rounded-full opacity-30 blur-3xl z-0"
         style={{
-          background: 'radial-gradient(circle at 30% 70%, rgba(167, 243, 208, 0.3), transparent 70%)',
+          background: 'radial-gradient(circle at 30% 70%, rgba(228, 228, 231, 0.35), transparent 70%)',
         }}
       />
 
@@ -73,7 +73,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToRegist
             <ArrowLeft className="w-3.5 h-3.5" />
             Back to Public Home
           </Link>
-          <span className="text-[11px] font-mono font-semibold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200/60 shadow-sm">
+          <span className="text-[11px] font-mono font-semibold uppercase tracking-wider text-stone-700 bg-stone-100 px-3 py-1 rounded-full border border-stone-200/80 shadow-xs">
             Unified Account Access
           </span>
         </div>
@@ -83,7 +83,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToRegist
           {/* Left Side: Brand & Product Architecture */}
           <div className="lg:col-span-5 space-y-6">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-[#10B981] flex items-center justify-center text-white shadow-md shadow-emerald-500/20">
+              <div className="w-10 h-10 rounded-xl bg-stone-900 flex items-center justify-center text-white shadow-md shadow-stone-900/10">
                 <Ticket className="w-5 h-5 stroke-[2.5]" />
               </div>
               <span className="font-extrabold text-xl tracking-tight text-[#111827]">
@@ -91,14 +91,14 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToRegist
               </span>
             </div>
 
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/60 shadow-sm">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-stone-100 text-stone-800 border border-stone-200/80 shadow-xs">
+              <Sparkles className="w-3.5 h-3.5 text-stone-700" />
               <span>Event Operating & Credential Platform</span>
             </div>
 
             <h1 className="text-3xl sm:text-4xl lg:text-[2.6rem] font-extrabold tracking-tight text-[#111827] leading-[1.15]">
               One Account.<br />
-              <span className="text-[#10B981]">Attend & Organize.</span>
+              <span className="text-stone-600 font-serif italic">Attend & Organize.</span>
             </h1>
 
             <p className="text-sm sm:text-base text-stone-600 leading-relaxed">
@@ -107,7 +107,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToRegist
 
             <div className="space-y-3 pt-2">
               <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0 mt-0.5">
+                <div className="w-8 h-8 rounded-lg bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-900 shrink-0 mt-0.5">
                   <Compass className="w-4 h-4" />
                 </div>
                 <div>
@@ -117,7 +117,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToRegist
               </div>
 
               <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-lg bg-teal-50 border border-teal-100 flex items-center justify-center text-teal-600 shrink-0 mt-0.5">
+                <div className="w-8 h-8 rounded-lg bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-900 shrink-0 mt-0.5">
                   <Zap className="w-4 h-4" />
                 </div>
                 <div>
@@ -127,7 +127,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToRegist
               </div>
 
               <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0 mt-0.5">
+                <div className="w-8 h-8 rounded-lg bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-900 shrink-0 mt-0.5">
                   <ShieldCheck className="w-4 h-4" />
                 </div>
                 <div>
@@ -175,7 +175,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToRegist
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="you@example.com"
-                      className="w-full pl-10 pr-4 py-2.5 bg-white border border-stone-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 rounded-xl text-sm text-[#111827] placeholder-stone-400 focus:outline-none transition-all shadow-sm"
+                      className="w-full pl-10 pr-4 py-2.5 bg-white border border-stone-200 focus:border-stone-900 focus:ring-2 focus:ring-stone-400/20 rounded-xl text-sm text-[#111827] placeholder-stone-400 focus:outline-none transition-all shadow-sm"
                     />
                   </div>
                 </div>
@@ -192,7 +192,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToRegist
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••••••"
-                      className="w-full pl-10 pr-4 py-2.5 bg-white border border-stone-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 rounded-xl text-sm text-[#111827] placeholder-stone-400 focus:outline-none transition-all shadow-sm"
+                      className="w-full pl-10 pr-4 py-2.5 bg-white border border-stone-200 focus:border-stone-900 focus:ring-2 focus:ring-stone-400/20 rounded-xl text-sm text-[#111827] placeholder-stone-400 focus:outline-none transition-all shadow-sm"
                     />
                   </div>
                 </div>
@@ -200,7 +200,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToRegist
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-3 bg-[#10B981] hover:bg-[#059669] text-white font-bold text-sm rounded-xl transition-all shadow-sm hover:shadow-md hover:shadow-emerald-500/20 flex items-center justify-center gap-2 disabled:opacity-50 mt-3 active:scale-[0.99]"
+                  className="w-full py-3 bg-stone-900 hover:bg-black text-white font-bold text-sm rounded-xl transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2 disabled:opacity-50 mt-3 active:scale-[0.99] cursor-pointer"
                 >
                   {loading ? 'Signing in...' : 'Sign In'}
                   {!loading && <ArrowRight className="w-4 h-4" />}
@@ -214,12 +214,12 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToRegist
                     <button
                       type="button"
                       onClick={onNavigateToRegister}
-                      className="font-bold text-emerald-700 hover:text-emerald-800 underline ml-1"
+                      className="font-bold text-stone-900 hover:text-black underline ml-1 cursor-pointer"
                     >
                       Create an Account
                     </button>
                   ) : (
-                    <Link to="/register" className="font-bold text-emerald-700 hover:text-emerald-800 underline ml-1">
+                    <Link to="/register" className="font-bold text-stone-900 hover:text-black underline ml-1">
                       Create an Account
                     </Link>
                   )}

@@ -179,11 +179,11 @@ export const EventCheckinScannerCard: React.FC<EventCheckinScannerCardProps> = (
       <div className="p-6 border-b border-surface-border bg-gradient-to-r from-zinc-900 to-zinc-800 text-white flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="p-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg border border-emerald-500/30">
+            <span className="p-1.5 bg-zinc-800 text-white rounded-lg border border-zinc-700">
               <Scan className="w-5 h-5" />
             </span>
             <h2 className="text-lg font-bold">Day-of-Event Gate Verification & Check-In</h2>
-            <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+            <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 border border-zinc-700">
               Phase 14 Engine
             </span>
           </div>
@@ -198,7 +198,7 @@ export const EventCheckinScannerCard: React.FC<EventCheckinScannerCardProps> = (
             onClick={() => setAudioFeedback(!audioFeedback)}
             className={`p-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors border ${
               audioFeedback
-                ? 'bg-zinc-800 text-emerald-400 border-zinc-700 hover:bg-zinc-700'
+                ? 'bg-zinc-800 text-white border-zinc-700 hover:bg-zinc-700'
                 : 'bg-zinc-800 text-zinc-500 border-zinc-700 hover:bg-zinc-700'
             }`}
           >
@@ -269,7 +269,7 @@ export const EventCheckinScannerCard: React.FC<EventCheckinScannerCardProps> = (
             <select
               value={selectedGate}
               onChange={(e) => setSelectedGate(e.target.value)}
-              className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-semibold text-zinc-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-semibold text-zinc-800 focus:outline-none focus:ring-2 focus:ring-stone-400/20 focus:border-stone-900"
             >
               <option value="Main Gate">Main Gate</option>
               <option value="North Entrance">North Entrance</option>
@@ -304,7 +304,7 @@ export const EventCheckinScannerCard: React.FC<EventCheckinScannerCardProps> = (
                   placeholder="Paste verification token or full verification URL..."
                   value={tokenInput}
                   onChange={(e) => setTokenInput(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-mono text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                  className="w-full pl-10 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-mono text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-stone-400/20 focus:border-stone-900"
                 />
                 <QrCode className="w-4 h-4 text-zinc-400 absolute left-3.5 top-3.5" />
               </div>
@@ -312,7 +312,7 @@ export const EventCheckinScannerCard: React.FC<EventCheckinScannerCardProps> = (
               <button
                 type="submit"
                 disabled={loading || !tokenInput.trim()}
-                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl text-sm font-bold flex items-center gap-2 transition-colors shadow-sm"
+                className="px-5 py-2.5 bg-stone-900 hover:bg-black disabled:opacity-50 text-white rounded-xl text-sm font-bold flex items-center gap-2 transition-colors shadow-sm"
               >
                 {loading ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
@@ -417,7 +417,7 @@ export const EventCheckinScannerCard: React.FC<EventCheckinScannerCardProps> = (
                   placeholder="Filter name / id..."
                   value={searchFilter}
                   onChange={(e) => setSearchFilter(e.target.value)}
-                  className="pl-8 pr-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs text-zinc-800 placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  className="pl-8 pr-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs text-zinc-800 placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-stone-900"
                 />
                 <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-2.5" />
               </div>

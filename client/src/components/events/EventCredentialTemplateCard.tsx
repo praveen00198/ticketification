@@ -195,7 +195,7 @@ export const EventCredentialTemplateCard: React.FC<EventCredentialTemplateCardPr
           fontSize: 36,
           fontFamily: 'Noto Sans, sans-serif',
           fontWeight: 'bold',
-          color: '#10B981',
+          color: '#E2E8F0',
           textAlign: 'center',
           visible: true,
         },
@@ -318,12 +318,12 @@ export const EventCredentialTemplateCard: React.FC<EventCredentialTemplateCardPr
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-bold rounded-xl transition-colors border border-zinc-200 disabled:opacity-50"
               title="Render genuine PNG assets for issued passes with active template"
             >
-              <Sparkles className={`w-3.5 h-3.5 text-emerald-600 ${renderingAll ? 'animate-spin' : ''}`} />
+              <Sparkles className={`w-3.5 h-3.5 text-stone-700 ${renderingAll ? 'animate-spin' : ''}`} />
               <span>{renderingAll ? 'Rendering...' : 'Rasterize Issued Passes'}</span>
             </button>
             <button
               onClick={() => handleOpenEdit()}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm shadow-emerald-600/20"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-stone-900 hover:bg-black text-white text-xs font-bold rounded-xl transition-all shadow-sm"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>New Template</span>
@@ -587,12 +587,12 @@ export const EventCredentialTemplateCard: React.FC<EventCredentialTemplateCardPr
                     type="text"
                     value={mockSequence}
                     onChange={(e) => setMockSequence(e.target.value)}
-                    className="w-full bg-white border border-zinc-300 rounded-lg px-2.5 py-1 text-zinc-900 focus:outline-none focus:border-emerald-500 font-mono"
+                    className="w-full bg-white border border-zinc-300 rounded-lg px-2.5 py-1 text-zinc-900 focus:outline-none focus:border-stone-900 font-mono"
                   />
                   <button
                     onClick={handleRefreshPreview}
                     disabled={generatingPreview}
-                    className="p-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors shrink-0 disabled:opacity-50"
+                    className="p-1 bg-stone-900 hover:bg-black text-white rounded-lg transition-colors shrink-0 disabled:opacity-50"
                     title="Regenerate Preview"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${generatingPreview ? 'animate-spin' : ''}`} />
@@ -777,7 +777,7 @@ export const EventCredentialTemplateCard: React.FC<EventCredentialTemplateCardPr
                 <button
                   type="submit"
                   disabled={savingTemplate}
-                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-sm disabled:opacity-50"
+                  className="px-4 py-1.5 bg-stone-900 hover:bg-black text-white font-bold rounded-xl shadow-sm disabled:opacity-50"
                 >
                   {savingTemplate ? 'Saving...' : 'Save Template'}
                 </button>

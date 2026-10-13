@@ -19,8 +19,8 @@ export const StatCard: React.FC<StatCardProps> = ({
   isNumeric = true,
   subtext,
   icon,
-  iconBg = 'bg-emerald-50',
-  iconColor = 'text-emerald-600',
+  iconBg = 'bg-stone-100',
+  iconColor = 'text-stone-900',
   badge,
   className = '',
 }) => {

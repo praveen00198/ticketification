@@ -30,7 +30,7 @@ export const Disclosure: React.FC<DisclosureProps> = ({
         <div className="flex-1 min-w-0 pr-4">{title}</div>
         <ChevronDown
           className={`w-4 h-4 text-stone-500 shrink-0 transition-transform duration-200 ${
-            isOpen ? 'rotate-180 text-emerald-600' : ''
+            isOpen ? 'rotate-180 text-zinc-900' : ''
           }`}
         />
       </button>

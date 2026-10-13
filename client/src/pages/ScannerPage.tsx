@@ -124,7 +124,7 @@ export const ScannerPage: React.FC = () => {
   if (!currentEvent) {
     return (
       <div className="max-w-2xl mx-auto py-16 text-center bg-white border border-stone-200/90 rounded-2xl p-6 sm:p-8 shadow-xs">
-        <div className="w-12 h-12 bg-emerald-50 text-emerald-700 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-emerald-100/80 shadow-2xs">
+        <div className="w-12 h-12 bg-stone-100 text-stone-900 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-stone-200/80 shadow-2xs">
           <Calendar className="w-6 h-6" />
         </div>
         <h2 className="text-base sm:text-lg font-bold text-zinc-900 mb-1.5">No Active Event Selected</h2>
@@ -149,7 +149,7 @@ export const ScannerPage: React.FC = () => {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white border border-stone-200/90 p-5 sm:p-6 rounded-2xl shadow-xs">
           <div>
             <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-              <Badge variant="emerald" dot>Event-Day Turnstiles</Badge>
+              <Badge variant="neutral" dot>Event-Day Turnstiles</Badge>
               <span className="text-xs text-stone-300">•</span>
               <span className="text-xs font-semibold text-stone-600 truncate">
                 Event: <span className="text-zinc-900 font-bold">{currentEvent.name}</span>
@@ -185,8 +185,8 @@ export const ScannerPage: React.FC = () => {
 
           {/* Real-Time Scan Status Feed */}
           {verifying && (
-            <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-2xl flex items-center justify-center gap-2 shadow-2xs animate-pulse">
-              <RefreshCw className="w-4 h-4 animate-spin text-emerald-600" />
+            <div className="p-3.5 bg-stone-100 border border-stone-200 text-stone-900 text-xs font-bold rounded-2xl flex items-center justify-center gap-2 shadow-2xs animate-pulse">
+              <RefreshCw className="w-4 h-4 animate-spin text-stone-900" />
               <span>Validating cryptographic QR token...</span>
             </div>
           )}
@@ -240,7 +240,7 @@ export const ScannerPage: React.FC = () => {
                 value={manualInput}
                 onChange={(e) => setManualInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleScanSuccess(manualInput)}
-                className="w-full bg-stone-50 border border-stone-200/90 rounded-xl px-3.5 py-2 text-xs text-zinc-900 placeholder:text-stone-400 focus:outline-none focus:border-emerald-500 focus:ring-3 focus:ring-emerald-500/15 shadow-2xs font-mono"
+                className="w-full bg-stone-50 border border-stone-200/90 rounded-xl px-3.5 py-2 text-xs text-zinc-900 placeholder:text-stone-400 focus:outline-none focus:border-stone-900 focus:ring-3 focus:ring-stone-400/20 shadow-2xs font-mono"
               />
               <Button
                 variant="primary"
@@ -258,7 +258,7 @@ export const ScannerPage: React.FC = () => {
         <div className="md:col-span-6 space-y-4">
           {verifying ? (
             <Card padding="lg" className="text-center text-xs text-stone-500 space-y-3">
-              <RefreshCw className="w-7 h-7 text-emerald-600 animate-spin mx-auto" />
+              <RefreshCw className="w-7 h-7 text-stone-900 animate-spin mx-auto" />
               <div>Verifying token cryptographically...</div>
             </Card>
           ) : scanResult ? (
@@ -287,7 +287,7 @@ export const ScannerPage: React.FC = () => {
                 </Badge>
 
                 {scanResult.ticket?.sequenceNumber && (
-                  <span className="font-mono font-bold text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200/80">
+                  <span className="font-mono font-bold text-xs text-stone-900 bg-stone-100 px-2 py-0.5 rounded-lg border border-stone-200/80">
                     #{scanResult.ticket.sequenceNumber.toString().padStart(5, '0')}
                   </span>
                 )}
@@ -318,7 +318,7 @@ export const ScannerPage: React.FC = () => {
 
                   <div className="flex items-center justify-between">
                     <span className="text-stone-500">Category:</span>
-                    <Badge variant="emerald" size="sm">
+                    <Badge variant="neutral" size="sm">
                       {scanResult.ticket.category}
                     </Badge>
                   </div>
@@ -398,7 +398,7 @@ export const ScannerPage: React.FC = () => {
           ) : (
             /* Idle State Instructions */
             <Card padding="lg" className="text-center space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100/80 flex items-center justify-center mx-auto text-emerald-700 shadow-2xs">
+              <div className="w-12 h-12 rounded-2xl bg-stone-100 border border-stone-200/80 flex items-center justify-center mx-auto text-stone-900 shadow-2xs">
                 <TicketIcon className="w-6 h-6" />
               </div>
               <h3 className="text-sm font-bold text-zinc-900">Scanner Ready</h3>
@@ -412,7 +412,7 @@ export const ScannerPage: React.FC = () => {
           <Card padding="md" className="space-y-3">
             <div className="flex items-center justify-between border-b border-stone-100 pb-2.5">
               <span className="text-xs font-bold text-zinc-900 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-emerald-600" />
+                <Clock className="w-3.5 h-3.5 text-stone-500" />
                 <span>Recent Check-ins ({checkinCount})</span>
               </span>
               <button
@@ -442,7 +442,7 @@ export const ScannerPage: React.FC = () => {
                         {item.ticketType?.label || item.ticketType?.name}
                       </div>
                     </div>
-                    <div className="text-[10px] font-mono text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
+                    <div className="text-[10px] font-mono text-stone-700 font-semibold bg-stone-100 px-2 py-0.5 rounded-md border border-stone-200/60">
                       {new Date(item.checkin.checkedInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </div>
                   </div>

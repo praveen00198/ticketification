@@ -86,8 +86,8 @@ export const TicketCard: React.FC<TicketCardProps> = ({ ticket, onDownload, onPr
               {ticket.name || (ticket as any).guestName || 'Guest'}
             </h4>
             {ticket.phone ? (
-              <p className="text-xs text-emerald-700 font-mono flex items-center gap-1 mt-0.5">
-                <Smartphone className="w-3.5 h-3.5 text-emerald-600" /> {ticket.phone}
+              <p className="text-xs text-stone-600 font-mono flex items-center gap-1 mt-0.5">
+                <Smartphone className="w-3.5 h-3.5 text-stone-500" /> {ticket.phone}
               </p>
             ) : ticket.email ? (
               <p className="text-xs text-surface-muted flex items-center gap-1 mt-0.5">

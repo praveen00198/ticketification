@@ -234,7 +234,7 @@ export const MentorEvaluatorWorkspacePage: React.FC = () => {
           </button>
 
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono rounded-full">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs font-mono rounded-full">
               <Lock className="w-3.5 h-3.5" /> Blind Review Enforced
             </span>
           </div>
@@ -245,13 +245,13 @@ export const MentorEvaluatorWorkspacePage: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <Award className="w-5 h-5 text-emerald-400" />
+                <Award className="w-5 h-5 text-white" />
                 <h1 className="text-lg font-bold text-white">Mentor & Evaluator Workspace</h1>
               </div>
               <p className="text-xs text-zinc-400">
                 Authorized Session for{' '}
                 <span className="font-semibold text-white">{member?.userEmail}</span> (
-                <span className="text-emerald-400 font-medium">{member?.role}</span>)
+                <span className="text-zinc-300 font-medium">{member?.role}</span>)
               </p>
             </div>
 
@@ -290,7 +290,7 @@ export const MentorEvaluatorWorkspacePage: React.FC = () => {
               onClick={() => setActiveTab('MENTOR')}
               className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 ${
                 activeTab === 'MENTOR'
-                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                  ? 'bg-zinc-800 text-white border border-zinc-700'
                   : 'text-zinc-400 hover:text-white'
               }`}
             >
@@ -357,7 +357,7 @@ export const MentorEvaluatorWorkspacePage: React.FC = () => {
                           <span
                             className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${
                               isMentor
-                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                ? 'bg-zinc-800 text-zinc-200 border-zinc-700'
                                 : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                             }`}
                           >
@@ -371,7 +371,7 @@ export const MentorEvaluatorWorkspacePage: React.FC = () => {
                         <div className="flex items-center gap-3 text-xs text-zinc-400 mt-1.5 flex-wrap">
                           {assignment.track && (
                             <span className="flex items-center gap-1 text-zinc-300">
-                              <Tag className="w-3.5 h-3.5 text-emerald-400" /> Track: {assignment.track}
+                              <Tag className="w-3.5 h-3.5 text-zinc-400" /> Track: {assignment.track}
                             </span>
                           )}
                           <span className="flex items-center gap-1 text-zinc-400">
@@ -386,7 +386,7 @@ export const MentorEvaluatorWorkspacePage: React.FC = () => {
                         {isMentor ? (
                           <button
                             onClick={() => handleOpenLogModal(assignment)}
-                            className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-black text-xs font-semibold rounded-xl flex items-center gap-1.5 transition shadow-sm"
+                            className="px-3.5 py-1.5 bg-white hover:bg-zinc-200 text-black text-xs font-semibold rounded-xl flex items-center gap-1.5 transition shadow-sm"
                           >
                             <MessageSquare className="w-3.5 h-3.5" />
                             Log Consultation
@@ -442,7 +442,7 @@ export const MentorEvaluatorWorkspacePage: React.FC = () => {
                       <div className="border-t border-zinc-800/80 pt-3 space-y-2">
                         <div className="flex items-center justify-between text-xs text-zinc-400">
                           <span className="font-semibold text-zinc-300 flex items-center gap-1.5">
-                            <FileText className="w-3.5 h-3.5 text-emerald-400" />
+                            <FileText className="w-3.5 h-3.5 text-zinc-400" />
                             Consultation History ({logs.length})
                           </span>
                         </div>
@@ -459,7 +459,7 @@ export const MentorEvaluatorWorkspacePage: React.FC = () => {
                                 className="p-2.5 bg-zinc-900/40 border border-zinc-800/60 rounded-xl text-xs text-zinc-300 space-y-1"
                               >
                                 <div className="flex items-center justify-between text-[11px] text-zinc-400">
-                                  <span className="font-semibold text-emerald-400">
+                                  <span className="font-semibold text-zinc-200">
                                     {log.authorEmail || 'Mentor'}
                                   </span>
                                   <span className="flex items-center gap-1 text-zinc-500">
@@ -487,7 +487,7 @@ export const MentorEvaluatorWorkspacePage: React.FC = () => {
             <div className="bg-[#121215] border border-zinc-800 w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
               <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
                 <div className="flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-emerald-400" />
+                  <MessageSquare className="w-4 h-4 text-zinc-300" />
                   <h3 className="text-sm font-bold text-white">Record Mentorship Consultation</h3>
                 </div>
                 <button
@@ -529,7 +529,7 @@ export const MentorEvaluatorWorkspacePage: React.FC = () => {
                     placeholder="Summarize technical guidance, architectural recommendations, and next milestones..."
                     value={logNotes}
                     onChange={(e) => setLogNotes(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-emerald-500 resize-none"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-zinc-400 resize-none"
                   />
                 </div>
 
@@ -544,7 +544,7 @@ export const MentorEvaluatorWorkspacePage: React.FC = () => {
                   <button
                     type="submit"
                     disabled={submittingLog || logSuccess}
-                    className="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-black text-xs font-semibold rounded-xl flex items-center gap-1.5 transition shadow-sm"
+                    className="px-4 py-1.5 bg-white hover:bg-zinc-200 disabled:opacity-50 text-black text-xs font-semibold rounded-xl flex items-center gap-1.5 transition shadow-sm"
                   >
                     {submittingLog ? 'Saving...' : 'Save Feedback Log'}
                   </button>
@@ -614,7 +614,7 @@ export const MentorEvaluatorWorkspacePage: React.FC = () => {
                       >
                         {selectedRubric.scoringStatus}
                       </span>
-                      <div className="text-[11px] font-mono text-emerald-400 font-bold mt-1">
+                      <div className="text-[11px] font-mono text-zinc-300 font-bold mt-1">
                         Total: {computedTotalWeightedScore()} pts
                       </div>
                     </div>

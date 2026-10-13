@@ -69,7 +69,7 @@ export const TwoConnectedJourneysSection: React.FC<TwoConnectedJourneysSectionPr
 
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[#111827] tracking-tight">
             Two Connected Journeys.<br />
-            <span className="text-stone-900 font-serif italic">One Unified Platform.</span>
+            <span className="text-stone-900 font-serif italic tracking-wide">One Unified Platform.</span>
           </h2>
 
           <p className="text-sm sm:text-base text-stone-600 max-w-xl mx-auto leading-relaxed">
@@ -310,11 +310,11 @@ export const TwoConnectedJourneysSection: React.FC<TwoConnectedJourneysSectionPr
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="p-2 rounded-xl border border-stone-200 bg-white flex items-center justify-between">
                       <span className="font-bold text-stone-800 text-[11px]">Gate 01 • Main</span>
-                      <span className="text-[10px] font-mono text-emerald-600 font-bold">140ms</span>
+                      <span className="text-[10px] font-mono text-stone-900 font-bold">140ms</span>
                     </div>
                     <div className="p-2 rounded-xl border border-stone-200 bg-white flex items-center justify-between">
                       <span className="font-bold text-stone-800 text-[11px]">Gate 04 • VIP</span>
-                      <span className="text-[10px] font-mono text-emerald-600 font-bold">110ms</span>
+                      <span className="text-[10px] font-mono text-stone-900 font-bold">110ms</span>
                     </div>
                   </div>
                 </div>
@@ -452,7 +452,7 @@ export const TwoConnectedJourneysSection: React.FC<TwoConnectedJourneysSectionPr
 
                 <div className="p-2 rounded-xl bg-white border border-stone-200 flex items-center justify-between text-[10px]">
                   <span className="font-semibold text-stone-700">Duplicate Pass Risk:</span>
-                  <span className="font-bold text-emerald-600 font-mono">0.00% (Guaranteed)</span>
+                  <span className="font-bold text-stone-900 font-mono">0.00% (Guaranteed)</span>
                 </div>
 
                 <div className="text-center pt-1">
@@ -500,7 +500,7 @@ export const TwoConnectedJourneysSection: React.FC<TwoConnectedJourneysSectionPr
         </div>
 
         {/* ── Bottom Dual-Journey CTAs ── */}
-        <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-4 text-center">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 text-center">
           <button
             type="button"
             onClick={() => navigate('/explore')}

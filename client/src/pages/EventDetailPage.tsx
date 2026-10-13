@@ -161,7 +161,7 @@ export const EventDetailPage: React.FC = () => {
             }}
             className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-zinc-50 text-zinc-800 text-xs font-semibold rounded-xl border border-zinc-300 transition-all shadow-xs"
           >
-            <ExternalLink className="w-3.5 h-3.5 text-emerald-600" />
+            <ExternalLink className="w-3.5 h-3.5 text-stone-700" />
             <span>Public Page</span>
           </button>
 
@@ -172,7 +172,7 @@ export const EventDetailPage: React.FC = () => {
             }}
             className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-zinc-50 text-zinc-800 text-xs font-bold rounded-xl border border-zinc-300 transition-all shadow-sm"
           >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-brand-600" />
+            <FileSpreadsheet className="w-3.5 h-3.5 text-stone-700" />
             <span>Import Guests</span>
           </button>
 
@@ -183,7 +183,7 @@ export const EventDetailPage: React.FC = () => {
             }}
             className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-zinc-50 text-zinc-800 text-xs font-bold rounded-xl border border-zinc-300 transition-all shadow-sm"
           >
-            <Ticket className="w-3.5 h-3.5 text-blue-600" />
+            <Ticket className="w-3.5 h-3.5 text-stone-700" />
             <span>View Tickets</span>
           </button>
 
@@ -194,7 +194,7 @@ export const EventDetailPage: React.FC = () => {
             }}
             className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-zinc-50 text-zinc-800 text-xs font-bold rounded-xl border border-zinc-300 transition-all shadow-sm"
           >
-            <Shield className="w-3.5 h-3.5 text-emerald-600" />
+            <Shield className="w-3.5 h-3.5 text-stone-700" />
             <span>Staff Console</span>
           </button>
 
@@ -266,7 +266,7 @@ export const EventDetailPage: React.FC = () => {
                   placeholder="e.g. VIP, PRESS, SPONSOR, SPEAKER"
                   value={newTypeName}
                   onChange={(e) => setNewTypeName(e.target.value)}
-                  className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-zinc-900 placeholder:text-stone-400 focus:outline-none focus:border-emerald-500 shadow-xs uppercase"
+                  className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-zinc-900 placeholder:text-stone-400 focus:outline-none focus:border-stone-900 focus:ring-1 focus:ring-stone-400/20 shadow-xs uppercase"
                 />
               </div>
 
@@ -277,7 +277,7 @@ export const EventDetailPage: React.FC = () => {
                   placeholder="e.g. VIP Backstage Pass"
                   value={newTypeLabel}
                   onChange={(e) => setNewTypeLabel(e.target.value)}
-                  className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-zinc-900 placeholder:text-stone-400 focus:outline-none focus:border-emerald-500 shadow-xs"
+                  className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-zinc-900 placeholder:text-stone-400 focus:outline-none focus:border-stone-900 focus:ring-1 focus:ring-stone-400/20 shadow-xs"
                 />
               </div>
 
@@ -288,7 +288,7 @@ export const EventDetailPage: React.FC = () => {
                   onChange={(e) =>
                     setNewTypePolicy(e.target.value as 'SINGLE_USE' | 'REUSABLE' | 'REUSABLE_WORKER')
                   }
-                  className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:border-emerald-500 shadow-xs"
+                  className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:border-stone-900 focus:ring-1 focus:ring-stone-400/20 shadow-xs"
                 >
                   <option value="SINGLE_USE">SINGLE_USE (Standard Attendee)</option>
                   <option value="REUSABLE">REUSABLE (Multi-entry Staff / VIP)</option>
@@ -305,7 +305,7 @@ export const EventDetailPage: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs"
+                  className="px-4 py-1.5 bg-stone-900 hover:bg-black text-white text-xs font-semibold rounded-xl shadow-xs"
                 >
                   Add Type
                 </button>

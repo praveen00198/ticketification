@@ -61,11 +61,11 @@ export const Dashboard: React.FC = () => {
       <div className="max-w-4xl mx-auto space-y-6">
         <InView direction="up" distance={16}>
           <div className="bg-white border border-stone-200/90 rounded-2xl p-6 sm:p-10 shadow-xs text-center space-y-4">
-            <div className="w-14 h-14 bg-emerald-50 text-emerald-700 rounded-2xl flex items-center justify-center mx-auto mb-2 border border-emerald-100/80 shadow-2xs">
+            <div className="w-14 h-14 bg-stone-100 text-stone-900 rounded-2xl flex items-center justify-center mx-auto mb-2 border border-stone-200 shadow-2xs">
               <Sparkles className="w-7 h-7" />
             </div>
             <div>
-              <Badge variant="emerald" className="mb-2">Operational Command Center</Badge>
+              <Badge variant="neutral" className="mb-2">Operational Command Center</Badge>
               <h2 className="text-xl sm:text-2xl font-extrabold text-zinc-900 tracking-tight">
                 Welcome to Ticketification
               </h2>
@@ -84,7 +84,7 @@ export const Dashboard: React.FC = () => {
                       variant="secondary"
                       size="sm"
                       onClick={() => setCurrentEvent(e)}
-                      iconLeft={<Calendar className="w-3.5 h-3.5 text-emerald-600" />}
+                      iconLeft={<Calendar className="w-3.5 h-3.5 text-stone-600" />}
                     >
                       <span className="truncate max-w-[140px]">{e.name}</span>
                     </Button>
@@ -94,9 +94,9 @@ export const Dashboard: React.FC = () => {
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 text-left">
-              <div className="p-5 rounded-2xl border border-stone-200/90 hover:border-emerald-500/60 bg-stone-50/50 hover:bg-white transition-all flex flex-col justify-between space-y-4 shadow-2xs group">
+              <div className="p-5 rounded-2xl border border-stone-200/90 hover:border-stone-900 bg-stone-50/50 hover:bg-white transition-all flex flex-col justify-between space-y-4 shadow-2xs group">
                 <div>
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center mb-3 border border-emerald-200/80 group-hover:scale-105 transition-transform">
+                  <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-900 flex items-center justify-center mb-3 border border-stone-200 group-hover:scale-105 transition-transform">
                     <Sparkles className="w-5 h-5" />
                   </div>
                   <h4 className="text-sm font-bold text-zinc-900">Host an Event</h4>
@@ -115,9 +115,9 @@ export const Dashboard: React.FC = () => {
                 </Button>
               </div>
 
-              <div className="p-5 rounded-2xl border border-stone-200/90 hover:border-emerald-500/60 bg-stone-50/50 hover:bg-white transition-all flex flex-col justify-between space-y-4 shadow-2xs group">
+              <div className="p-5 rounded-2xl border border-stone-200/90 hover:border-stone-900 bg-stone-50/50 hover:bg-white transition-all flex flex-col justify-between space-y-4 shadow-2xs group">
                 <div>
-                  <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center mb-3 border border-sky-200/80 group-hover:scale-105 transition-transform">
+                  <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-900 flex items-center justify-center mb-3 border border-stone-200 group-hover:scale-105 transition-transform">
                     <Compass className="w-5 h-5" />
                   </div>
                   <h4 className="text-sm font-bold text-zinc-900">Explore Catalog</h4>
@@ -136,9 +136,9 @@ export const Dashboard: React.FC = () => {
                 </Button>
               </div>
 
-              <div className="p-5 rounded-2xl border border-stone-200/90 hover:border-emerald-500/60 bg-stone-50/50 hover:bg-white transition-all flex flex-col justify-between space-y-4 shadow-2xs group">
+              <div className="p-5 rounded-2xl border border-stone-200/90 hover:border-stone-900 bg-stone-50/50 hover:bg-white transition-all flex flex-col justify-between space-y-4 shadow-2xs group">
                 <div>
-                  <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center mb-3 border border-amber-200/80 group-hover:scale-105 transition-transform">
+                  <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-900 flex items-center justify-center mb-3 border border-stone-200 group-hover:scale-105 transition-transform">
                     <Wallet className="w-5 h-5" />
                   </div>
                   <h4 className="text-sm font-bold text-zinc-900">My Pass Wallet</h4>
@@ -176,7 +176,7 @@ export const Dashboard: React.FC = () => {
         <div className="bg-white border border-stone-200/90 p-5 sm:p-6 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 sm:gap-6 shadow-xs">
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-              <Badge variant="emerald" dot>Operational Console</Badge>
+              <Badge variant="neutral" dot>Operational Console</Badge>
               <span className="text-xs text-stone-300">•</span>
               <span className="text-xs font-semibold text-stone-600 truncate">
                 Active: <span className="text-zinc-900 font-bold">{currentEvent.name}</span>
@@ -238,8 +238,8 @@ export const Dashboard: React.FC = () => {
           label="Total Guests"
           value={total}
           icon={<Users className="w-4 h-4" />}
-          iconBg="bg-emerald-50"
-          iconColor="text-emerald-700"
+          iconBg="bg-stone-100"
+          iconColor="text-stone-900"
           subtext="Imported in guest roster"
         />
 
@@ -247,8 +247,8 @@ export const Dashboard: React.FC = () => {
           label="Passes Issued"
           value={generated}
           icon={<Ticket className="w-4 h-4" />}
-          iconBg="bg-blue-50"
-          iconColor="text-blue-700"
+          iconBg="bg-stone-100"
+          iconColor="text-stone-900"
           subtext="Cryptographic QR passes"
         />
 
@@ -256,10 +256,10 @@ export const Dashboard: React.FC = () => {
           label="Checked In"
           value={used}
           icon={<CheckCircle2 className="w-4 h-4" />}
-          iconBg="bg-emerald-50"
-          iconColor="text-emerald-700"
+          iconBg="bg-stone-100"
+          iconColor="text-stone-900"
           badge={
-            <Badge variant="emerald" size="sm">
+            <Badge variant="neutral" size="sm">
               {checkinRate}% Turnout
             </Badge>
           }
@@ -270,8 +270,8 @@ export const Dashboard: React.FC = () => {
           label="Remaining Passes"
           value={active}
           icon={<Clock className="w-4 h-4" />}
-          iconBg="bg-amber-50"
-          iconColor="text-amber-700"
+          iconBg="bg-stone-100"
+          iconColor="text-stone-900"
           subtext="Active for entry scan"
         />
       </AnimatedGroup>
@@ -283,20 +283,20 @@ export const Dashboard: React.FC = () => {
           role="button"
           tabIndex={0}
           onKeyDown={(e) => e.key === 'Enter' && navigate('/import')}
-          className="group bg-white border border-stone-200/90 hover:border-emerald-500/80 p-4 sm:p-5 rounded-2xl cursor-pointer transition-all shadow-xs flex items-center justify-between"
+          className="group bg-white border border-stone-200/90 hover:border-stone-900 p-4 sm:p-5 rounded-2xl cursor-pointer transition-all shadow-xs flex items-center justify-between"
         >
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-100/80 group-hover:scale-105 transition-transform shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-900 flex items-center justify-center border border-stone-200 group-hover:scale-105 transition-transform shrink-0">
               <FileSpreadsheet className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <div className="text-xs font-bold text-zinc-900 group-hover:text-emerald-700 transition-colors truncate">
+              <div className="text-xs font-bold text-zinc-900 group-hover:text-black transition-colors truncate">
                 Import Guest Data
               </div>
               <div className="text-[11px] text-stone-400 truncate">Excel & CSV Upload Wizard</div>
             </div>
           </div>
-          <ArrowRight className="w-4 h-4 text-stone-400 group-hover:text-emerald-600 transition-colors shrink-0 ml-2" />
+          <ArrowRight className="w-4 h-4 text-stone-400 group-hover:text-black transition-colors shrink-0 ml-2" />
         </div>
 
         <div
@@ -304,20 +304,20 @@ export const Dashboard: React.FC = () => {
           role="button"
           tabIndex={0}
           onKeyDown={(e) => e.key === 'Enter' && navigate('/tickets')}
-          className="group bg-white border border-stone-200/90 hover:border-blue-500/80 p-4 sm:p-5 rounded-2xl cursor-pointer transition-all shadow-xs flex items-center justify-between"
+          className="group bg-white border border-stone-200/90 hover:border-stone-900 p-4 sm:p-5 rounded-2xl cursor-pointer transition-all shadow-xs flex items-center justify-between"
         >
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center border border-blue-100/80 group-hover:scale-105 transition-transform shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-900 flex items-center justify-center border border-stone-200 group-hover:scale-105 transition-transform shrink-0">
               <Ticket className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <div className="text-xs font-bold text-zinc-900 group-hover:text-blue-700 transition-colors truncate">
+              <div className="text-xs font-bold text-zinc-900 group-hover:text-black transition-colors truncate">
                 View & Generate Tickets
               </div>
               <div className="text-[11px] text-stone-400 truncate">Credentials & ZIP Export</div>
             </div>
           </div>
-          <ArrowRight className="w-4 h-4 text-stone-400 group-hover:text-blue-600 transition-colors shrink-0 ml-2" />
+          <ArrowRight className="w-4 h-4 text-stone-400 group-hover:text-black transition-colors shrink-0 ml-2" />
         </div>
 
         <div
@@ -325,20 +325,20 @@ export const Dashboard: React.FC = () => {
           role="button"
           tabIndex={0}
           onKeyDown={(e) => e.key === 'Enter' && navigate('/scan')}
-          className="group bg-white border border-stone-200/90 hover:border-emerald-500/80 p-4 sm:p-5 rounded-2xl cursor-pointer transition-all shadow-xs flex items-center justify-between"
+          className="group bg-white border border-stone-200/90 hover:border-stone-900 p-4 sm:p-5 rounded-2xl cursor-pointer transition-all shadow-xs flex items-center justify-between"
         >
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-100/80 group-hover:scale-105 transition-transform shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-900 flex items-center justify-center border border-stone-200 group-hover:scale-105 transition-transform shrink-0">
               <QrCode className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <div className="text-xs font-bold text-zinc-900 group-hover:text-emerald-700 transition-colors truncate">
+              <div className="text-xs font-bold text-zinc-900 group-hover:text-black transition-colors truncate">
                 Turnstiles Scanner
               </div>
               <div className="text-[11px] text-stone-400 truncate">High-throughput gate scanner</div>
             </div>
           </div>
-          <ArrowRight className="w-4 h-4 text-stone-400 group-hover:text-emerald-600 transition-colors shrink-0 ml-2" />
+          <ArrowRight className="w-4 h-4 text-stone-400 group-hover:text-black transition-colors shrink-0 ml-2" />
         </div>
       </div>
 
@@ -346,7 +346,7 @@ export const Dashboard: React.FC = () => {
       <Card padding="md" className="space-y-4">
         <div className="flex items-center justify-between border-b border-stone-100 pb-3">
           <h2 className="text-xs sm:text-sm font-bold text-zinc-900 flex items-center gap-2">
-            <Clock className="w-4 h-4 text-emerald-600 shrink-0" />
+            <Clock className="w-4 h-4 text-stone-600 shrink-0" />
             <span>Recent Generated Credentials</span>
           </h2>
           <Button
@@ -379,7 +379,7 @@ export const Dashboard: React.FC = () => {
                 <tbody className="divide-y divide-stone-100 bg-white">
                   {recentActivity.map((t) => (
                     <tr key={t.id} className="hover:bg-stone-50/70 transition-colors">
-                      <td className="py-2.5 px-3 font-mono font-bold text-emerald-700">
+                      <td className="py-2.5 px-3 font-mono font-bold text-stone-900">
                         #{t.sequenceNumber?.toString().padStart(5, '0')}
                       </td>
                       <td className="py-2.5 px-3 font-bold text-zinc-900">{t.name || 'Staff Member'}</td>
