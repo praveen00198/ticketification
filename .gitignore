@@ -51,3 +51,8 @@ temp/
 # Cache
 .cache/
 .parcel-cache/
+
+# Agents / Tooling
+.agents/
+skills-lock.json
+skills.json
