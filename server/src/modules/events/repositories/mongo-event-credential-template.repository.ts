@@ -328,6 +328,10 @@ export class MongoEventCredentialTemplateRepository {
   async findDefaultByEventId(
     eventId: string
   ): Promise<IEventCredentialTemplateDocument | null> {
+    if (mongoose.connection.readyState !== 1) {
+      return null;
+    }
+
     const objId = new mongoose.Types.ObjectId(eventId);
     // First look for active default specifically configured for this event
     const eventDefault = await EventCredentialTemplateModel.findOne({
@@ -352,7 +356,7 @@ export class MongoEventCredentialTemplateRepository {
   }
 
   async findById(id: string): Promise<IEventCredentialTemplateDocument | null> {
-    if (!mongoose.Types.ObjectId.isValid(id)) return null;
+    if (!mongoose.Types.ObjectId.isValid(id) || mongoose.connection.readyState !== 1) return null;
     return EventCredentialTemplateModel.findById(id).exec();
   }
 

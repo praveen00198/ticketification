@@ -76,8 +76,57 @@ export class EventRegistrationService {
   ) {}
 
   /**
+   * Enforce explicit event registration eligibility.
+   */
+  public validateRegistrationEligibility(event: any): void {
+    if (!event) {
+      throw new NotFoundError('Event not found');
+    }
+
+    // 1. Explicit allowed lifecycle states: only PUBLISHED and REGISTRATION_OPEN
+    const allowedStatuses = ['PUBLISHED', 'REGISTRATION_OPEN'];
+    if (!allowedStatuses.includes(event.status)) {
+      if (event.status === 'REGISTRATION_CLOSED') {
+        throw new ValidationError('Registration is closed for this event');
+      }
+      if (event.status === 'CANCELLED') {
+        throw new ValidationError('Registration is currently unavailable: Event has been cancelled');
+      }
+      if (event.status === 'SUSPENDED') {
+        throw new ValidationError('Registration is currently unavailable: Event is currently suspended');
+      }
+      if (event.status === 'COMPLETED') {
+        throw new ValidationError('Registration is currently unavailable: Event has already completed');
+      }
+      if (event.status === 'DRAFT') {
+        throw new ValidationError('Registration is currently unavailable: Event is not published');
+      }
+      throw new ValidationError(`Registration is currently unavailable for this event (Status: ${event.status})`);
+    }
+
+    // 2. Attendance mode check
+    if (event.attendanceMode === 'EXISTING_ATTENDEE_DATA') {
+      throw new ValidationError('Self-registration is not permitted for events using existing attendee data');
+    }
+
+    // 3. Registration required flag
+    if (event.registration && event.registration.registrationRequired === false) {
+      throw new ValidationError('Registration is not enabled for this event');
+    }
+
+    // 4. Schedule checks (if event has already ended)
+    if (event.schedule?.endAt) {
+      const now = new Date();
+      const endAt = new Date(event.schedule.endAt);
+      if (now > endAt) {
+        throw new ValidationError('Registration is closed because this event has already ended');
+      }
+    }
+  }
+
+  /**
    * Register authenticated user for an event and auto-issue active credential.
-   * Enforces idempotency: multiple calls return existing registration.
+   * Enforces idempotency, explicit lifecycle, and atomic capacity reservation.
    */
   async register(
     eventId: string,
@@ -89,11 +138,8 @@ export class EventRegistrationService {
       throw new NotFoundError('Event not found');
     }
 
-    // Guard against inactive or closed lifecycle states
-    const disallowedStatuses = ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'SUSPENDED', 'CANCELLED', 'ARCHIVED', 'REJECTED'];
-    if (disallowedStatuses.includes(event.status)) {
-      throw new ValidationError(`Registration is currently unavailable for this event (Status: ${event.status})`);
-    }
+    // Explicit lifecycle verification
+    this.validateRegistrationEligibility(event);
 
     const callerUser = await this.userRepo.findBySupabaseId(userSupabaseId);
     if (!callerUser) {
@@ -116,14 +162,25 @@ export class EventRegistrationService {
       return { registration: existing, credential: linkedCred as IEventCredentialDocument };
     }
 
-    // Capacity check
-    if (event.registration?.capacity && event.registration.capacity > 0) {
+    // Atomic capacity reservation
+    const capacity = event.registration?.capacity;
+    let slotReserved = false;
+
+    if (capacity && capacity > 0) {
       const activeCount = await this.registrationRepo.countByEvent(eventId, 'CONFIRMED');
-      if (activeCount >= event.registration.capacity) {
+      if (activeCount >= capacity) {
         throw new ValidationError(
-          `Event capacity limit (${event.registration.capacity}) has been reached. Registration closed.`
+          `Event capacity limit (${capacity}) has been reached. Registration closed.`
         );
       }
+
+      const reserved = await this.eventRepo.reserveRegistrationSlot(eventId, capacity);
+      if (!reserved) {
+        throw new ValidationError(
+          `Event capacity limit (${capacity}) has been reached. Registration closed.`
+        );
+      }
+      slotReserved = true;
     }
 
     const attendeeName = dto.name?.trim() || callerUser.name || 'Attendee';
@@ -133,80 +190,114 @@ export class EventRegistrationService {
     const designation = dto.designation?.trim() || null;
     const teamName = dto.teamName?.trim() || null;
 
-    // Optional team linking if teamName specified and exists
-    let teamId: mongoose.Types.ObjectId | null = null;
-    if (teamName) {
-      const existingTeam = await this.teamRepo.findByEventAndName(eventId, teamName);
-      if (existingTeam) {
-        teamId = existingTeam._id;
-      }
-    }
+    let credential: IEventCredentialDocument | null = null;
 
-    // Auto-issue event credential
-    const credential = await this.credentialService.issueRegistrationCredential(
-      eventId,
-      event.credentialTerminology,
-      {
-        holder: {
+    try {
+      // Optional team linking if teamName specified and exists
+      let teamId: mongoose.Types.ObjectId | null = null;
+      if (teamName) {
+        const existingTeam = await this.teamRepo.findByEventAndName(eventId, teamName);
+        if (existingTeam) {
+          teamId = existingTeam._id;
+        }
+      }
+
+      // Auto-issue event credential
+      credential = await this.credentialService.issueRegistrationCredential(
+        eventId,
+        event.credentialTerminology,
+        {
+          holder: {
+            name: attendeeName,
+            email: attendeeEmail,
+            phone,
+            organization,
+            designation,
+            teamId: teamId ? teamId.toString() : null,
+            category: dto.registrationType || 'ATTENDEE',
+            isAssigned: true,
+          },
+          credentialType: dto.registrationType || 'ATTENDEE',
+          usagePolicy: 'SINGLE_USE',
+          metadata: {
+            registeredVia: 'SELF_SERVICE',
+            registeredAt: new Date().toISOString(),
+            ...dto.responses,
+          },
+        },
+        callerUser._id
+      );
+
+      // Persist registration document
+      const registration = await this.registrationRepo.create({
+        eventId,
+        userId: callerUser._id,
+        userSupabaseId,
+        credentialId: credential._id,
+        status: 'CONFIRMED',
+        registrationType: dto.registrationType || 'ATTENDEE',
+        attendeeDetails: {
           name: attendeeName,
           email: attendeeEmail,
           phone,
           organization,
           designation,
-          teamId: teamId ? teamId.toString() : null,
-          category: dto.registrationType || 'ATTENDEE',
-          isAssigned: true,
+          teamName,
         },
-        credentialType: dto.registrationType || 'ATTENDEE',
-        usagePolicy: 'SINGLE_USE',
+        responses: dto.responses || {},
+        teamId,
+        registeredAt: new Date(),
+      });
+
+      // Record immutable audit entry
+      await this.audit.record({
+        eventId,
+        actorId: callerUser._id,
+        actorEmail: callerUser.email,
+        actorRole: 'ATTENDEE',
+        action: 'ATTENDEE_REGISTERED',
+        targetEntity: 'EVENT_REGISTRATION',
+        targetId: registration._id.toString(),
         metadata: {
-          registeredVia: 'SELF_SERVICE',
-          registeredAt: new Date().toISOString(),
-          ...dto.responses,
+          registrationId: registration._id.toString(),
+          credentialId: credential._id.toString(),
+          formattedId: credential.formattedId,
+          attendeeEmail,
         },
-      },
-      callerUser._id
-    );
+      });
 
-    // Persist registration document
-    const registration = await this.registrationRepo.create({
-      eventId,
-      userId: callerUser._id,
-      userSupabaseId,
-      credentialId: credential._id,
-      status: 'CONFIRMED',
-      registrationType: dto.registrationType || 'ATTENDEE',
-      attendeeDetails: {
-        name: attendeeName,
-        email: attendeeEmail,
-        phone,
-        organization,
-        designation,
-        teamName,
-      },
-      responses: dto.responses || {},
-      teamId,
-      registeredAt: new Date(),
-    });
+      return { registration, credential };
+    } catch (err: any) {
+      // Rollback reserved slot upon failure
+      if (slotReserved) {
+        await this.eventRepo.releaseRegistrationSlot(eventId);
+      }
 
-    // Record immutable audit entry
-    await this.audit.record({
-      eventId,
-      actorId: callerUser._id,
-      actorEmail: callerUser.email,
-      actorRole: 'ATTENDEE',
-      action: 'ATTENDEE_REGISTERED',
-      targetEntity: 'EVENT_REGISTRATION',
-      targetId: registration._id.toString(),
-      metadata: {
-        registrationId: registration._id.toString(),
-        credentialId: credential._id.toString(),
-        formattedId: credential.formattedId,
-        attendeeEmail,
-      },
-    });
+      // Rollback issued credential if registration failed
+      if (credential?._id) {
+        await this.credentialRepo.updateStatus(
+          eventId,
+          credential._id.toString(),
+          'REVOKED',
+          'Registration persistence failure rollback'
+        ).catch(() => {});
+      }
 
-    return { registration, credential };
+      // Handle race-condition duplicate key error idempotently
+      if (err.code === 11000 || err.message?.includes('duplicate key') || err.message?.includes('E11000')) {
+        const concurrentExisting = await this.registrationRepo.findByEventAndUser(eventId, callerUser._id);
+        if (concurrentExisting && concurrentExisting.status !== 'CANCELLED') {
+          let linkedCred: IEventCredentialDocument | null = null;
+          if (concurrentExisting.credentialId) {
+            linkedCred = await this.credentialRepo.findById(concurrentExisting.credentialId.toString());
+          }
+          return { registration: concurrentExisting, credential: linkedCred as IEventCredentialDocument };
+        }
+        throw new ValidationError('A confirmed registration already exists for this attendee');
+      }
+
+      throw err;
+    }
   }
 
   /**
@@ -235,7 +326,7 @@ export class EventRegistrationService {
   }
 
   /**
-   * Cancel authenticated attendee's registration and revoke linked credential.
+   * Cancel authenticated attendee's registration, release slot, and revoke linked credential.
    */
   async cancelRegistration(
     eventId: string,
@@ -250,6 +341,11 @@ export class EventRegistrationService {
     const registration = await this.registrationRepo.findByEventAndUser(eventId, callerUser._id);
     if (!registration) {
       throw new NotFoundError('No active registration found for this event');
+    }
+
+    // Release capacity slot if registration was confirmed
+    if (registration.status === 'CONFIRMED') {
+      await this.eventRepo.releaseRegistrationSlot(eventId);
     }
 
     // Cancel registration

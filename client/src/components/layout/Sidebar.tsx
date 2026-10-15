@@ -185,11 +185,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* ── Active Event Switcher (Seamless, No Box, No Separation Line) ── */}
         {!isCollapsed || isMobile ? (
-          <div className="py-1.5 shrink-0">
+          <div className="px-3 py-1.5 shrink-0">
             <div className="relative">
               <button
                 onClick={() => setEventMenuOpen(!eventMenuOpen)}
-                className="w-full flex items-center justify-between gap-2.5 px-3 py-2 rounded-xl text-left transition-all cursor-pointer group"
+                className="w-full flex items-center justify-between gap-2.5 px-2.5 py-2 rounded-xl text-left hover:bg-stone-200/50 transition-all cursor-pointer group"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className="w-7 h-7 rounded bg-stone-200/70 flex items-center justify-center text-stone-700 shrink-0 group-hover:bg-stone-300/60 transition-colors">
@@ -208,21 +208,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <ChevronDown className="w-3.5 h-3.5 text-stone-400 group-hover:text-stone-700 shrink-0 ml-1 transition-colors" />
               </button>
 
-              {/* Event Selector Dropdown */}
+              {/* Event Selector Dropdown (Aligned with button above it, not touching screen edge) */}
               {eventMenuOpen && (
                 <>
                   <div
                     className="fixed inset-0 z-40"
                     onClick={() => setEventMenuOpen(false)}
                   />
-                  <div className="absolute left-0 top-full w-full bg-white border border-stone-200 rounded-lg shadow-xl pt-0.5 z-50 animate-in fade-in zoom-in-95">
-                    <div className="px-2 py-1 text-[10px] font-semibold tracking-wider text-stone-400 border-b border-stone-100 flex items-center justify-between">
+                  <div className="absolute left-0 top-full mt-1.5 w-full bg-white border border-stone-200 rounded-xl shadow-lg overflow-hidden z-50 animate-in fade-in zoom-in-95">
+                    <div className="px-3 py-2 text-[10px] font-semibold tracking-wider text-stone-400 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
                       <span>Active Events</span>
                       <span className="text-stone-700 font-mono">
                         {events.length}
                       </span>
                     </div>
-                    <div className="max-h-52 overflow-y-auto py-1 space-y-0.5">
+                    <div className="max-h-52 overflow-y-auto sidebar-scrollbar p-1 space-y-0.5">
                       {events.length === 0 ? (
                         <div className="px-2 py-3 text-center text-xs text-stone-400">
                           No events found
@@ -283,7 +283,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
 
         {/* ── Category-wise Navigation List ── */}
-        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-5">
+        <div className="flex-1 overflow-y-auto sidebar-scrollbar px-3 py-3 space-y-5">
           {categories.map((category, catIdx) => (
             <div key={catIdx} className="space-y-1">
               {(!isCollapsed || isMobile) && (

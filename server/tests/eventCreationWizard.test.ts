@@ -23,6 +23,8 @@ import { supabaseStorageService } from '../src/modules/tickets/services/supabase
 import mongoose from 'mongoose';
 
 describe('Phase 4: Event Creation Engine & Wizard', () => {
+  jest.setTimeout(30000);
+
   const hostUserToken = 'valid-host-token-phase4';
   const otherUserToken = 'valid-other-token-phase4';
   const unonboardedUserToken = 'valid-unonboarded-token-phase4';
@@ -187,7 +189,7 @@ describe('Phase 4: Event Creation Engine & Wizard', () => {
     });
 
     it('should reject event creation if caller workspaceStatus is SUSPENDED', async () => {
-      jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockResolvedValueOnce({
+      jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockResolvedValue({
         _id: hostMongoId,
         supabaseUserId: hostUser.id,
         email: hostUser.email,

@@ -36,10 +36,10 @@
 }
 
 @layer utilities {
-  /* Slim & Dark Minimalist Scrollbar for Sidebar (2.5px width) */
+  /* Slim & Dark Minimalist Scrollbar for Sidebar (2-3px width) */
   .sidebar-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: #bdbdbd transparent;
+    scrollbar-color: #57534E transparent;
   }
   .sidebar-scrollbar::-webkit-scrollbar {
     width: 2.5px;
@@ -49,11 +49,11 @@
     background: transparent;
   }
   .sidebar-scrollbar::-webkit-scrollbar-thumb {
-    background: #78716C;
+    background: #57534E;
     border-radius: 9999px;
   }
   .sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #57534E;
+    background: #292524;
   }
 
   /* Signature Ticket Perforation Notches */

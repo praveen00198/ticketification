@@ -170,7 +170,14 @@ This file serves as the permanent institutional memory for Ticketification. All 
   2. Sanitized Host Profiles: Public host endpoints must never leak phone numbers, password hashes, or internal database tokens. Only verified public brand fields (`organizationName`, `institutionType`, `institutionName`, `bio`, `website`, `logoUrl`, `hostVerificationStatus`) may be exposed.
   3. Public Abuse Reporting: `EventReportModel` validates minimum description length (10 chars), category enum, and valid email format. Submissions automatically log immutable entries into `audit_logs` (`EVENT_REPORTED`) for platform oversight.
   4. Test Timeouts under High Concurrency: Long rasterization operations in unit tests under heavy CPU load must explicitly configure timeout boundaries (e.g. 30,000ms) to prevent false-positive failures during full multi-suite regression runs.
-
-
-
-
+### 2.20 Distributed Job Leases, Atomic Capacity Reservation & Bounded Archival Streaming
+- **Lesson**: Asynchronous background jobs dispatched purely in memory (`setImmediate()`) are lost upon container recycling or process restarts. In multi-instance deployments, workers race to process the same jobs simultaneously without distributed coordination. Additionally, checking event capacity via non-atomic `countDocuments` permits over-registration, and accumulating multi-megabyte ZIP chunks in V8 heap causes 512MB RAM container crashes.
+- **Invariant**:
+  1. Background jobs in `event_jobs` must be persisted with `lockedBy`, `lockExpiresAt` (5m lease), `attempts`, `maxAttempts` (3), `failureReason`, and `nextRunAt` prior to dispatch acknowledgment.
+  2. Workers claim jobs atomically via conditional update (`claimJob` / `claimNextAvailableJob`) verifying expiration and status.
+  3. Eligible abandoned jobs must be safely recovered upon server restart (`recoverAbandonedJobs`).
+  4. Transient failures must use bounded exponential retry backoff, and all error logs must be sanitized (`sanitizeErrorMessage`) to redact tokens, connection strings, and PII.
+  5. Bulk pass rasterization must use cursor-based batch pagination (`findUnrenderedBatch` with `_id: { $gt: lastId }`) to process rosters beyond 500 records without hitting arbitrary caps.
+  6. Capacity reservations must be atomic at the database level (`reserveRegistrationSlot` via `$expr: { $lt: ['$registration.confirmedCount', '$registration.capacity'] }` and `$inc: 1`). Any downstream registration failure must rollback the slot count.
+  7. Partial unique compound indexes on `event_registrations` (`{ eventId: 1, userId: 1 }` and `{ eventId: 1, 'attendeeDetails.email': 1 }` for active statuses) prevent duplicate registrations under concurrent submissions.
+  8. ZIP archive generation must stream directly to a temporary file (`fs.createWriteStream`) in `os.tmpdir()` and be piped to Supabase Storage before unlinking in `finally`, guaranteeing constant bounded memory usage.

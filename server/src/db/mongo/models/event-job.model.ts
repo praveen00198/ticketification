@@ -40,6 +40,13 @@ export interface IEventJobDocument extends Document {
   startedAt?: Date | null;
   completedAt?: Date | null;
   failedAt?: Date | null;
+  lockedBy?: string | null;
+  lockExpiresAt?: Date | null;
+  attempts: number;
+  maxAttempts: number;
+  lastAttemptAt?: Date | null;
+  failureReason?: string | null;
+  nextRunAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -141,6 +148,36 @@ const EventJobSchema = new Schema<IEventJobDocument>(
       type: Date,
       default: null,
     },
+    lockedBy: {
+      type: String,
+      default: null,
+    },
+    lockExpiresAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+    attempts: {
+      type: Number,
+      default: 0,
+    },
+    maxAttempts: {
+      type: Number,
+      default: 3,
+    },
+    lastAttemptAt: {
+      type: Date,
+      default: null,
+    },
+    failureReason: {
+      type: String,
+      default: null,
+    },
+    nextRunAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -151,6 +188,7 @@ const EventJobSchema = new Schema<IEventJobDocument>(
 // Indexes for high-throughput lookup and queue monitoring
 EventJobSchema.index({ eventId: 1, createdAt: -1 });
 EventJobSchema.index({ status: 1, createdAt: 1 });
+EventJobSchema.index({ status: 1, lockExpiresAt: 1, nextRunAt: 1, createdAt: 1 });
 
 export const EventJobModel: Model<IEventJobDocument> =
   (mongoose.models.EventJob as Model<IEventJobDocument>) ||

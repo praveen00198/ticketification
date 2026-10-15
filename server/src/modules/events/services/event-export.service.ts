@@ -1,6 +1,8 @@
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 import archiver from 'archiver';
 import * as xlsx from 'xlsx';
-import { PassThrough } from 'stream';
 import { IEventJobDocument, IJobResult } from '../../../db/mongo/models/event-job.model';
 import { mongoEventCredentialRepository, MongoEventCredentialRepository } from '../repositories/mongo-event-credential.repository';
 import { mongoEventJobRepository, MongoEventJobRepository } from '../repositories/mongo-event-job.repository';
@@ -43,6 +45,7 @@ export class EventExportService {
 
   /**
    * Stream & bundle all credential PNG passes into a compressed ZIP archive.
+   * Streams output to a temporary file on disk rather than holding the entire archive in memory.
    */
   private async exportCredentialsZip(
     event: any,
@@ -77,20 +80,17 @@ export class EventExportService {
     // Default template fallback for unrendered passes
     const defaultTemplate = await mongoEventCredentialTemplateRepository.findDefaultByEventId(eventId);
 
-    // Setup streaming zip archive
+    const tempFilePath = path.join(os.tmpdir(), `ticket-export-${job._id.toString()}-${Date.now()}.zip`);
+    const writeStream = fs.createWriteStream(tempFilePath);
+
     const archive = archiver('zip', { zlib: { level: 6 } });
-    const passthrough = new PassThrough();
-    const chunks: Buffer[] = [];
+    archive.pipe(writeStream);
 
-    passthrough.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
-
-    const archivePromise = new Promise<Buffer>((resolve, reject) => {
-      passthrough.on('end', () => resolve(Buffer.concat(chunks)));
-      passthrough.on('error', reject);
+    const archiveClosedPromise = new Promise<void>((resolve, reject) => {
+      writeStream.on('close', resolve);
+      writeStream.on('error', reject);
       archive.on('error', reject);
     });
-
-    archive.pipe(passthrough);
 
     const result: IJobResult = {
       importedCount: 0,
@@ -102,105 +102,129 @@ export class EventExportService {
     let processedCount = 0;
     let succeededCount = 0;
 
-    for (const cred of credentials) {
-      // Check cancellation between items
-      const currentJob = await this.jobRepo.findById(job._id.toString());
-      if (currentJob?.status === 'CANCELLED') {
-        archive.abort();
-        return;
-      }
-
-      processedCount++;
-
-      try {
-        let imageBuffer: Buffer | null = null;
-
-        // Try downloading existing rendered asset
-        if (cred.asset?.storagePath) {
-          try {
-            imageBuffer = await this.storageService.downloadTicketImage(cred.asset.storagePath);
-          } catch (downloadErr) {
-            imageBuffer = null;
-          }
+    try {
+      for (const cred of credentials) {
+        // Check cancellation between items
+        const currentJob = await this.jobRepo.findById(job._id.toString());
+        if (currentJob?.status === 'CANCELLED') {
+          archive.abort();
+          return;
         }
 
-        // If not available, render on the fly if template is available
-        if (!imageBuffer && defaultTemplate) {
-          try {
-            imageBuffer = await this.renderService.renderCredentialBuffer(
-              defaultTemplate,
-              {
-                name: cred.holder?.name,
-                sequence: cred.formattedId,
-                verificationToken: cred.verificationToken,
-                role: cred.holder?.category,
-                eventName: event.name,
-              }
-            );
-          } catch (renderErr: any) {
+        processedCount++;
+
+        try {
+          let imageBuffer: Buffer | null = null;
+
+          // Try downloading existing rendered asset
+          if (cred.asset?.storagePath) {
+            try {
+              imageBuffer = await this.storageService.downloadTicketImage(cred.asset.storagePath);
+            } catch (downloadErr) {
+              imageBuffer = null;
+            }
+          }
+
+          // If not available, render on the fly if template is available
+          if (!imageBuffer && defaultTemplate) {
+            try {
+              imageBuffer = await this.renderService.renderCredentialBuffer(
+                defaultTemplate,
+                {
+                  name: cred.holder?.name,
+                  sequence: cred.formattedId,
+                  verificationToken: cred.verificationToken,
+                  role: cred.holder?.category,
+                  eventName: event.name,
+                }
+              );
+            } catch (renderErr: any) {
+              result.errorLog.push({
+                identifier: cred.formattedId,
+                error: `Rendering failed: ${renderErr.message}`,
+              });
+            }
+          }
+
+          if (imageBuffer) {
+            const safeName = (cred.holder?.name || 'Attendee')
+              .replace(/[^a-zA-Z0-9_-]/g, '_')
+              .replace(/_+/g, '_');
+            const filename = `${cred.formattedId}-${safeName}.png`;
+            archive.append(imageBuffer, { name: filename });
+            succeededCount++;
+          } else {
             result.errorLog.push({
               identifier: cred.formattedId,
-              error: `Rendering failed: ${renderErr.message}`,
+              error: 'Asset not rendered and no default template available',
             });
           }
-        }
-
-        if (imageBuffer) {
-          const safeName = (cred.holder?.name || 'Attendee')
-            .replace(/[^a-zA-Z0-9_-]/g, '_')
-            .replace(/_+/g, '_');
-          const filename = `${cred.formattedId}-${safeName}.png`;
-          archive.append(imageBuffer, { name: filename });
-          succeededCount++;
-        } else {
+        } catch (err: any) {
           result.errorLog.push({
             identifier: cred.formattedId,
-            error: 'Asset not rendered and no default template available',
+            error: err.message || 'Failed to package pass into archive',
           });
         }
-      } catch (err: any) {
-        result.errorLog.push({
-          identifier: cred.formattedId,
-          error: err.message || 'Failed to package pass into archive',
-        });
+
+        // Update progress every 10 records or on the last record
+        if (processedCount % 10 === 0 || processedCount === total) {
+          const percentage = Math.round((processedCount / total) * 100);
+          await this.jobRepo.updateProgress(job._id.toString(), {
+            total,
+            processed: processedCount,
+            succeeded: succeededCount,
+            failed: result.errorLog.length,
+            percentage,
+          });
+        }
       }
 
-      // Update progress every 10 records or on the last record
-      if (processedCount % 10 === 0 || processedCount === total) {
-        const percentage = Math.round((processedCount / total) * 100);
-        await this.jobRepo.updateProgress(job._id.toString(), {
-          total,
-          processed: processedCount,
-          succeeded: succeededCount,
-          failed: result.errorLog.length,
-          percentage,
-        });
+      await archive.finalize();
+      await archiveClosedPromise;
+
+      const fileSizeBytes = fs.existsSync(tempFilePath) ? fs.statSync(tempFilePath).size : 0;
+
+      // Upload finalized ZIP archive to Supabase Storage
+      const sanitizedEventName = (event.name || 'event')
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, '_')
+        .replace(/_+/g, '_');
+      const zipFilename = `passes-${sanitizedEventName}-${Date.now()}.zip`;
+
+      const fileData = fs.createReadStream(tempFilePath);
+      fileData.on('error', () => {});
+
+      let uploadRes: any;
+      try {
+        uploadRes = await this.storageService.uploadExportFile(
+          eventId,
+          fileData,
+          zipFilename,
+          'application/zip'
+        );
+      } finally {
+        fileData.destroy();
+      }
+
+      result.exportedCount = succeededCount;
+      result.downloadUrl = uploadRes.signedUrl || uploadRes.publicUrl;
+      result.storagePath = uploadRes.storagePath;
+      result.fileSizeBytes = fileSizeBytes;
+
+      await this.jobRepo.markCompleted(job._id.toString(), result);
+    } catch (err: any) {
+      archive.abort();
+      throw err;
+    } finally {
+      // Safe cleanup of temporary file on disk
+      if (fs.existsSync(tempFilePath)) {
+        try {
+          fs.unlinkSync(tempFilePath);
+        } catch (cleanupErr) {
+          console.warn('[EventExportService] Temp file cleanup note:', cleanupErr);
+        }
       }
     }
-
-    await archive.finalize();
-    const zipBuffer = await archivePromise;
-
-    // Upload finalized ZIP archive to Supabase Storage
-    const sanitizedEventName = (event.name || 'event')
-      .toLowerCase()
-      .replace(/[^a-z0-9_-]/g, '_')
-      .replace(/_+/g, '_');
-    const zipFilename = `passes-${sanitizedEventName}-${Date.now()}.zip`;
-
-    const uploadRes = await this.storageService.uploadExportFile(
-      eventId,
-      zipBuffer,
-      zipFilename,
-      'application/zip'
-    );
-
-    result.exportedCount = succeededCount;
-    result.downloadUrl = uploadRes.signedUrl || uploadRes.publicUrl;
-    result.storagePath = uploadRes.storagePath;
-    result.fileSizeBytes = zipBuffer.length;
-
-    await this.jobRepo.markCompleted(job._id.toString(), result);
   }
 
   /**

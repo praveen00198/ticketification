@@ -725,9 +725,38 @@
   - Zero-Trust security and host privacy are strictly enforced.
   - All 34 test suites pass with zero regressions.
 
+---
 
-
-
-
-
-
+## ADR-036: Background Job Reliability, Atomic Capacity Reservation & Bounded Export Streaming
+- **Status**: ACCEPTED
+- **Context**:
+  1. Background job processing was previously dispatched in-memory via `setImmediate()`. Unhandled crashes, restarts, or multi-worker deployments risked losing queued jobs, executing duplicate jobs, or hanging jobs indefinitely without recovery.
+  2. Bulk credential rendering had arbitrary pagination limits (500 and 200 records) which prevented processing large rosters beyond 500 attendees.
+  3. Registration capacity checking used a race-prone read-then-write pattern (`countDocuments` followed by `create`), permitting over-registration under concurrent load. Duplicate active registrations were possible under simultaneous submissions.
+  4. Event registration lifecycle lacked centralized state enforcement, permitting registrations on draft or suspended events if endpoints were directly called.
+  5. Bulk export creation accumulated unrendered in-memory chunks (`chunks.push(chunk)` + `Buffer.concat()`), triggering V8 heap exhaustion on 512MB RAM containers.
+- **Decision**:
+  1. **Durable Worker Leases & Distributed Job Queue**:
+     - Extended `event_jobs` schema with `lockedBy`, `lockExpiresAt` (5 min default lease), `attempts`, `maxAttempts` (default 3), `lastAttemptAt`, `failureReason`, and `nextRunAt`.
+     - Added compound index `{ status: 1, lockExpiresAt: 1, nextRunAt: 1, createdAt: 1 }`.
+     - Implemented atomic claiming via `claimJob` using `findOneAndUpdate({ _id, status: { $in: ['QUEUED', 'PROCESSING'] }, $or: [{ lockedBy: null }, { lockExpiresAt: { $lt: new Date() } }] }, { $set: { status: 'PROCESSING', lockedBy: workerId, lockExpiresAt } })`.
+     - Added bounded retries with exponential backoff (`releaseJobForRetry`), server restart recovery (`recoverAbandonedJobs`), and strict error sanitization (`sanitizeErrorMessage` redacting auth tokens, connection strings, keys, and PII).
+     - Ensured idempotent side-effect resumption on import retry via `alreadyCreatedCount` offset.
+  2. **Cursor-Based Bulk Rendering Beyond 500 Records**:
+     - Replaced arbitrary 200/500 query caps with `countUnrenderedByEvent` and cursor pagination `findUnrenderedBatch(eventId, limit, lastId)` querying `{ _id: { $gt: lastId } }`.
+     - Renders pass batches until unrendered count reaches zero, guaranteeing support for large-scale attendee rosters under 512MB RAM constraints (`sharp.concurrency(1)`).
+  3. **Atomic Database-Level Capacity Reservation & Partial Unique Indexing**:
+     - Added `confirmedCount` field to `IEventRegistration` on `EventModel`.
+     - Implemented `reserveRegistrationSlot(eventId, capacity)` executing atomic conditional increment: `findOneAndUpdate({ _id: eventId, $expr: { $lt: ['$registration.confirmedCount', '$registration.capacity'] } }, { $inc: { 'registration.confirmedCount': 1 } })`.
+     - Automatic slot release (`releaseRegistrationSlot`) and credential revocation if subsequent registration steps fail.
+     - Enforced partial unique compound indexes on `event_registrations`: `{ eventId: 1, userId: 1 }` and `{ eventId: 1, 'attendeeDetails.email': 1 }` filtered for active statuses (`CONFIRMED`, `WAITLISTED`, `ATTENDED`).
+  4. **Centralized Registration Eligibility Validation**:
+     - Enforced `validateRegistrationEligibility(event)` checking active event statuses (`PUBLISHED`, `REGISTRATION_OPEN`), valid registration windows (`registrationStartDate` / `registrationEndDate`), attendance mode matching, and `registrationRequired` configuration.
+  5. **Streaming ZIP Archiver to Temporary File**:
+     - Piped archiver directly to a temporary file via `fs.createWriteStream(tempFilePath)` in `os.tmpdir()`.
+     - Streamed file to Supabase Storage via `fs.createReadStream(tempFilePath)` with error listeners and guaranteed cleanup (`fs.unlinkSync`) in `finally`.
+- **Consequences**:
+  - Background jobs are durable, resilient across server crashes and multi-instance concurrency.
+  - Zero capacity overselling under high concurrency.
+  - Constant bounded memory usage for bulk exports.
+  - 100% compliance with engineering rules and zero external queue dependencies (Redis-free).

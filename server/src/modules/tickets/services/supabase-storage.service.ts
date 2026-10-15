@@ -464,7 +464,7 @@ export class SupabaseStorageService {
    */
   async uploadExportFile(
     eventId: string,
-    fileData: Buffer,
+    fileData: Buffer | fs.ReadStream | NodeJS.ReadableStream | any,
     filename: string,
     mimeType: string
   ): Promise<{ storagePath: string; publicUrl?: string; signedUrl?: string }> {
@@ -476,12 +476,17 @@ export class SupabaseStorageService {
     const sanitizedBase = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
     const storagePath = `events/${eventId}/exports/${sanitizedBase}`;
 
+    const uploadOptions: any = {
+      contentType: mimeType,
+      upsert: true,
+    };
+    if (fileData && typeof (fileData as any).pipe === 'function') {
+      uploadOptions.duplex = 'half';
+    }
+
     const { error: uploadError } = await this.client.storage
       .from(this.bucket)
-      .upload(storagePath, fileData, {
-        contentType: mimeType,
-        upsert: true,
-      });
+      .upload(storagePath, fileData, uploadOptions);
 
     if (uploadError) {
       throw new StorageError(`Failed to upload export file to Supabase Storage: ${uploadError.message}`);

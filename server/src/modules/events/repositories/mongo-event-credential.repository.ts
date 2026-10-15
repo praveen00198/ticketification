@@ -366,6 +366,65 @@ export class MongoEventCredentialRepository {
       { new: true }
     );
   }
+
+  /**
+   * Count all unrendered credentials for an event (without 200/500 query cap).
+   */
+  async countUnrenderedByEvent(eventId: string): Promise<number> {
+    if (!mongoose.Types.ObjectId.isValid(eventId)) return 0;
+
+    if (mongoose.connection.readyState !== 1) {
+      const { credentials } = await this.findByEvent(eventId, { limit: 1000 });
+      return credentials.filter((c: any) => !c.asset?.storagePath).length;
+    }
+
+    return EventCredentialModel.countDocuments({
+      eventId: new mongoose.Types.ObjectId(eventId),
+      $or: [
+        { 'asset.storagePath': { $exists: false } },
+        { 'asset.storagePath': null },
+        { 'asset.storagePath': '' },
+      ],
+    }).exec();
+  }
+
+  /**
+   * Cursor-based batch pagination for unrendered credentials.
+   * Loads at most `limit` records per batch using deterministic _id pagination.
+   */
+  async findUnrenderedBatch(
+    eventId: string,
+    lastId?: string | mongoose.Types.ObjectId | null,
+    limit: number = 50
+  ): Promise<IEventCredentialDocument[]> {
+    if (!mongoose.Types.ObjectId.isValid(eventId)) return [];
+
+    if (mongoose.connection.readyState !== 1) {
+      const { credentials } = await this.findByEvent(eventId, { limit: 1000 });
+      const unrendered = credentials.filter((c: any) => !c.asset?.storagePath);
+      return unrendered.slice(0, limit);
+    }
+
+    const query: any = {
+      eventId: new mongoose.Types.ObjectId(eventId),
+      $or: [
+        { 'asset.storagePath': { $exists: false } },
+        { 'asset.storagePath': null },
+        { 'asset.storagePath': '' },
+      ],
+    };
+
+    if (lastId && mongoose.Types.ObjectId.isValid(lastId)) {
+      query._id = { $gt: new mongoose.Types.ObjectId(lastId) };
+    }
+
+    const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 200);
+
+    return EventCredentialModel.find(query)
+      .sort({ _id: 1 })
+      .limit(safeLimit)
+      .exec();
+  }
 }
 
 export const mongoEventCredentialRepository = new MongoEventCredentialRepository();

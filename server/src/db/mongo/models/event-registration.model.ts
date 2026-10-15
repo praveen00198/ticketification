@@ -122,12 +122,26 @@ const EventRegistrationSchema = new Schema<IEventRegistrationDocument>(
   }
 );
 
-// Compound indexes
-EventRegistrationSchema.index({ eventId: 1, userId: 1 });
+// Compound indexes and partial unique constraints for active registrations
+EventRegistrationSchema.index(
+  { eventId: 1, userId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: { $in: ['CONFIRMED', 'WAITLISTED', 'ATTENDED'] } },
+    name: 'unique_active_user_event_registration',
+  }
+);
+EventRegistrationSchema.index(
+  { eventId: 1, 'attendeeDetails.email': 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: { $in: ['CONFIRMED', 'WAITLISTED', 'ATTENDED'] } },
+    name: 'unique_active_email_event_registration',
+  }
+);
 EventRegistrationSchema.index({ eventId: 1, userSupabaseId: 1 });
 EventRegistrationSchema.index({ eventId: 1, status: 1 });
 EventRegistrationSchema.index({ userSupabaseId: 1, status: 1 });
-EventRegistrationSchema.index({ eventId: 1, 'attendeeDetails.email': 1 });
 
 export const EventRegistrationModel: Model<IEventRegistrationDocument> =
   mongoose.models.EventRegistration ||

@@ -96,7 +96,7 @@ export class MongoEventJobRepository {
   }
 
   /**
-   * Mark job as COMPLETED and save final result.
+   * Mark job as COMPLETED and clear worker lease.
    */
   async markCompleted(
     jobId: string,
@@ -111,6 +111,8 @@ export class MongoEventJobRepository {
           completedAt: new Date(),
           'progress.percentage': 100,
           result: finalResult,
+          lockedBy: null,
+          lockExpiresAt: null,
         },
       },
       { new: true }
@@ -118,7 +120,7 @@ export class MongoEventJobRepository {
   }
 
   /**
-   * Mark job as FAILED with error message.
+   * Mark job as FAILED with error message and clear worker lease.
    */
   async markFailed(
     jobId: string,
@@ -132,6 +134,9 @@ export class MongoEventJobRepository {
         status: 'FAILED',
         failedAt: new Date(),
         errorMessage,
+        failureReason: errorMessage,
+        lockedBy: null,
+        lockExpiresAt: null,
       },
     };
 
@@ -148,6 +153,179 @@ export class MongoEventJobRepository {
     }
 
     return EventJobModel.findByIdAndUpdate(jobId, update, { new: true }).exec();
+  }
+
+  /**
+   * Atomically claim a specific job by ID for processing.
+   * Succeeds only if status is QUEUED or an expired PROCESSING lock.
+   */
+  async claimJob(
+    jobId: string,
+    workerId: string,
+    leaseMs: number = 10 * 60 * 1000
+  ): Promise<IEventJobDocument | null> {
+    if (!mongoose.Types.ObjectId.isValid(jobId)) return null;
+
+    if (mongoose.connection.readyState !== 1) {
+      const job = await this.findById(jobId);
+      if (job && (job.status === 'QUEUED' || job.status === 'PROCESSING')) {
+        await this.markStarted(jobId);
+        job.lockedBy = workerId;
+        job.lockExpiresAt = new Date(Date.now() + leaseMs);
+        job.attempts = (job.attempts || 0) + 1;
+        return job;
+      }
+      return null;
+    }
+
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + leaseMs);
+
+    return EventJobModel.findOneAndUpdate(
+      {
+        _id: new mongoose.Types.ObjectId(jobId),
+        $or: [
+          { status: 'QUEUED' },
+          { status: 'PROCESSING', lockExpiresAt: { $lt: now } },
+        ],
+      },
+      {
+        $set: {
+          status: 'PROCESSING',
+          lockedBy: workerId,
+          lockExpiresAt: expiresAt,
+          startedAt: now,
+          lastAttemptAt: now,
+        },
+        $inc: { attempts: 1 },
+      },
+      { new: true }
+    ).exec();
+  }
+
+  /**
+   * Atomically claim next available queued or abandoned job across workers.
+   */
+  async claimNextAvailableJob(
+    workerId: string,
+    leaseMs: number = 10 * 60 * 1000
+  ): Promise<IEventJobDocument | null> {
+    if (mongoose.connection.readyState !== 1) {
+      return null;
+    }
+
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + leaseMs);
+
+    return EventJobModel.findOneAndUpdate(
+      {
+        $or: [
+          {
+            status: 'QUEUED',
+            $or: [
+              { nextRunAt: { $exists: false } },
+              { nextRunAt: null },
+              { nextRunAt: { $lte: now } },
+            ],
+          },
+          {
+            status: 'PROCESSING',
+            lockExpiresAt: { $lt: now },
+          },
+        ],
+      },
+      {
+        $set: {
+          status: 'PROCESSING',
+          lockedBy: workerId,
+          lockExpiresAt: expiresAt,
+          startedAt: now,
+          lastAttemptAt: now,
+        },
+        $inc: { attempts: 1 },
+      },
+      { sort: { createdAt: 1 }, new: true }
+    ).exec();
+  }
+
+  /**
+   * Release a job back to QUEUED for bounded retry after transient failure.
+   */
+  async releaseJobForRetry(
+    jobId: string,
+    errorMessage: string,
+    delayMs: number = 5000
+  ): Promise<IEventJobDocument | null> {
+    if (!mongoose.Types.ObjectId.isValid(jobId)) return null;
+
+    if (mongoose.connection.readyState !== 1) {
+      const job = await this.findById(jobId);
+      if (job) {
+        job.status = 'QUEUED';
+        job.failureReason = errorMessage;
+      }
+      return job;
+    }
+
+    const now = new Date();
+    const nextRun = new Date(now.getTime() + delayMs);
+
+    return EventJobModel.findByIdAndUpdate(
+      jobId,
+      {
+        $set: {
+          status: 'QUEUED',
+          lockedBy: null,
+          lockExpiresAt: null,
+          failureReason: errorMessage,
+          nextRunAt: nextRun,
+        },
+      },
+      { new: true }
+    ).exec();
+  }
+
+  /**
+   * Recover abandoned jobs (e.g. after server restart or worker crash).
+   * Either resets eligible jobs to QUEUED or marks exhausted jobs FAILED.
+   */
+  async recoverAbandonedJobs(leaseGraceMs: number = 0): Promise<{ recovered: number; failed: number }> {
+    if (mongoose.connection.readyState !== 1) {
+      return { recovered: 0, failed: 0 };
+    }
+
+    const now = new Date(Date.now() - leaseGraceMs);
+
+    const abandonedJobs = await EventJobModel.find({
+      status: 'PROCESSING',
+      lockExpiresAt: { $lt: now },
+    }).exec();
+
+    let recovered = 0;
+    let failed = 0;
+
+    for (const job of abandonedJobs) {
+      if (job.attempts >= job.maxAttempts) {
+        await this.markFailed(
+          job._id.toString(),
+          'Abandoned by worker and exceeded maximum retry attempts'
+        );
+        failed++;
+      } else {
+        await EventJobModel.findByIdAndUpdate(job._id, {
+          $set: {
+            status: 'QUEUED',
+            lockedBy: null,
+            lockExpiresAt: null,
+            failureReason: 'Recovered from abandoned worker process',
+            nextRunAt: new Date(),
+          },
+        }).exec();
+        recovered++;
+      }
+    }
+
+    return { recovered, failed };
   }
 
   /**

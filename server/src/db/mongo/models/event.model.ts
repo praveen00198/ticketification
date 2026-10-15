@@ -96,6 +96,7 @@ export interface IEventRegistration {
   pricingModel?: 'FREE' | 'PAID';
   registrationRequired?: boolean;
   capacity?: number;
+  confirmedCount?: number;
 }
 
 export type EventVerificationLevel = 'UNVERIFIED' | 'LOW' | 'MEDIUM' | 'HIGH';
@@ -228,6 +229,11 @@ const EventRegistrationSchema = new Schema<IEventRegistration>(
     capacity: {
       type: Number,
       min: [1, 'Capacity must be at least 1'],
+    },
+    confirmedCount: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
   },
   { _id: false }
