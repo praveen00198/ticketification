@@ -29,6 +29,9 @@ export interface EnvConfig {
   uploadDir: string;
   puppeteerHeadless: boolean;
   initialAdminEmails: string[];
+  // Resend Email Service
+  resendApiKey: string;
+  resendFromEmail: string;
 }
 
 function validateAndLoadEnv(): EnvConfig {
@@ -137,6 +140,9 @@ function validateAndLoadEnv(): EnvConfig {
       .split(',')
       .map((e) => e.trim().toLowerCase())
       .filter(Boolean),
+    // Resend Email Service
+    resendApiKey: process.env.RESEND_API_KEY || '',
+    resendFromEmail: process.env.RESEND_FROM_EMAIL || 'Ticketification <onboarding@resend.dev>',
   };
 }
 
