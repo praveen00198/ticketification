@@ -167,13 +167,6 @@ export class EventRegistrationService {
     let slotReserved = false;
 
     if (capacity && capacity > 0) {
-      const activeCount = await this.registrationRepo.countByEvent(eventId, 'CONFIRMED');
-      if (activeCount >= capacity) {
-        throw new ValidationError(
-          `Event capacity limit (${capacity}) has been reached. Registration closed.`
-        );
-      }
-
       const reserved = await this.eventRepo.reserveRegistrationSlot(eventId, capacity);
       if (!reserved) {
         throw new ValidationError(
@@ -343,19 +336,21 @@ export class EventRegistrationService {
       throw new NotFoundError('No active registration found for this event');
     }
 
-    // Release capacity slot if registration was confirmed
-    if (registration.status === 'CONFIRMED') {
-      await this.eventRepo.releaseRegistrationSlot(eventId);
-    }
-
-    // Cancel registration
-    await this.registrationRepo.updateStatus(
+    // Atomically cancel registration and release capacity slot only if transition succeeded
+    const wasConfirmed = registration.status === 'CONFIRMED';
+    const cancelledReg = await this.registrationRepo.updateStatus(
       registration._id.toString(),
       eventId,
       'CANCELLED',
       new Date(),
-      reason || 'Cancelled by attendee'
+      reason || 'Cancelled by attendee',
+      wasConfirmed ? 'CONFIRMED' : undefined
     );
+
+    if (wasConfirmed && cancelledReg) {
+      // Exactly-once capacity release
+      await this.eventRepo.releaseRegistrationSlot(eventId);
+    }
 
     // Revoke linked credential if active
     if (registration.credentialId) {

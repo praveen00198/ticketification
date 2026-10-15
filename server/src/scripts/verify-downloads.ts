@@ -1,25 +1,46 @@
 import axios from 'axios';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
+/**
+ * Test verification utility for local development ticket downloads.
+ * Explicitly guards against execution in production environments.
+ */
 async function verify() {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const allowVerification = process.env.ALLOW_TEST_VERIFICATION === 'true' || process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+
+  if (isProduction || !allowVerification) {
+    console.error('[Security] verify-downloads script aborted: Cannot run against production or unverified environments.');
+    console.error('[Security] Set NODE_ENV=development or ALLOW_TEST_VERIFICATION=true to run in local test fixtures.');
+    process.exit(1);
+  }
+
+  const baseUrl = process.env.TEST_API_URL || 'http://localhost:3000';
+
   try {
-    const testEmail = `ganesh-admin-${Date.now()}@ticketification.com`;
-    const testPassword = 'Password123!';
-    
-    // 1. Register test admin with eventName: "Ganesh Chaturthi"
-    const reg = await axios.post('http://localhost:3000/api/auth/register', {
-      name: 'Event Organizer',
+    const testEmail = `test-verify-${Date.now()}-${crypto.randomBytes(4).toString('hex')}@ticketification.example.invalid`;
+    // Ephemeral dynamic password for local test execution
+    const testPassword = process.env.TEST_ADMIN_PASSWORD || `P@ss-${crypto.randomBytes(8).toString('hex')}`;
+
+    // 1. Register test user
+    const reg = await axios.post(`${baseUrl}/api/auth/register`, {
+      name: 'Event Organizer Test',
       email: testEmail,
       password: testPassword,
-      eventName: 'Ganesh Chaturthi',
+      eventName: 'Verification Test Event',
     });
-    const token = reg.data.data.token;
-    console.log('1. Registered admin with event "Ganesh Chaturthi". Token:', token.substring(0, 15) + '...');
+
+    const token = reg.data?.data?.token;
+    if (!token) {
+      throw new Error('Registration succeeded but no authorization token was returned');
+    }
+    console.log('1. Registered test administrator account successfully. Auth session acquired.');
 
     // 2. Generate tickets
     const genRes = await axios.post(
-      'http://localhost:3000/api/tickets/generate',
+      `${baseUrl}/api/tickets/generate`,
       {
         guests: [
           {
@@ -36,26 +57,33 @@ async function verify() {
       },
       { headers: { Authorization: `Bearer ${token}` } }
     );
-    console.log('2. Generated tickets:');
-    genRes.data.data.tickets.forEach((t: any) => {
-      console.log(`   - Ticket ID: ${t.ticketId} | Name: ${t.name} | Event: ${t.event}`);
-    });
 
-    const firstTicket = genRes.data.data.tickets[0];
-    console.log('3. Testing single download for:', firstTicket.ticketId);
+    const tickets = genRes.data?.data?.tickets || [];
+    console.log(`2. Generated ${tickets.length} test tickets successfully.`);
 
-    const singleDl = await axios.get(`http://localhost:3000/api/tickets/${firstTicket.ticketId}/download?token=${token}`, {
+    if (tickets.length === 0) {
+      throw new Error('No tickets generated in response');
+    }
+
+    const firstTicket = tickets[0];
+    console.log('3. Testing single download for pass sequence identifier.');
+
+    const singleDl = await axios.get(`${baseUrl}/api/tickets/${firstTicket.ticketId}/download?token=${encodeURIComponent(token)}`, {
       responseType: 'arraybuffer',
     });
     console.log('   Single download Content-Disposition:', singleDl.headers['content-disposition']);
     console.log('   Single download size:', singleDl.data.length, 'bytes');
 
-    const testPngPath = path.resolve(process.cwd(), 'uploads/tickets', 'verified-ganesh-ticket.png');
+    const outDir = path.resolve(process.cwd(), 'uploads/tickets');
+    if (!fs.existsSync(outDir)) {
+      fs.mkdirSync(outDir, { recursive: true });
+    }
+    const testPngPath = path.join(outDir, 'verified-ganesh-ticket.png');
     fs.writeFileSync(testPngPath, singleDl.data);
-    console.log('   Saved verified-ganesh-ticket.png');
+    console.log('   Saved verified-ganesh-ticket.png to local test artifact directory.');
 
     console.log('4. Testing ZIP download...');
-    const zipDl = await axios.get(`http://localhost:3000/api/tickets/download-zip?token=${token}`, {
+    const zipDl = await axios.get(`${baseUrl}/api/tickets/download-zip?token=${encodeURIComponent(token)}`, {
       responseType: 'arraybuffer',
     });
     console.log('   ZIP download Content-Disposition:', zipDl.headers['content-disposition']);
@@ -63,9 +91,12 @@ async function verify() {
 
     console.log('ALL VERIFICATION TESTS COMPLETED SUCCESSFULLY!');
   } catch (err: any) {
-    console.error('Download verification error:', err.response?.data || err.message);
+    const errorDetails = err.response?.data?.message || err.message || 'Unknown verification error';
+    console.error('Download verification error (sanitized):', errorDetails);
+    process.exit(1);
   }
 }
 
-verify();
-
+if (require.main === module) {
+  verify();
+}

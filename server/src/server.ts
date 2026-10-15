@@ -37,6 +37,8 @@ console.log(`[DIAG:Storage] ${JSON.stringify({
 })}`);
 
 
+import { eventJobQueueService } from './modules/events/services/event-job-queue.service';
+
 let serverInstance: any = null;
 
 async function startServer() {
@@ -69,6 +71,18 @@ async function startServer() {
     }
   }
 
+  // Recover abandoned background jobs and start worker polling loop
+  try {
+    const recoveryResult = await eventJobQueueService.recoverAbandonedJobs();
+    if (recoveryResult.recovered > 0 || recoveryResult.failed > 0) {
+      console.log(`[JobQueue] Recovered ${recoveryResult.recovered} abandoned jobs, failed ${recoveryResult.failed} exhausted jobs.`);
+    }
+    eventJobQueueService.startWorker();
+    console.log('[JobQueue] Controlled background worker polling started.');
+  } catch (jobErr: any) {
+    console.error('[JobQueue] Worker startup / recovery notice:', jobErr.message);
+  }
+
   const PORT = config.env.port;
   serverInstance = app.listen(PORT, () => {
     console.log(`[Server] Operational console API listening on http://localhost:${PORT}`);
@@ -96,6 +110,14 @@ process.on('unhandledRejection', (reason: any) => {
 async function gracefulShutdown(signal: string) {
   logMemory(`${signal.toLowerCase()}_shutdown`);
   console.log(`[Server] ${signal} received, shutting down gracefully...`);
+
+  try {
+    await eventJobQueueService.stopWorker(5000);
+    console.log('[JobQueue] Background worker stopped cleanly.');
+  } catch (stopErr: any) {
+    console.error('[JobQueue] Worker shutdown note:', stopErr.message);
+  }
+
   if (serverInstance) {
     serverInstance.close(async () => {
       console.log('[Server] HTTP listener closed cleanly.');

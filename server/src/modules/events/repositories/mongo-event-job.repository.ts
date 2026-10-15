@@ -64,13 +64,41 @@ export class MongoEventJobRepository {
 
   /**
    * Atomically update progress metrics and partial results.
+   * If workerId is provided, validates active lease ownership before writing.
    */
   async updateProgress(
     jobId: string,
     progress: Partial<IJobProgress>,
-    partialResult?: Partial<IJobResult>
+    partialResult?: Partial<IJobResult>,
+    workerId?: string
   ): Promise<IEventJobDocument | null> {
     if (!mongoose.Types.ObjectId.isValid(jobId)) return null;
+
+    if (mongoose.connection.readyState !== 1) {
+      const job = await this.findById(jobId);
+      if (!job) return null;
+      if (workerId && job.lockedBy && job.lockedBy !== workerId) return null;
+      if (progress.total !== undefined) job.progress.total = progress.total;
+      if (progress.processed !== undefined) job.progress.processed = progress.processed;
+      if (progress.succeeded !== undefined) job.progress.succeeded = progress.succeeded;
+      if (progress.failed !== undefined) job.progress.failed = progress.failed;
+      if (progress.percentage !== undefined) job.progress.percentage = progress.percentage;
+      if (partialResult) {
+        if (partialResult.importedCount !== undefined) job.result.importedCount = partialResult.importedCount;
+        if (partialResult.renderedCount !== undefined) job.result.renderedCount = partialResult.renderedCount;
+        if (partialResult.exportedCount !== undefined) job.result.exportedCount = partialResult.exportedCount;
+        if (partialResult.errorLog) job.result.errorLog = partialResult.errorLog;
+      }
+      return job;
+    }
+
+    const now = new Date();
+    const query: any = { _id: new mongoose.Types.ObjectId(jobId) };
+    if (workerId) {
+      query.status = 'PROCESSING';
+      query.lockedBy = workerId;
+      query.lockExpiresAt = { $gte: now };
+    }
 
     const update: any = { $set: {} };
 
@@ -87,24 +115,50 @@ export class MongoEventJobRepository {
       if (partialResult.renderedCount !== undefined) {
         update.$set['result.renderedCount'] = partialResult.renderedCount;
       }
-      if (partialResult.errorLog && partialResult.errorLog.length > 0) {
-        update.$push = { 'result.errorLog': { $each: partialResult.errorLog } };
+      if (partialResult.exportedCount !== undefined) {
+        update.$set['result.exportedCount'] = partialResult.exportedCount;
+      }
+      if (partialResult.errorLog !== undefined) {
+        update.$set['result.errorLog'] = partialResult.errorLog;
       }
     }
 
-    return EventJobModel.findByIdAndUpdate(jobId, update, { new: true }).exec();
+    return EventJobModel.findOneAndUpdate(query, update, { new: true }).exec();
   }
 
   /**
    * Mark job as COMPLETED and clear worker lease.
+   * If workerId is provided, validates that worker still owns an unexpired lease.
    */
   async markCompleted(
     jobId: string,
-    finalResult: IJobResult
+    finalResult: IJobResult,
+    workerId?: string
   ): Promise<IEventJobDocument | null> {
     if (!mongoose.Types.ObjectId.isValid(jobId)) return null;
-    return EventJobModel.findByIdAndUpdate(
-      jobId,
+
+    if (mongoose.connection.readyState !== 1) {
+      const job = await this.findById(jobId);
+      if (!job) return null;
+      if (workerId && job.lockedBy && job.lockedBy !== workerId) return null;
+      job.status = 'COMPLETED';
+      job.completedAt = new Date();
+      job.progress.percentage = 100;
+      job.result = finalResult;
+      job.lockedBy = null;
+      job.lockExpiresAt = null;
+      return job;
+    }
+
+    const query: any = { _id: new mongoose.Types.ObjectId(jobId) };
+    if (workerId) {
+      query.status = 'PROCESSING';
+      query.lockedBy = workerId;
+      query.lockExpiresAt = { $gte: new Date() };
+    }
+
+    return EventJobModel.findOneAndUpdate(
+      query,
       {
         $set: {
           status: 'COMPLETED',
@@ -125,9 +179,32 @@ export class MongoEventJobRepository {
   async markFailed(
     jobId: string,
     errorMessage: string,
-    partialResult?: Partial<IJobResult>
+    partialResult?: Partial<IJobResult>,
+    workerId?: string
   ): Promise<IEventJobDocument | null> {
     if (!mongoose.Types.ObjectId.isValid(jobId)) return null;
+
+    if (mongoose.connection.readyState !== 1) {
+      const job = await this.findById(jobId);
+      if (!job) return null;
+      job.status = 'FAILED';
+      job.failedAt = new Date();
+      job.errorMessage = errorMessage;
+      job.failureReason = errorMessage;
+      job.lockedBy = null;
+      job.lockExpiresAt = null;
+      if (partialResult?.errorLog) job.result.errorLog = partialResult.errorLog;
+      return job;
+    }
+
+    const query: any = { _id: new mongoose.Types.ObjectId(jobId) };
+    if (workerId) {
+      query.$or = [
+        { lockedBy: workerId },
+        { lockedBy: null },
+        { lockExpiresAt: { $lt: new Date() } },
+      ];
+    }
 
     const update: any = {
       $set: {
@@ -147,17 +224,86 @@ export class MongoEventJobRepository {
       if (partialResult.renderedCount !== undefined) {
         update.$set['result.renderedCount'] = partialResult.renderedCount;
       }
-      if (partialResult.errorLog && partialResult.errorLog.length > 0) {
-        update.$push = { 'result.errorLog': { $each: partialResult.errorLog } };
+      if (partialResult.exportedCount !== undefined) {
+        update.$set['result.exportedCount'] = partialResult.exportedCount;
+      }
+      if (partialResult.errorLog !== undefined) {
+        update.$set['result.errorLog'] = partialResult.errorLog;
       }
     }
 
-    return EventJobModel.findByIdAndUpdate(jobId, update, { new: true }).exec();
+    return EventJobModel.findOneAndUpdate(query, update, { new: true }).exec();
+  }
+
+  /**
+   * Persist updated job payload (e.g. allocated sequence ranges).
+   */
+  async updatePayload(
+    jobId: string,
+    payload: Record<string, any>
+  ): Promise<IEventJobDocument | null> {
+    if (!mongoose.Types.ObjectId.isValid(jobId)) return null;
+
+    if (mongoose.connection.readyState !== 1) {
+      const job = await this.findById(jobId);
+      if (job) {
+        job.payload = payload;
+      }
+      return job;
+    }
+
+    return EventJobModel.findByIdAndUpdate(
+      jobId,
+      { $set: { payload } },
+      { new: true }
+    ).exec();
+  }
+
+  /**
+   * Renew worker lease for an actively running job (heartbeat).
+   * Succeeds only if worker still owns the valid, unexpired lease.
+   */
+  async renewLease(
+    jobId: string,
+    workerId: string,
+    leaseMs: number = 10 * 60 * 1000
+  ): Promise<boolean> {
+    if (!mongoose.Types.ObjectId.isValid(jobId)) return false;
+
+    if (mongoose.connection.readyState !== 1) {
+      const job = await this.findById(jobId);
+      if (job && job.status === 'PROCESSING' && job.lockedBy === workerId) {
+        job.lockExpiresAt = new Date(Date.now() + leaseMs);
+        return true;
+      }
+      return false;
+    }
+
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + leaseMs);
+
+    const updated = await EventJobModel.findOneAndUpdate(
+      {
+        _id: new mongoose.Types.ObjectId(jobId),
+        status: 'PROCESSING',
+        lockedBy: workerId,
+        lockExpiresAt: { $gte: now },
+      },
+      {
+        $set: {
+          lockExpiresAt: expiresAt,
+        },
+      },
+      { new: true }
+    ).exec();
+
+    return !!updated;
   }
 
   /**
    * Atomically claim a specific job by ID for processing.
-   * Succeeds only if status is QUEUED or an expired PROCESSING lock.
+   * Succeeds only if status is QUEUED (and nextRunAt is due) or an expired PROCESSING lock,
+   * provided maximum retry attempts have not been exceeded.
    */
   async claimJob(
     jobId: string,
@@ -166,27 +312,50 @@ export class MongoEventJobRepository {
   ): Promise<IEventJobDocument | null> {
     if (!mongoose.Types.ObjectId.isValid(jobId)) return null;
 
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + leaseMs);
+
     if (mongoose.connection.readyState !== 1) {
       const job = await this.findById(jobId);
       if (job && (job.status === 'QUEUED' || job.status === 'PROCESSING')) {
+        if (job.nextRunAt && job.nextRunAt > now) return null;
+        if (job.attempts >= (job.maxAttempts || 3)) return null;
         await this.markStarted(jobId);
+        job.status = 'PROCESSING';
         job.lockedBy = workerId;
-        job.lockExpiresAt = new Date(Date.now() + leaseMs);
+        job.lockExpiresAt = expiresAt;
         job.attempts = (job.attempts || 0) + 1;
+        job.lastAttemptAt = now;
         return job;
       }
       return null;
     }
 
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + leaseMs);
-
     return EventJobModel.findOneAndUpdate(
       {
         _id: new mongoose.Types.ObjectId(jobId),
-        $or: [
-          { status: 'QUEUED' },
-          { status: 'PROCESSING', lockExpiresAt: { $lt: now } },
+        $and: [
+          {
+            $or: [
+              {
+                status: 'QUEUED',
+                $or: [
+                  { nextRunAt: { $exists: false } },
+                  { nextRunAt: null },
+                  { nextRunAt: { $lte: now } },
+                ],
+              },
+              {
+                status: 'PROCESSING',
+                lockExpiresAt: { $lt: now },
+              },
+            ],
+          },
+          {
+            $expr: {
+              $lt: ['$attempts', { $ifNull: ['$maxAttempts', 3] }],
+            },
+          },
         ],
       },
       {
@@ -205,32 +374,42 @@ export class MongoEventJobRepository {
 
   /**
    * Atomically claim next available queued or abandoned job across workers.
+   * Respects nextRunAt schedules and bounded retry limits.
    */
   async claimNextAvailableJob(
     workerId: string,
     leaseMs: number = 10 * 60 * 1000
   ): Promise<IEventJobDocument | null> {
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + leaseMs);
+
     if (mongoose.connection.readyState !== 1) {
       return null;
     }
 
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + leaseMs);
-
     return EventJobModel.findOneAndUpdate(
       {
-        $or: [
+        $and: [
           {
-            status: 'QUEUED',
             $or: [
-              { nextRunAt: { $exists: false } },
-              { nextRunAt: null },
-              { nextRunAt: { $lte: now } },
+              {
+                status: 'QUEUED',
+                $or: [
+                  { nextRunAt: { $exists: false } },
+                  { nextRunAt: null },
+                  { nextRunAt: { $lte: now } },
+                ],
+              },
+              {
+                status: 'PROCESSING',
+                lockExpiresAt: { $lt: now },
+              },
             ],
           },
           {
-            status: 'PROCESSING',
-            lockExpiresAt: { $lt: now },
+            $expr: {
+              $lt: ['$attempts', { $ifNull: ['$maxAttempts', 3] }],
+            },
           },
         ],
       },

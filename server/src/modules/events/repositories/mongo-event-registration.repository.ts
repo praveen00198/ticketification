@@ -97,17 +97,23 @@ export class MongoEventRegistrationRepository {
     eventId: string,
     status: RegistrationStatus,
     cancelledAt?: Date,
-    cancellationReason?: string
+    cancellationReason?: string,
+    expectedPreviousStatus?: RegistrationStatus
   ): Promise<IEventRegistrationDocument | null> {
+    const query: any = {
+      _id: new mongoose.Types.ObjectId(id),
+      eventId: new mongoose.Types.ObjectId(eventId),
+    };
+    if (expectedPreviousStatus) {
+      query.status = expectedPreviousStatus;
+    }
+
     const update: any = { status };
     if (cancelledAt) update.cancelledAt = cancelledAt;
     if (cancellationReason) update.cancellationReason = cancellationReason;
 
     return await EventRegistrationModel.findOneAndUpdate(
-      {
-        _id: new mongoose.Types.ObjectId(id),
-        eventId: new mongoose.Types.ObjectId(eventId),
-      },
+      query,
       { $set: update },
       { new: true }
     ).exec();

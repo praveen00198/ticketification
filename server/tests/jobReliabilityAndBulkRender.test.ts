@@ -292,12 +292,12 @@ describe('Job Reliability, Concurrency & Bulk Render Beyond 500 Records', () => 
 
     it('safely sanitizes secrets, Bearer tokens, passwords, and PII from failure logs', () => {
       const sensitiveErr = new Error(
-        'Database connection failed for mongodb+srv://admin:SuperSecret123@cluster0.mongodb.net/test with Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.t-ID and user email rahul@secret.com phone +15551234567'
+        'Database connection failed for mongodb+srv://testuser:syntheticSecret123@synthetic-cluster.example.invalid/test with Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.t-ID and user email test-person@example.invalid phone +15551234567'
       );
 
       const sanitized = service.sanitizeErrorMessage(sensitiveErr);
-      expect(sanitized).not.toContain('SuperSecret123');
-      expect(sanitized).not.toContain('rahul@secret.com');
+      expect(sanitized).not.toContain('syntheticSecret123');
+      expect(sanitized).not.toContain('test-person@example.invalid');
       expect(sanitized).not.toContain('+15551234567');
       expect(sanitized).toContain('mongodb+srv://[REDACTED_URI]');
       expect(sanitized).toContain('Bearer [REDACTED]');

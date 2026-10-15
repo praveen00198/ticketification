@@ -266,10 +266,55 @@ export class MongoEventRepository {
   }
 
   /**
+   * Reconcile or ensure confirmedCount is properly initialized from authoritative registration records.
+   * If forceReconcile is true, synchronizes the count with actual confirmed registrations.
+   * If false, only sets it if missing (null or undefined) to preserve concurrent reservations.
+   */
+  async reconcileConfirmedCount(eventId: string, forceReconcile: boolean = false): Promise<number> {
+    if (!mongoose.Types.ObjectId.isValid(eventId)) return 0;
+    if (mongoose.connection.readyState !== 1) return 0;
+
+    const event = await this.model.findById(eventId);
+    if (!event) return 0;
+
+    const hasCounter = event.registration?.confirmedCount !== undefined && event.registration?.confirmedCount !== null;
+    if (hasCounter && !forceReconcile) {
+      return event.registration!.confirmedCount!;
+    }
+
+    const { EventRegistrationModel } = await import('../../../db/mongo/models/event-registration.model');
+    const actualCount = await EventRegistrationModel.countDocuments({
+      eventId: new mongoose.Types.ObjectId(eventId),
+      status: { $in: ['CONFIRMED', 'ATTENDED'] },
+    });
+
+    if (forceReconcile) {
+      await this.model.updateOne(
+        { _id: new mongoose.Types.ObjectId(eventId) },
+        { $set: { 'registration.confirmedCount': actualCount } }
+      ).exec();
+    } else {
+      await this.model.updateOne(
+        {
+          _id: new mongoose.Types.ObjectId(eventId),
+          $or: [
+            { 'registration.confirmedCount': { $exists: false } },
+            { 'registration.confirmedCount': null },
+          ],
+        },
+        { $set: { 'registration.confirmedCount': actualCount } }
+      ).exec();
+    }
+
+    return actualCount;
+  }
+
+  /**
    * Atomically reserve a registration capacity slot.
+   * Validates event registration eligibility status (PUBLISHED or REGISTRATION_OPEN).
+   * Ensures counter is initialized for legacy events before reserving.
    * If capacity is set, only increments if confirmedCount < capacity.
-   * If capacity is unlimited/not set, increments unconditionally.
-   * Returns true if slot successfully reserved, false if capacity limit reached.
+   * Returns true if slot successfully reserved, false if capacity limit reached or event ineligible.
    */
   async reserveRegistrationSlot(eventId: string, capacity?: number): Promise<boolean> {
     if (!mongoose.Types.ObjectId.isValid(eventId)) return false;
@@ -279,7 +324,13 @@ export class MongoEventRepository {
       return true;
     }
 
-    const query: any = { _id: new mongoose.Types.ObjectId(eventId) };
+    // Lazy initialization for legacy events lacking confirmedCount
+    await this.reconcileConfirmedCount(eventId, false);
+
+    const query: any = {
+      _id: new mongoose.Types.ObjectId(eventId),
+      status: { $in: ['PUBLISHED', 'REGISTRATION_OPEN'] },
+    };
 
     if (capacity && capacity > 0) {
       query.$expr = {

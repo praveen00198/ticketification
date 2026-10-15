@@ -159,6 +159,10 @@ export class MongoEventCredentialRepository {
       return [];
     }
 
+    if (mongoose.connection.readyState !== 1) {
+      return [];
+    }
+
     const query: any = { eventId: new mongoose.Types.ObjectId(eventId) };
     if (filters.status && filters.status !== 'ALL') {
       query.status = filters.status;
@@ -168,6 +172,80 @@ export class MongoEventCredentialRepository {
     }
 
     return EventCredentialModel.find(query).sort({ sequenceNumber: 1 });
+  }
+
+  /**
+   * Find credentials within a contiguous sequence number range for an event.
+   */
+  async findBySequenceRange(
+    eventId: string,
+    startSeq: number,
+    endSeq: number
+  ): Promise<IEventCredentialDocument[]> {
+    if (!mongoose.Types.ObjectId.isValid(eventId)) return [];
+
+    if (mongoose.connection.readyState !== 1) {
+      return [];
+    }
+
+    return EventCredentialModel.find({
+      eventId: new mongoose.Types.ObjectId(eventId),
+      sequenceNumber: { $gte: startSeq, $lte: endSeq },
+    }).sort({ sequenceNumber: 1 });
+  }
+
+  /**
+   * Count credentials matching export filters.
+   */
+  async countForExport(
+    eventId: string,
+    filters: CredentialQueryFilters = {}
+  ): Promise<number> {
+    if (!mongoose.Types.ObjectId.isValid(eventId)) return 0;
+
+    if (mongoose.connection.readyState !== 1) {
+      const items = await this.findAllForExport(eventId, filters);
+      return items.length;
+    }
+
+    const query: any = { eventId: new mongoose.Types.ObjectId(eventId) };
+    if (filters.status && filters.status !== 'ALL') query.status = filters.status;
+    if (filters.credentialType && filters.credentialType !== 'ALL') query.credentialType = filters.credentialType;
+    return EventCredentialModel.countDocuments(query).exec();
+  }
+
+  /**
+   * Return a Mongoose cursor for streaming credentials with bounded memory.
+   */
+  findExportCursor(
+    eventId: string,
+    filters: CredentialQueryFilters = {},
+    batchSize: number = 50
+  ) {
+    if (!mongoose.Types.ObjectId.isValid(eventId)) {
+      throw new Error('Invalid eventId for export cursor');
+    }
+
+    if (mongoose.connection.readyState !== 1) {
+      const self = this;
+      return {
+        async *[Symbol.asyncIterator]() {
+          const items = await self.findAllForExport(eventId, filters);
+          for (const item of items) {
+            yield item;
+          }
+        },
+        close: async () => {},
+      };
+    }
+
+    const query: any = { eventId: new mongoose.Types.ObjectId(eventId) };
+    if (filters.status && filters.status !== 'ALL') query.status = filters.status;
+    if (filters.credentialType && filters.credentialType !== 'ALL') query.credentialType = filters.credentialType;
+
+    return EventCredentialModel.find(query)
+      .sort({ sequenceNumber: 1 })
+      .cursor({ batchSize });
   }
 
   /**

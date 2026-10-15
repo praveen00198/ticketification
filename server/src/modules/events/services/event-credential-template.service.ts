@@ -425,7 +425,7 @@ export class EventCredentialTemplateService {
       eventName: event.name,
       date: event.schedule?.startAt
         ? new Date(event.schedule.startAt).toLocaleDateString()
-        : '2026-10-10',
+        : 'Date TBA',
       venue: event.venue?.name || 'Main Venue',
     };
 

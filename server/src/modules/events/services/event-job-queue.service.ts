@@ -47,6 +47,12 @@ import {
 } from '../../../middlewares/error.middleware';
 
 export class EventJobQueueService {
+  private workerId: string = `worker-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
+  private pollTimer: NodeJS.Timeout | null = null;
+  private isPolling: boolean = false;
+  private isShuttingDown: boolean = false;
+  private activeJobPromise: Promise<void> | null = null;
+
   constructor(
     private jobRepo: MongoEventJobRepository = mongoEventJobRepository,
     private credentialRepo: MongoEventCredentialRepository = mongoEventCredentialRepository,
@@ -56,6 +62,91 @@ export class EventJobQueueService {
     private memberRepo: MongoEventMemberRepository = mongoEventMemberRepository,
     private userRepo: MongoUserRepository = mongoUserRepository
   ) {}
+
+  public getWorkerId(): string {
+    return this.workerId;
+  }
+
+  public setWorkerId(id: string): void {
+    this.workerId = id;
+  }
+
+  /**
+   * Start controlled background polling loop.
+   */
+  public startWorker(pollIntervalMs: number = 2000): void {
+    if (this.pollTimer) return;
+    this.isShuttingDown = false;
+
+    const tick = async () => {
+      if (this.isShuttingDown || this.isPolling) return;
+      this.isPolling = true;
+
+      try {
+        const nextJob = await this.jobRepo.claimNextAvailableJob(this.workerId);
+        if (nextJob) {
+          this.activeJobPromise = this.executeClaimedJob(nextJob);
+          await this.activeJobPromise;
+          this.activeJobPromise = null;
+
+          // Check immediately for more pending jobs without waiting for next poll tick
+          if (!this.isShuttingDown) {
+            setImmediate(tick);
+            return;
+          }
+        }
+      } catch (err: any) {
+        console.error(`[JobQueueWorker] Worker tick error: ${this.sanitizeErrorMessage(err.message)}`);
+      } finally {
+        this.isPolling = false;
+      }
+    };
+
+    this.pollTimer = setInterval(tick, pollIntervalMs);
+    setImmediate(tick);
+  }
+
+  /**
+   * Stop background worker and wait for currently active job to finish up to timeoutMs.
+   */
+  public async stopWorker(timeoutMs: number = 5000): Promise<void> {
+    this.isShuttingDown = true;
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+
+    if (this.activeJobPromise) {
+      await Promise.race([
+        this.activeJobPromise,
+        new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+      ]);
+    }
+  }
+
+  /**
+   * Wake up worker immediately to process new jobs without blocking API callers.
+   */
+  public wakeWorker(): void {
+    if (this.pollTimer && !this.isPolling && !this.isShuttingDown) {
+      setImmediate(async () => {
+        if (this.isPolling || this.isShuttingDown) return;
+        this.isPolling = true;
+        try {
+          const nextJob = await this.jobRepo.claimNextAvailableJob(this.workerId);
+          if (nextJob) {
+            this.activeJobPromise = this.executeClaimedJob(nextJob);
+            await this.activeJobPromise;
+            this.activeJobPromise = null;
+          }
+        } catch (err: any) {
+          console.error(`[JobQueueWorker] Wake tick error: ${this.sanitizeErrorMessage(err.message)}`);
+        } finally {
+          this.isPolling = false;
+        }
+      });
+    }
+  }
 
   /**
    * Verify Host or Coordinator authority via event_members.
@@ -116,6 +207,10 @@ export class EventJobQueueService {
       credentialType?: string;
     } = {}
   ): Promise<IEventJobDocument> {
+    if (this.isShuttingDown) {
+      throw new ValidationError('Server is shutting down. Cannot accept new jobs.');
+    }
+
     const { actorUser } = await this.authorizeHostOrCoordinator(
       eventId,
       callerUserId,
@@ -146,24 +241,8 @@ export class EventJobQueueService {
       createdBy: actorUser._id,
     });
 
-    // Execute asynchronously on event loop
-    setImmediate(() => {
-      this.executeJob(job._id.toString()).catch((err) => {
-        console.error(`[JobQueue] Unhandled job error for ${job._id}:`, err);
-      });
-    });
-
+    this.wakeWorker();
     return job;
-  }
-
-  private workerId: string = `worker-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
-
-  public getWorkerId(): string {
-    return this.workerId;
-  }
-
-  public setWorkerId(id: string): void {
-    this.workerId = id;
   }
 
   /**
@@ -197,13 +276,16 @@ export class EventJobQueueService {
     callerPlatformRole?: string,
     options: { templateId?: string } = {}
   ): Promise<IEventJobDocument> {
+    if (this.isShuttingDown) {
+      throw new ValidationError('Server is shutting down. Cannot accept new jobs.');
+    }
+
     const { actorUser } = await this.authorizeHostOrCoordinator(
       eventId,
       callerUserId,
       callerPlatformRole
     );
 
-    // Count unrendered credentials without query cap
     const unrenderedCount = await this.credentialRepo.countUnrenderedByEvent(eventId);
 
     const job = await this.jobRepo.createJob({
@@ -223,12 +305,7 @@ export class EventJobQueueService {
       createdBy: actorUser._id,
     });
 
-    setImmediate(() => {
-      this.executeJob(job._id.toString()).catch((err) => {
-        console.error(`[JobQueue] Unhandled job error for ${job._id}:`, err);
-      });
-    });
-
+    this.wakeWorker();
     return job;
   }
 
@@ -241,13 +318,16 @@ export class EventJobQueueService {
     callerUserId: string,
     callerPlatformRole?: string
   ): Promise<IEventJobDocument> {
+    if (this.isShuttingDown) {
+      throw new ValidationError('Server is shutting down. Cannot accept new jobs.');
+    }
+
     const { actorUser } = await this.authorizeHostOrCoordinator(
       eventId,
       callerUserId,
       callerPlatformRole
     );
 
-    // Verify storage quota allowance before enqueuing multi-megabyte export jobs
     await eventStorageGovernanceService.assertStorageAllowance(eventId, 10 * 1024 * 1024);
 
     const job = await this.jobRepo.createJob({
@@ -268,22 +348,24 @@ export class EventJobQueueService {
       createdBy: actorUser._id,
     });
 
-    setImmediate(() => {
-      this.executeJob(job._id.toString()).catch((err) => {
-        console.error(`[JobQueue] Unhandled export job error for ${job._id}:`, err);
-      });
-    });
-
+    this.wakeWorker();
     return job;
   }
 
   /**
-   * Background Execution Engine with atomic claiming, lease management, and bounded retries.
+   * Direct execution entry point by ID (atomically claims job with this.workerId).
    */
   async executeJob(jobId: string): Promise<void> {
-    // Atomically claim job to ensure no two workers process simultaneously
     const claimedJob = await this.jobRepo.claimJob(jobId, this.workerId);
     if (!claimedJob) return;
+    await this.executeClaimedJob(claimedJob);
+  }
+
+  /**
+   * Background Execution Engine for a claimed job with atomic ownership and bounded retry backoff.
+   */
+  private async executeClaimedJob(claimedJob: IEventJobDocument): Promise<void> {
+    const jobId = claimedJob._id.toString();
 
     try {
       if (claimedJob.jobType === 'IMPORT_CREDENTIALS') {
@@ -291,7 +373,7 @@ export class EventJobQueueService {
       } else if (claimedJob.jobType === 'BULK_RENDER_ASSETS') {
         await this.processBulkRenderJob(claimedJob);
       } else if (claimedJob.jobType === 'EXPORT_CREDENTIALS') {
-        await eventExportService.processExportJob(claimedJob);
+        await eventExportService.processExportJob(claimedJob, this.workerId);
       }
     } catch (err: any) {
       const sanitized = this.sanitizeErrorMessage(err.message || 'Job processing failed');
@@ -302,35 +384,37 @@ export class EventJobQueueService {
       const maxAttempts = refreshed?.maxAttempts || claimedJob.maxAttempts || 3;
 
       if (attempts < maxAttempts) {
-        // Bounded retry with backoff delay
-        await this.jobRepo.releaseJobForRetry(jobId, sanitized, 3000 * attempts);
+        // Exponential backoff: 2s, 4s, 8s... capped at 30s
+        const backoffDelay = Math.min(30000, 1000 * Math.pow(2, attempts));
+        await this.jobRepo.releaseJobForRetry(jobId, sanitized, backoffDelay);
       } else {
-        await this.jobRepo.markFailed(jobId, sanitized);
+        await this.jobRepo.markFailed(jobId, sanitized, undefined, this.workerId);
       }
     }
   }
 
   /**
    * Process Attendee Import Job in bounded batches.
-   * Fully idempotent across retries by reusing startingSequence and resuming.
+   * Fully idempotent across retries by persisting sequence range and reusing it.
    */
   private async processImportJob(job: IEventJobDocument): Promise<void> {
     const eventId = job.eventId.toString();
     const event = await this.eventRepo.findById(eventId);
     if (!event) throw new NotFoundError('Event not found for job');
 
-    const records: MappedAttendeeRecord[] = job.payload.records || [];
+    const records: MappedAttendeeRecord[] = job.payload?.records || [];
     const total = records.length;
     const terminology = event.credentialTerminology || 'Pass';
     const cleanPrefix = this.derivePrefix(terminology);
 
-    // Atomically reserve or reuse contiguous sequence numbers for the entire roster
+    // Persist allocated sequence range before processing chunks so retries reuse the identical block
     let startingSequence: number;
-    if (job.payload.startingSequence) {
+    if (job.payload?.startingSequence) {
       startingSequence = job.payload.startingSequence;
     } else {
       startingSequence = await this.credentialRepo.allocateSequenceBlock(eventId, total);
-      job.payload.startingSequence = startingSequence;
+      job.payload = { ...(job.payload || {}), startingSequence };
+      await this.jobRepo.updatePayload(job._id.toString(), job.payload);
     }
 
     const result: IJobResult = {
@@ -341,24 +425,40 @@ export class EventJobQueueService {
 
     const insertedCredentials: IEventCredentialDocument[] = [];
     const CHUNK_SIZE = 50;
-    const resumeIndex = job.progress?.processed || 0;
 
     for (let i = 0; i < total; i += CHUNK_SIZE) {
-      // Check cancellation
+      // Cancellation check
       const currentStatus = await this.jobRepo.findById(job._id.toString());
       if (currentStatus?.status === 'CANCELLED') return;
 
-      // Skip already processed chunks if retried
-      if (i + CHUNK_SIZE <= resumeIndex && resumeIndex > 0) {
-        continue;
+      // Heartbeat lease renewal
+      const renewed = await this.jobRepo.renewLease(job._id.toString(), this.workerId);
+      if (!renewed) {
+        throw new Error('Worker lease lost or expired during import chunk processing');
       }
 
       const chunk = records.slice(i, i + CHUNK_SIZE);
+      const startSeq = startingSequence + i;
+      const endSeq = startingSequence + i + chunk.length - 1;
+
+      // Idempotency check: load credentials already created in prior partial run of this chunk
+      const existingInChunk = await this.credentialRepo.findBySequenceRange(eventId, startSeq, endSeq);
+      const existingSeqMap = new Map<number, IEventCredentialDocument>();
+      for (const existingDoc of existingInChunk) {
+        existingSeqMap.set(existingDoc.sequenceNumber, existingDoc);
+      }
+
       const batchDocs: Partial<IEventCredentialDocument>[] = [];
 
       for (let j = 0; j < chunk.length; j++) {
         const record = chunk[j];
-        const seqNum = startingSequence + i + j;
+        const seqNum = startSeq + j;
+
+        if (existingSeqMap.has(seqNum)) {
+          insertedCredentials.push(existingSeqMap.get(seqNum)!);
+          continue;
+        }
+
         const formattedId = `${cleanPrefix}-${String(seqNum).padStart(5, '0')}`;
         const verificationToken = crypto.randomBytes(32).toString('hex');
 
@@ -367,7 +467,7 @@ export class EventJobQueueService {
           sequenceNumber: seqNum,
           formattedId,
           verificationToken,
-          credentialType: job.payload.credentialType || 'ATTENDEE_PASS',
+          credentialType: job.payload?.credentialType || 'ATTENDEE_PASS',
           terminology,
           usagePolicy: 'SINGLE_USE',
           status: 'ACTIVE',
@@ -387,14 +487,16 @@ export class EventJobQueueService {
         });
       }
 
-      const created = await this.credentialRepo.createMany(batchDocs);
-      insertedCredentials.push(...created);
-      result.importedCount += created.length;
+      if (batchDocs.length > 0) {
+        const created = await this.credentialRepo.createMany(batchDocs);
+        insertedCredentials.push(...created);
+      }
 
+      result.importedCount = insertedCredentials.length;
       const processed = Math.min(i + CHUNK_SIZE, total);
       const percentage = Math.round((processed / total) * 100);
 
-      await this.jobRepo.updateProgress(
+      const progressUpdated = await this.jobRepo.updateProgress(
         job._id.toString(),
         {
           total,
@@ -403,12 +505,17 @@ export class EventJobQueueService {
           failed: result.errorLog.length,
           percentage,
         },
-        result
+        result,
+        this.workerId
       );
+
+      if (!progressUpdated) {
+        throw new Error('Worker lease lost during progress update');
+      }
     }
 
     // Optional background Sharp rendering if requested
-    if (job.payload.renderAfterImport && insertedCredentials.length > 0) {
+    if (job.payload?.renderAfterImport && insertedCredentials.length > 0) {
       await this.renderCredentialsSequentially(
         eventId,
         event,
@@ -418,12 +525,12 @@ export class EventJobQueueService {
       );
     }
 
-    await this.jobRepo.markCompleted(job._id.toString(), result);
+    await this.jobRepo.markCompleted(job._id.toString(), result, this.workerId);
   }
 
   /**
    * Process Bulk Render Job using cursor-based batch pagination.
-   * Completely eliminates the 500-record query cap and bounds memory to O(1).
+   * Completely eliminates 500-record query cap and bounds memory to O(1).
    */
   private async processBulkRenderJob(job: IEventJobDocument): Promise<void> {
     const eventId = job.eventId.toString();
@@ -432,11 +539,15 @@ export class EventJobQueueService {
 
     const totalUnrendered = await this.credentialRepo.countUnrenderedByEvent(eventId);
     if (totalUnrendered === 0) {
-      await this.jobRepo.markCompleted(job._id.toString(), {
-        importedCount: 0,
-        renderedCount: 0,
-        errorLog: [],
-      });
+      await this.jobRepo.markCompleted(
+        job._id.toString(),
+        {
+          importedCount: 0,
+          renderedCount: 0,
+          errorLog: [],
+        },
+        this.workerId
+      );
       return;
     }
 
@@ -445,7 +556,7 @@ export class EventJobQueueService {
       totalUnrendered * 400 * 1024
     );
 
-    let template = job.payload.templateId
+    let template = job.payload?.templateId
       ? await this.templateRepo.findById(job.payload.templateId)
       : await this.templateRepo.findDefaultByEventId(eventId);
 
@@ -464,24 +575,27 @@ export class EventJobQueueService {
       errorLog: job.result?.errorLog ? [...job.result.errorLog] : [],
     };
 
-    let processedCount = job.progress?.processed || 0;
+    let processedCount = 0;
     const BATCH_SIZE = 50;
     let lastId: any = null;
 
     while (true) {
-      // Check cancellation between batches
       const current = await this.jobRepo.findById(job._id.toString());
       if (current?.status === 'CANCELLED') return;
+
+      // Heartbeat lease renewal before each batch
+      const renewed = await this.jobRepo.renewLease(job._id.toString(), this.workerId);
+      if (!renewed) {
+        throw new Error('Worker lease lost or expired during bulk rendering');
+      }
 
       const batch = await this.credentialRepo.findUnrenderedBatch(eventId, lastId, BATCH_SIZE);
       if (!batch || batch.length === 0) break;
 
       for (const cred of batch) {
-        // Double check cancellation per credential
         const checkJob = await this.jobRepo.findById(job._id.toString());
         if (checkJob?.status === 'CANCELLED') return;
 
-        // Skip if already rendered in prior attempt
         if (cred.asset?.storagePath) {
           processedCount++;
           continue;
@@ -497,7 +611,7 @@ export class EventJobQueueService {
             eventName: event.name,
             date: event.schedule?.startAt
               ? new Date(event.schedule.startAt).toLocaleDateString()
-              : '2026-10-10',
+              : 'Date TBA',
             venue: event.venue?.name || 'Main Venue',
           };
 
@@ -527,7 +641,7 @@ export class EventJobQueueService {
 
         if (processedCount % 5 === 0 || processedCount >= totalUnrendered) {
           const percentage = totalUnrendered > 0 ? Math.min(100, Math.round((processedCount / totalUnrendered) * 100)) : 100;
-          await this.jobRepo.updateProgress(
+          const updated = await this.jobRepo.updateProgress(
             job._id.toString(),
             {
               total: totalUnrendered,
@@ -536,15 +650,31 @@ export class EventJobQueueService {
               failed: result.errorLog.length,
               percentage,
             },
-            result
+            result,
+            this.workerId
           );
+          if (!updated) {
+            throw new Error('Worker ownership lost during bulk render progress update');
+          }
         }
       }
 
+      if (processedCount >= totalUnrendered || batch.length < BATCH_SIZE) {
+        break;
+      }
       lastId = batch[batch.length - 1]._id;
     }
 
-    // Ensure final 100% progress recorded
+    if (totalUnrendered > 0 && result.renderedCount === 0 && result.errorLog.length === totalUnrendered) {
+      await this.jobRepo.markFailed(
+        job._id.toString(),
+        'All credentials failed to render',
+        result,
+        this.workerId
+      );
+      return;
+    }
+
     await this.jobRepo.updateProgress(
       job._id.toString(),
       {
@@ -554,10 +684,11 @@ export class EventJobQueueService {
         failed: result.errorLog.length,
         percentage: 100,
       },
-      result
+      result,
+      this.workerId
     );
 
-    await this.jobRepo.markCompleted(job._id.toString(), result);
+    await this.jobRepo.markCompleted(job._id.toString(), result, this.workerId);
   }
 
   /**
@@ -570,7 +701,7 @@ export class EventJobQueueService {
     job: IEventJobDocument,
     result: IJobResult
   ): Promise<void> {
-    let template = job.payload.templateId
+    let template = job.payload?.templateId
       ? await this.templateRepo.findById(job.payload.templateId)
       : await this.templateRepo.findDefaultByEventId(eventId);
 
@@ -586,7 +717,6 @@ export class EventJobQueueService {
     const total = credentials.length;
 
     for (let i = 0; i < total; i++) {
-      // Check cancellation every pass
       const current = await this.jobRepo.findById(job._id.toString());
       if (current?.status === 'CANCELLED') return;
 
@@ -601,7 +731,7 @@ export class EventJobQueueService {
           eventName: event.name,
           date: event.schedule?.startAt
             ? new Date(event.schedule.startAt).toLocaleDateString()
-            : '2026-10-10',
+            : 'Date TBA',
           venue: event.venue?.name || 'Main Venue',
         };
 
@@ -639,7 +769,8 @@ export class EventJobQueueService {
             failed: result.errorLog.length,
             percentage,
           },
-          result
+          result,
+          this.workerId
         );
       }
     }
@@ -658,4 +789,3 @@ export class EventJobQueueService {
 }
 
 export const eventJobQueueService = new EventJobQueueService();
-
