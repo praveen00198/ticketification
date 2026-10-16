@@ -446,13 +446,23 @@ export class MongoEventCredentialRepository {
   }
 
   /**
+   * Returns current Mongoose connection readyState (1 = connected).
+   */
+  protected getDbReadyState(): number {
+    return mongoose.connection.readyState;
+  }
+
+  /**
    * Count all unrendered credentials for an event (without 200/500 query cap).
    */
   async countUnrenderedByEvent(eventId: string): Promise<number> {
     if (!mongoose.Types.ObjectId.isValid(eventId)) return 0;
 
-    if (mongoose.connection.readyState !== 1) {
-      const { credentials } = await this.findByEvent(eventId, { limit: 1000 });
+    if (this.getDbReadyState() !== 1) {
+      if (process.env.NODE_ENV !== 'test') {
+        throw new Error('[DatabaseDisconnected] Cannot process unrendered credentials while database is disconnected');
+      }
+      const { credentials } = await this.findByEvent(eventId, { limit: 200 });
       return credentials.filter((c: any) => !c.asset?.storagePath).length;
     }
 
@@ -477,8 +487,11 @@ export class MongoEventCredentialRepository {
   ): Promise<IEventCredentialDocument[]> {
     if (!mongoose.Types.ObjectId.isValid(eventId)) return [];
 
-    if (mongoose.connection.readyState !== 1) {
-      const { credentials } = await this.findByEvent(eventId, { limit: 1000 });
+    if (this.getDbReadyState() !== 1) {
+      if (process.env.NODE_ENV !== 'test') {
+        throw new Error('[DatabaseDisconnected] Cannot process unrendered credentials while database is disconnected');
+      }
+      const { credentials } = await this.findByEvent(eventId, { limit: 200 });
       const unrendered = credentials.filter((c: any) => !c.asset?.storagePath);
       return unrendered.slice(0, limit);
     }

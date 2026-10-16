@@ -603,6 +603,51 @@ export class TicketService {
   }
 
   /**
+   * Generates a signed direct download URL from Supabase Storage for the ticket asset.
+   * Avoids proxying large binary image buffers through Node.js heap.
+   */
+  async getPresignedTicketDownloadUrl(
+    ticketIdOrToken: string,
+    userId: string,
+    expiresInSeconds: number = 3600
+  ): Promise<{ url: string; fileName: string } | null> {
+    const rawRecord: any = await this.getTicketById(ticketIdOrToken);
+    if (!rawRecord) {
+      throw new NotFoundError('Ticket not found');
+    }
+
+    const ticket = rawRecord.ticket || rawRecord;
+    let event = rawRecord.event;
+    if (!event && ticket.eventId) {
+      event = await this.eventRepo.findByIdAndOwner(ticket.eventId, userId);
+    }
+
+    if (!event || event.createdBy !== userId) {
+      throw new NotFoundError('Ticket not found or unauthorized');
+    }
+
+    const guest = rawRecord.guest || (ticket.guestId ? await this.guestRepo.findById(ticket.guestId) : null);
+    const guestName = guest?.name || null;
+    const seqStr = ticket.sequenceNumber.toString().padStart(5, '0');
+    const isWorker = !ticket.guestId || ticket.usagePolicy === 'REUSABLE';
+    const safePrefix =
+      (event.name || 'EVT').trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase() || 'EVT';
+    const displayId = isWorker ? `WRK-${seqStr}` : `${safePrefix}-${seqStr}`;
+    const fileName = formatTicketFileName(guestName, displayId);
+
+    const storagePath = ticket.assetPath || `events/${ticket.eventId}/tickets/ticket-${displayId}.png`;
+    try {
+      const url = await this.storageServ.createPresignedDownloadUrl(storagePath, expiresInSeconds);
+      if (url) {
+        return { url, fileName };
+      }
+    } catch {
+      // Fallback to null so caller can stream buffer if direct download isn't supported
+    }
+    return null;
+  }
+
+  /**
    * Stream a ZIP archive containing genuine PNG ticket assets retrieved from Supabase Storage.
    * Reuses existing stored PNG assets directly; zero on-demand ticket regeneration.
    */

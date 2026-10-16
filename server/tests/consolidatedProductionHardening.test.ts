@@ -846,4 +846,68 @@ describe('Consolidated Production Hardening Regression Suite', () => {
       expect(sanitized).toContain('[REDACTED_PHONE]');
     });
   });
+
+  describe('Workstream G — Query Optimization, Index Health & Direct Storage Transfers', () => {
+    it('EventCredentialSchema contains necessary compound performance indexes', async () => {
+      const { EventCredentialSchema } = await import('../src/db/mongo/models/event-credential.model');
+      const indexes = EventCredentialSchema.indexes();
+      const indexFields = indexes.map((idx: any) => Object.keys(idx[0]).join(','));
+
+      expect(indexFields).toContain('eventId,asset.storagePath,_id');
+      expect(indexFields).toContain('eventId,status,sequenceNumber');
+      expect(indexFields).toContain('eventId,_id');
+    });
+
+    it('fails closed when database is disconnected in production/non-test environment', async () => {
+      const { MongoEventCredentialRepository } = await import(
+        '../src/modules/events/repositories/mongo-event-credential.repository'
+      );
+      const repo = new MongoEventCredentialRepository();
+
+      const prevEnv = process.env.NODE_ENV;
+      try {
+        process.env.NODE_ENV = 'production';
+        // Mock getDbReadyState = 0 (disconnected)
+        jest.spyOn(repo as any, 'getDbReadyState').mockReturnValue(0);
+
+        await expect(repo.countUnrenderedByEvent(eventId)).rejects.toThrow(/\[DatabaseDisconnected\]/);
+        await expect(repo.findUnrenderedBatch(eventId, null, 50)).rejects.toThrow(/\[DatabaseDisconnected\]/);
+      } finally {
+        process.env.NODE_ENV = prevEnv;
+      }
+    });
+
+    it('ticketService.getPresignedTicketDownloadUrl provides direct signed download without buffering into Node heap', async () => {
+      const { ticketService } = await import('../src/modules/tickets/services/ticket.service');
+      const { supabaseStorageService } = await import('../src/modules/tickets/services/supabase-storage.service');
+
+      const ticketId = 'ticket-123';
+      const mockTicket = {
+        ticket: {
+          id: ticketId,
+          eventId,
+          guestId: 'guest-123',
+          sequenceNumber: 1,
+          assetPath: `events/${eventId}/tickets/ticket-EVT-00001.png`,
+          usagePolicy: 'SINGLE_USE',
+        },
+        event: {
+          id: eventId,
+          name: 'Tech Summit',
+          createdBy: hostUserId,
+        },
+        guest: {
+          name: 'Alice Attendee',
+        },
+      };
+
+      jest.spyOn(ticketService as any, 'getTicketById').mockResolvedValue(mockTicket);
+      jest.spyOn(supabaseStorageService, 'createPresignedDownloadUrl').mockResolvedValue('https://storage.supabase.co/signed/ticket-url');
+
+      const presigned = await ticketService.getPresignedTicketDownloadUrl(ticketId, hostUserId);
+      expect(presigned).not.toBeNull();
+      expect(presigned?.url).toBe('https://storage.supabase.co/signed/ticket-url');
+      expect(presigned?.fileName).toBe('Alice-Attendee-TEC-00001.png');
+    });
+  });
 });

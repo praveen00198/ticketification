@@ -80,7 +80,7 @@ const CredentialAssetSchema = new Schema<ICredentialAsset>(
   { _id: false }
 );
 
-const EventCredentialSchema = new Schema<IEventCredentialDocument>(
+export const EventCredentialSchema = new Schema<IEventCredentialDocument>(
   {
     eventId: {
       type: Schema.Types.ObjectId,
@@ -185,6 +185,9 @@ EventCredentialSchema.index({ eventId: 1, status: 1 });
 EventCredentialSchema.index({ eventId: 1, credentialType: 1 });
 EventCredentialSchema.index({ eventId: 1, 'holder.email': 1 });
 EventCredentialSchema.index({ eventId: 1, 'holder.teamId': 1 });
+EventCredentialSchema.index({ eventId: 1, 'asset.storagePath': 1, _id: 1 });
+EventCredentialSchema.index({ eventId: 1, status: 1, sequenceNumber: 1 });
+EventCredentialSchema.index({ eventId: 1, _id: 1 });
 
 export const EventCredentialModel: Model<IEventCredentialDocument> =
   mongoose.models.EventCredential ||

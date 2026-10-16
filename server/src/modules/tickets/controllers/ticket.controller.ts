@@ -91,6 +91,21 @@ export class TicketController {
       if (!req.user) throw new AuthenticationError();
 
       const ticketId = validateTicketIdParam(req.params.ticketId || req.params.id);
+      const wantsRedirect = req.query.redirect === 'true' || req.query.direct === 'true';
+      const wantsUrl = req.query.format === 'url';
+
+      if (wantsRedirect || wantsUrl) {
+        const presigned = await ticketService.getPresignedTicketDownloadUrl(ticketId, req.user.id);
+        if (presigned) {
+          if (wantsUrl) {
+            res.json({ success: true, downloadUrl: presigned.url, fileName: presigned.fileName });
+            return;
+          }
+          res.redirect(302, presigned.url);
+          return;
+        }
+      }
+
       const result = await ticketService.downloadTicket(ticketId, req.user.id);
 
       res.setHeader('Content-Type', result.contentType);
