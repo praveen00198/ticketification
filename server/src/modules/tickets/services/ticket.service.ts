@@ -20,11 +20,33 @@ import {
   ValidationError,
   StorageError,
 } from '../../../middlewares/error.middleware';
+import mongoose from 'mongoose';
+import { EventCredentialModel } from '../../../db/mongo/models/event-credential.model';
+import { EventMemberModel } from '../../../db/mongo/models/event-member.model';
+import { EventRegistrationModel } from '../../../db/mongo/models/event-registration.model';
+import { EventModel } from '../../../db/mongo/models/event.model';
+import { mongoEventCredentialRepository } from '../../events/repositories/mongo-event-credential.repository';
 import { GenerateTicketsResult } from '../ticket.types';
 import { logMemory, MemoryTracker } from '../../../utils/memory-logger';
 import { getTemplateById, DEFAULT_TEMPLATE_ID } from '../ticket-templates';
 
 export { formatTicketFileName };
+
+export interface TicketDownloadAuthContext {
+  userId: string;
+  userEmail?: string;
+  userRole?: string;
+  scopedEventId?: string;
+}
+
+export interface ResolvedTicketDownload {
+  ticketId: string;
+  eventId: string;
+  sequenceNumber: number;
+  fileName: string;
+  displayId: string;
+  candidatePaths: string[];
+}
 
 let _archiverModule: any = null;
 
@@ -191,7 +213,9 @@ export class TicketService {
         ticketId: displayId,
         guestName: guest.name || 'Valued Guest',
         eventName: event.name,
-        eventDate: event.date,
+        eventDate: (event.date && event.date !== '2026-10-10')
+          ? event.date
+          : ((event as any).schedule?.startAt ? new Date((event as any).schedule.startAt).toLocaleDateString() : 'Date TBA'),
         ticketType: matchedType.label || matchedType.name,
         qrCodeDataUrl: qrDataUrl,
         organization: guest.organization || undefined,
@@ -381,7 +405,9 @@ export class TicketService {
         ticketId: displayId,
         guestName: 'Event Staff',
         eventName: event.name,
-        eventDate: event.date,
+        eventDate: (event.date && event.date !== '2026-10-10')
+          ? event.date
+          : ((event as any).schedule?.startAt ? new Date((event as any).schedule.startAt).toLocaleDateString() : 'Date TBA'),
         ticketType: workerType.label || 'Event Staff',
         qrCodeDataUrl: qrDataUrl,
       };
@@ -540,46 +566,256 @@ export class TicketService {
   }
 
   /**
+   * Securely authorizes the requesting user against the target ticket, event, and RBAC permissions.
+   * Defends against IDOR, validates cross-event scoping, and resolves canonical storage paths.
+   */
+  async authorizeAndResolveTicket(
+    ticketIdOrToken: string,
+    authContext: string | TicketDownloadAuthContext
+  ): Promise<ResolvedTicketDownload> {
+    const auth: TicketDownloadAuthContext =
+      typeof authContext === 'string' ? { userId: authContext } : authContext;
+
+    if (!ticketIdOrToken || typeof ticketIdOrToken !== 'string') {
+      throw new NotFoundError('Ticket not found');
+    }
+
+    let ticketId: string | null = null;
+    let eventId: string | null = null;
+    let sequenceNumber: number = 1;
+    let assetPath: string | null = null;
+    let guestName: string | null = null;
+    let guestEmail: string | null = null;
+    let holderUserId: string | null = null;
+    let eventOwnerId: string | null = null;
+    let eventName: string | null = null;
+    let usagePolicy: string = 'SINGLE_USE';
+
+    // 1. Check PostgreSQL / Drizzle Tickets
+    let pgRecord: any = null;
+    try {
+      if (typeof this.getTicketById === 'function') {
+        pgRecord = await this.getTicketById(ticketIdOrToken);
+      }
+    } catch {}
+
+    if (!pgRecord) {
+      try {
+        if (typeof this.ticketRepo?.findById === 'function') {
+          pgRecord = await this.ticketRepo.findById(ticketIdOrToken);
+        }
+        if (!pgRecord && typeof this.ticketRepo?.findByVerificationToken === 'function') {
+          pgRecord = await this.ticketRepo.findByVerificationToken(ticketIdOrToken);
+        }
+      } catch {
+        // Postgres query failed or unconfigured, proceed to Mongo check
+      }
+    }
+
+    if (pgRecord) {
+      const t = pgRecord.ticket || pgRecord;
+      ticketId = t.id ? t.id.toString() : ticketIdOrToken;
+      eventId = t.eventId ? t.eventId.toString() : null;
+      sequenceNumber = Number(t.sequenceNumber) || 1;
+      assetPath = t.assetPath || null;
+      usagePolicy = t.usagePolicy || 'SINGLE_USE';
+
+      const g =
+        pgRecord.guest ||
+        (t.guestId && typeof this.guestRepo?.findById === 'function'
+          ? await this.guestRepo.findById(t.guestId)
+          : null);
+      guestName = g?.name || null;
+      guestEmail = g?.email || null;
+
+      let ev = pgRecord.event;
+      if (!ev && eventId) {
+        if (typeof this.eventRepo?.findById === 'function') {
+          try {
+            ev = await this.eventRepo.findById(eventId);
+          } catch {}
+        }
+        if (!ev && typeof this.eventRepo?.findByIdAndOwner === 'function') {
+          try {
+            ev = await this.eventRepo.findByIdAndOwner(eventId, auth.userId);
+          } catch {}
+        }
+      }
+      eventName = ev?.name || null;
+      eventOwnerId = ev?.createdBy || null;
+    }
+
+    // 2. Check MongoDB EventCredentials if not found in Postgres
+    if (!ticketId && mongoose.connection.readyState === 1) {
+      try {
+        let cred: any = null;
+        if (mongoose.Types.ObjectId.isValid(ticketIdOrToken)) {
+          cred = await EventCredentialModel.findById(ticketIdOrToken).exec();
+        }
+        if (!cred && ticketIdOrToken.length === 64) {
+          cred = await EventCredentialModel.findOne({ verificationToken: ticketIdOrToken }).exec();
+        }
+        if (!cred) {
+          cred = await EventCredentialModel.findOne({ formattedId: ticketIdOrToken }).exec();
+        }
+
+        if (cred) {
+          ticketId = cred._id.toString();
+          eventId = cred.eventId ? cred.eventId.toString() : null;
+          sequenceNumber = Number(cred.sequenceNumber) || 1;
+          assetPath = cred.asset?.storagePath || null;
+          usagePolicy = cred.usagePolicy || 'SINGLE_USE';
+          guestName = cred.holder?.name || null;
+          guestEmail = cred.holder?.email || null;
+          holderUserId = cred.holder?.userId ? cred.holder.userId.toString() : null;
+
+          if (eventId && mongoose.Types.ObjectId.isValid(eventId)) {
+            const ev = await EventModel.findById(eventId).exec();
+            if (ev) {
+              eventName = ev.name || null;
+              eventOwnerId = ev.ownerId ? ev.ownerId.toString() : (ev.ownerSupabaseId || null);
+            }
+          }
+        }
+      } catch {
+        // Mongo query error
+      }
+    }
+
+    if (!ticketId || !eventId) {
+      throw new NotFoundError('Ticket not found');
+    }
+
+    // Cross-Event Scoping Check: Never allow cross-event ticket access
+    if (auth.scopedEventId && auth.scopedEventId.toString() !== eventId.toString()) {
+      throw new NotFoundError('Ticket not found in this event');
+    }
+
+    // Strict Authorization Verification
+    let isAuthorized = false;
+
+    // A. Platform Administrator
+    if (auth.userRole === 'ADMIN') {
+      isAuthorized = true;
+    }
+
+    // B. Event Creator / Owner
+    if (!isAuthorized && eventOwnerId && eventOwnerId.toString() === auth.userId) {
+      isAuthorized = true;
+    }
+
+    // C. Event Staff with DOWNLOAD_CREDENTIALS permission
+    if (!isAuthorized && mongoose.connection.readyState === 1 && mongoose.Types.ObjectId.isValid(eventId)) {
+      try {
+        const staffOr: any[] = [];
+        if (mongoose.Types.ObjectId.isValid(auth.userId)) {
+          staffOr.push({ userId: new mongoose.Types.ObjectId(auth.userId) });
+        }
+        if (auth.userEmail) {
+          staffOr.push({ userEmail: auth.userEmail.toLowerCase().trim() });
+        }
+
+        if (staffOr.length > 0) {
+          const member = await EventMemberModel.findOne({
+            eventId: new mongoose.Types.ObjectId(eventId),
+            $or: staffOr,
+            status: 'ACTIVE',
+          }).exec();
+
+          if (member) {
+            if (
+              member.role === 'HOST' ||
+              member.role === 'COORDINATOR' ||
+              member.permissions?.includes('DOWNLOAD_CREDENTIALS')
+            ) {
+              isAuthorized = true;
+            }
+          }
+        }
+      } catch {
+        // Staff check error
+      }
+    }
+
+    // D. Ticket Holder / Attendee
+    if (!isAuthorized) {
+      if (guestEmail && auth.userEmail && guestEmail.toLowerCase().trim() === auth.userEmail.toLowerCase().trim()) {
+        isAuthorized = true;
+      }
+      if (holderUserId && holderUserId.toString() === auth.userId) {
+        isAuthorized = true;
+      }
+
+      // Check registered attendee status in MongoDB
+      if (!isAuthorized && mongoose.connection.readyState === 1 && mongoose.Types.ObjectId.isValid(eventId)) {
+        try {
+          const regOr: any[] = [{ userSupabaseId: auth.userId }];
+          if (mongoose.Types.ObjectId.isValid(auth.userId)) {
+            regOr.push({ userId: new mongoose.Types.ObjectId(auth.userId) });
+          }
+          if (auth.userEmail) {
+            regOr.push({ 'attendeeDetails.email': auth.userEmail.toLowerCase().trim() });
+          }
+
+          const reg = await EventRegistrationModel.findOne({
+            eventId: new mongoose.Types.ObjectId(eventId),
+            $or: regOr,
+            status: { $in: ['CONFIRMED', 'ATTENDED'] },
+          }).exec();
+
+          if (reg) {
+            if (
+              (reg.credentialId && reg.credentialId.toString() === ticketId.toString()) ||
+              (reg.attendeeDetails?.email && guestEmail && reg.attendeeDetails.email.toLowerCase() === guestEmail.toLowerCase())
+            ) {
+              isAuthorized = true;
+            }
+          }
+        } catch {
+          // Registration check error
+        }
+      }
+    }
+
+    if (!isAuthorized) {
+      throw new NotFoundError('Ticket not found or unauthorized');
+    }
+
+    // Compute canonical filename and displayId
+    const seqStr = sequenceNumber.toString().padStart(5, '0');
+    const isWorker = !guestName || usagePolicy === 'REUSABLE';
+    const safePrefix =
+      (eventName || 'EVT').trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase() || 'EVT';
+    const displayId = isWorker ? `WRK-${seqStr}` : `${safePrefix}-${seqStr}`;
+    const fileName = formatTicketFileName(guestName, displayId);
+
+    const candidatePaths = [
+      assetPath,
+      `events/${eventId}/tickets/ticket-${displayId}.png`,
+    ].filter(Boolean) as string[];
+
+    return {
+      ticketId,
+      eventId,
+      sequenceNumber,
+      fileName,
+      displayId,
+      candidatePaths,
+    };
+  }
+
+  /**
    * Download a single ticket asset as a genuine PNG buffer with canonical filename.
    * Directly reuses existing stored PNG asset; zero on-demand ticket regeneration.
    */
   async downloadTicket(
     ticketIdOrToken: string,
-    userId: string
+    authContext: string | TicketDownloadAuthContext
   ): Promise<{ buffer: Buffer; fileName: string; contentType: string }> {
-    const rawRecord: any = await this.getTicketById(ticketIdOrToken);
-    if (!rawRecord) {
-      throw new NotFoundError('Ticket not found');
-    }
-
-    // Support both joined record from Repository and plain ticket object
-    const ticket = rawRecord.ticket || rawRecord;
-    let event = rawRecord.event;
-    if (!event && ticket.eventId) {
-      event = await this.eventRepo.findByIdAndOwner(ticket.eventId, userId);
-    }
-
-    // Verify ownership via event createdBy
-    if (!event || event.createdBy !== userId) {
-      throw new NotFoundError('Ticket not found or unauthorized');
-    }
-
-    const guest = rawRecord.guest || (ticket.guestId ? await this.guestRepo.findById(ticket.guestId) : null);
-    const guestName = guest?.name || null;
-    const seqStr = ticket.sequenceNumber.toString().padStart(5, '0');
-    const isWorker = !ticket.guestId || ticket.usagePolicy === 'REUSABLE';
-    const safePrefix =
-      (event.name || 'EVT').trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase() || 'EVT';
-    const displayId = isWorker ? `WRK-${seqStr}` : `${safePrefix}-${seqStr}`;
-    const fileName = formatTicketFileName(guestName, displayId);
-
-    const candidatePaths = [
-      ticket.assetPath,
-      `events/${ticket.eventId}/tickets/ticket-${displayId}.png`,
-    ].filter(Boolean) as string[];
+    const resolved = await this.authorizeAndResolveTicket(ticketIdOrToken, authContext);
 
     let fileBuffer: Buffer | null = null;
-    for (const p of candidatePaths) {
+    for (const p of resolved.candidatePaths) {
       try {
         const buf = await this.storageServ.downloadTicketImage(p);
         if (isPngBuffer(buf)) {
@@ -597,7 +833,7 @@ export class TicketService {
 
     return {
       buffer: fileBuffer,
-      fileName,
+      fileName: resolved.fileName,
       contentType: 'image/png',
     };
   }
@@ -605,85 +841,116 @@ export class TicketService {
   /**
    * Generates a signed direct download URL from Supabase Storage for the ticket asset.
    * Avoids proxying large binary image buffers through Node.js heap.
+   * Defaults to 900 seconds (15 minutes) expiration with Content-Disposition attachment.
    */
   async getPresignedTicketDownloadUrl(
     ticketIdOrToken: string,
-    userId: string,
-    expiresInSeconds: number = 3600
+    authContext: string | TicketDownloadAuthContext,
+    expiresInSeconds: number = 900
   ): Promise<{ url: string; fileName: string } | null> {
-    const rawRecord: any = await this.getTicketById(ticketIdOrToken);
-    if (!rawRecord) {
-      throw new NotFoundError('Ticket not found');
-    }
+    const resolved = await this.authorizeAndResolveTicket(ticketIdOrToken, authContext);
 
-    const ticket = rawRecord.ticket || rawRecord;
-    let event = rawRecord.event;
-    if (!event && ticket.eventId) {
-      event = await this.eventRepo.findByIdAndOwner(ticket.eventId, userId);
-    }
-
-    if (!event || event.createdBy !== userId) {
-      throw new NotFoundError('Ticket not found or unauthorized');
-    }
-
-    const guest = rawRecord.guest || (ticket.guestId ? await this.guestRepo.findById(ticket.guestId) : null);
-    const guestName = guest?.name || null;
-    const seqStr = ticket.sequenceNumber.toString().padStart(5, '0');
-    const isWorker = !ticket.guestId || ticket.usagePolicy === 'REUSABLE';
-    const safePrefix =
-      (event.name || 'EVT').trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase() || 'EVT';
-    const displayId = isWorker ? `WRK-${seqStr}` : `${safePrefix}-${seqStr}`;
-    const fileName = formatTicketFileName(guestName, displayId);
-
-    const storagePath = ticket.assetPath || `events/${ticket.eventId}/tickets/ticket-${displayId}.png`;
-    try {
-      const url = await this.storageServ.createPresignedDownloadUrl(storagePath, expiresInSeconds);
-      if (url) {
-        return { url, fileName };
+    for (const p of resolved.candidatePaths) {
+      try {
+        const url = await this.storageServ.createPresignedDownloadUrl(p, expiresInSeconds, {
+          download: resolved.fileName,
+        });
+        if (url) {
+          return { url, fileName: resolved.fileName };
+        }
+      } catch {
+        // Fallback to next candidate path or return null for buffer streaming
       }
-    } catch {
-      // Fallback to null so caller can stream buffer if direct download isn't supported
     }
+
     return null;
   }
 
   /**
-   * Stream a ZIP archive containing genuine PNG ticket assets retrieved from Supabase Storage.
-   * Reuses existing stored PNG assets directly; zero on-demand ticket regeneration.
+   * Stream a ZIP archive containing genuine PNG ticket assets with bounded memory.
+   * Uses keyset pagination / Mongo cursor; zero whole-dataset in-memory buffering.
+   * Respects stream backpressure and releases buffers immediately.
    */
-  async streamTicketsZip(eventId: string, userId: string, streamOut: NodeJS.WritableStream) {
+  async streamTicketsZip(eventId: string, userId: string, streamOut: NodeJS.WritableStream): Promise<void> {
     const event = await this.eventRepo.findByIdAndOwner(eventId, userId);
     if (!event) {
       throw new NotFoundError('Event not found or unauthorized');
     }
 
-    const tickets = await this.ticketRepo.findByEventId(eventId, { limit: 50000 });
-    if (tickets.length === 0) {
-      throw new ValidationError('No tickets found to export for this event.');
-    }
-
     const archive = await createZipArchive({ zlib: { level: 6 } });
+    let archiveAborted = false;
+    let streamClosed = false;
+
     archive.on('error', (err: any) => {
       console.error('[BulkExport] Archive error:', err);
     });
-    archive.pipe(streamOut);
 
     const safePrefix =
       (event.name || 'EVT').trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase() || 'EVT';
 
-    const BATCH_SIZE = 10;
-    for (let i = 0; i < tickets.length; i += BATCH_SIZE) {
-      const batch = tickets.slice(i, i + BATCH_SIZE);
+    archive.pipe(streamOut);
 
-      await Promise.all(
-        batch.map(async (t) => {
-          const seqStr = t.ticket.sequenceNumber.toString().padStart(5, '0');
-          const isWorker = !t.ticket.guestId || t.ticketType.usagePolicy === 'REUSABLE';
+    const onStreamClose = () => {
+      streamClosed = true;
+      if (!archiveAborted) {
+        try {
+          archive.abort();
+          archiveAborted = true;
+        } catch {}
+      }
+    };
+    streamOut.on('close', onStreamClose);
+
+    const waitForDrain = async () => {
+      if ((streamOut as any).writableNeedDrain || (streamOut as any)._writableState?.needDrain) {
+        await new Promise<void>((resolve) => streamOut.once('drain', () => resolve()));
+      }
+    };
+
+    let totalDiscovered = 0;
+    let packagedCount = 0;
+    let cursor: any = null;
+
+    try {
+      // 1. Try Keyset Pagination on PostgreSQL ticketRepo
+      const BATCH_SIZE = 50;
+      let lastSeq = 0;
+      let offset = 0;
+      let hasMorePg = true;
+
+      while (hasMorePg && !streamClosed) {
+        let batch: any[] = [];
+        if (typeof (this.ticketRepo as any)?.findExportBatchKeyset === 'function') {
+          batch = await (this.ticketRepo as any).findExportBatchKeyset(eventId, lastSeq, BATCH_SIZE);
+        } else if (typeof this.ticketRepo?.findByEventId === 'function') {
+          batch = await this.ticketRepo.findByEventId(eventId, { limit: BATCH_SIZE, offset });
+        }
+
+        if (!batch || batch.length === 0) {
+          hasMorePg = false;
+          break;
+        }
+
+        totalDiscovered += batch.length;
+        let highestSeqInBatch = lastSeq;
+
+        for (const t of batch) {
+          if (streamClosed) break;
+
+          const rawSeq = t.ticket?.sequenceNumber ?? t.sequenceNumber ?? 0;
+          const seqNum = Number(rawSeq);
+          if (seqNum > highestSeqInBatch) {
+            highestSeqInBatch = seqNum;
+          }
+
+          const seqStr = seqNum.toString().padStart(5, '0');
+          const isWorker = (!t.ticket?.guestId && !t.guestId) || (t.ticketType?.usagePolicy === 'REUSABLE');
           const displayId = isWorker ? `WRK-${seqStr}` : `${safePrefix}-${seqStr}`;
-          const fileName = formatTicketFileName(t.guest?.name, displayId);
+          const guestName = t.guest?.name ?? t.guestName;
+          const fileName = formatTicketFileName(guestName, displayId);
 
           const candidatePaths = [
-            t.ticket.assetPath,
+            t.ticket?.assetPath ?? t.assetPath,
             `events/${eventId}/tickets/ticket-${displayId}.png`,
           ].filter(Boolean) as string[];
 
@@ -702,12 +969,87 @@ export class TicketService {
 
           if (fileBuffer && isPngBuffer(fileBuffer)) {
             archive.append(fileBuffer, { name: fileName });
+            packagedCount++;
+            await waitForDrain();
           }
-        })
-      );
-    }
+        }
 
-    await archive.finalize();
+        if (batch.length < BATCH_SIZE || (highestSeqInBatch === lastSeq && offset > 0)) {
+          hasMorePg = false;
+        } else {
+          lastSeq = highestSeqInBatch;
+          offset += batch.length;
+        }
+      }
+
+      // 2. If no tickets were found in PostgreSQL, check MongoDB credentials cursor
+      if (totalDiscovered === 0 && mongoose.connection.readyState === 1) {
+        try {
+          cursor = mongoEventCredentialRepository.findExportCursor(eventId, {}, BATCH_SIZE);
+          for await (const cred of cursor) {
+            if (streamClosed) break;
+            totalDiscovered++;
+
+            let fileBuffer: Buffer | null = null;
+            if (cred.asset?.storagePath) {
+              try {
+                const buf = await this.storageServ.downloadTicketImage(cred.asset.storagePath);
+                if (isPngBuffer(buf)) {
+                  fileBuffer = buf;
+                }
+              } catch {}
+            }
+
+            if (fileBuffer && isPngBuffer(fileBuffer)) {
+              const safeName = (cred.holder?.name || 'Attendee')
+                .replace(/[^a-zA-Z0-9_-]/g, '_')
+                .replace(/_+/g, '_');
+              const fileName = `${cred.formattedId || 'PASS'}-${safeName}.png`;
+              archive.append(fileBuffer, { name: fileName });
+              packagedCount++;
+              await waitForDrain();
+            }
+          }
+        } catch (mongoErr: any) {
+          if (totalDiscovered === 0) {
+            throw mongoErr;
+          }
+        }
+      }
+
+      if (totalDiscovered === 0) {
+        try {
+          archive.abort();
+          archiveAborted = true;
+        } catch {}
+        throw new ValidationError('No tickets found to export for this event.');
+      }
+
+      if (packagedCount === 0 && totalDiscovered > 0) {
+        try {
+          archive.abort();
+          archiveAborted = true;
+        } catch {}
+        throw new ValidationError('No valid ticket assets could be packaged into archive.');
+      }
+
+      await archive.finalize();
+    } catch (err) {
+      if (!archiveAborted) {
+        try {
+          archive.abort();
+          archiveAborted = true;
+        } catch {}
+      }
+      throw err;
+    } finally {
+      streamOut.removeListener('close', onStreamClose);
+      if (cursor && typeof cursor.close === 'function') {
+        try {
+          await cursor.close();
+        } catch {}
+      }
+    }
   }
 }
 

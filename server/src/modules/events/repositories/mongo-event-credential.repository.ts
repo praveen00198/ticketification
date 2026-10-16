@@ -57,11 +57,57 @@ export class MongoEventCredentialRepository {
   }
 
   /**
-   * Insert multiple credentials in batch.
+   * Idempotently insert credentials, upserting by (eventId, sequenceNumber) without
+   * overwriting existing records ($setOnInsert).
+   */
+  async upsertMany(items: Partial<IEventCredentialDocument>[]): Promise<IEventCredentialDocument[]> {
+    if (items.length === 0) return [];
+
+    if (mongoose.connection.readyState !== 1) {
+      return EventCredentialModel.insertMany(items) as unknown as Promise<IEventCredentialDocument[]>;
+    }
+
+    const operations = items.map((doc) => ({
+      updateOne: {
+        filter: {
+          eventId: doc.eventId,
+          sequenceNumber: doc.sequenceNumber,
+        },
+        update: {
+          $setOnInsert: doc,
+        },
+        upsert: true,
+      },
+    }));
+
+    try {
+      await EventCredentialModel.bulkWrite(operations, { ordered: false });
+    } catch (err: any) {
+      if (err.code === 11000 || err.message?.includes('duplicate key') || err.message?.includes('E11000')) {
+        // Safe duplicate-key absorption: document already exists in DB
+      } else {
+        throw err;
+      }
+    }
+
+    const eventIds = Array.from(new Set(items.map((i) => i.eventId!.toString())));
+    const minSeq = Math.min(...items.map((i) => i.sequenceNumber!));
+    const maxSeq = Math.max(...items.map((i) => i.sequenceNumber!));
+    const results = await Promise.all(
+      eventIds.map((eId) => this.findBySequenceRange(eId, minSeq, maxSeq))
+    );
+    return results.flat();
+  }
+
+  /**
+   * Insert multiple credentials in batch safely and idempotently.
    */
   async createMany(items: Partial<IEventCredentialDocument>[]): Promise<IEventCredentialDocument[]> {
     if (items.length === 0) return [];
-    return EventCredentialModel.insertMany(items) as unknown as Promise<IEventCredentialDocument[]>;
+    if (mongoose.connection.readyState !== 1) {
+      return EventCredentialModel.insertMany(items) as unknown as Promise<IEventCredentialDocument[]>;
+    }
+    return this.upsertMany(items);
   }
 
   /**
@@ -227,16 +273,19 @@ export class MongoEventCredentialRepository {
     }
 
     if (mongoose.connection.readyState !== 1) {
-      const self = this;
-      return {
-        async *[Symbol.asyncIterator]() {
-          const items = await self.findAllForExport(eventId, filters);
-          for (const item of items) {
-            yield item;
-          }
-        },
-        close: async () => {},
-      };
+      if (process.env.NODE_ENV === 'test') {
+        const self = this;
+        return {
+          async *[Symbol.asyncIterator]() {
+            const items = await self.findAllForExport(eventId, filters);
+            for (const item of items) {
+              yield item;
+            }
+          },
+          close: async () => {},
+        };
+      }
+      throw new Error('MongoDB connection is not ready. Bounded export cursor cannot be established.');
     }
 
     const query: any = { eventId: new mongoose.Types.ObjectId(eventId) };
@@ -244,8 +293,55 @@ export class MongoEventCredentialRepository {
     if (filters.credentialType && filters.credentialType !== 'ALL') query.credentialType = filters.credentialType;
 
     return EventCredentialModel.find(query)
-      .sort({ sequenceNumber: 1 })
+      .select('formattedId sequenceNumber holder asset verificationToken credentialType status eventId')
+      .sort({ sequenceNumber: 1, _id: 1 })
+      .lean()
       .cursor({ batchSize });
+  }
+
+  /**
+   * Keyset pagination for streaming credential exports with bounded memory.
+   * Retrieves only the minimal fields required for export packaging.
+   */
+  async findExportBatchKeyset(
+    eventId: string,
+    lastSequenceNumber: number = 0,
+    lastId?: string,
+    batchSize: number = 50,
+    filters: CredentialQueryFilters = {}
+  ): Promise<any[]> {
+    if (!mongoose.Types.ObjectId.isValid(eventId)) {
+      throw new Error('Invalid eventId for export keyset pagination');
+    }
+
+    if (mongoose.connection.readyState !== 1) {
+      if (process.env.NODE_ENV === 'test') {
+        const items = await this.findAllForExport(eventId, filters);
+        return items
+          .filter((i: any) => (i.sequenceNumber || 0) > lastSequenceNumber)
+          .slice(0, batchSize);
+      }
+      throw new Error('MongoDB connection is not ready. Bounded export keyset cannot be established.');
+    }
+
+    const query: any = { eventId: new mongoose.Types.ObjectId(eventId) };
+    if (filters.status && filters.status !== 'ALL') query.status = filters.status;
+    if (filters.credentialType && filters.credentialType !== 'ALL') query.credentialType = filters.credentialType;
+
+    if (lastId && mongoose.Types.ObjectId.isValid(lastId)) {
+      query.$or = [
+        { sequenceNumber: { $gt: lastSequenceNumber } },
+        { sequenceNumber: lastSequenceNumber, _id: { $gt: new mongoose.Types.ObjectId(lastId) } },
+      ];
+    } else {
+      query.sequenceNumber = { $gt: lastSequenceNumber };
+    }
+
+    return EventCredentialModel.find(query)
+      .select('formattedId sequenceNumber holder asset verificationToken credentialType status eventId')
+      .sort({ sequenceNumber: 1, _id: 1 })
+      .limit(batchSize)
+      .lean();
   }
 
   /**
@@ -462,7 +558,7 @@ export class MongoEventCredentialRepository {
       if (process.env.NODE_ENV !== 'test') {
         throw new Error('[DatabaseDisconnected] Cannot process unrendered credentials while database is disconnected');
       }
-      const { credentials } = await this.findByEvent(eventId, { limit: 200 });
+      const { credentials } = await this.findByEvent(eventId, { limit: 10000 });
       return credentials.filter((c: any) => !c.asset?.storagePath).length;
     }
 
@@ -491,8 +587,12 @@ export class MongoEventCredentialRepository {
       if (process.env.NODE_ENV !== 'test') {
         throw new Error('[DatabaseDisconnected] Cannot process unrendered credentials while database is disconnected');
       }
-      const { credentials } = await this.findByEvent(eventId, { limit: 200 });
-      const unrendered = credentials.filter((c: any) => !c.asset?.storagePath);
+      const { credentials } = await this.findByEvent(eventId, { limit: 10000 });
+      let unrendered = credentials.filter((c: any) => !c.asset?.storagePath);
+      if (lastId) {
+        const lastIdStr = lastId.toString();
+        unrendered = unrendered.filter((c: any) => (c._id?.toString() || '') > lastIdStr);
+      }
       return unrendered.slice(0, limit);
     }
 

@@ -181,3 +181,49 @@ This file serves as the permanent institutional memory for Ticketification. All 
   6. Capacity reservations must be atomic at the database level (`reserveRegistrationSlot` via `$expr: { $lt: ['$registration.confirmedCount', '$registration.capacity'] }` and `$inc: 1`). Any downstream registration failure must rollback the slot count.
   7. Partial unique compound indexes on `event_registrations` (`{ eventId: 1, userId: 1 }` and `{ eventId: 1, 'attendeeDetails.email': 1 }` for active statuses) prevent duplicate registrations under concurrent submissions.
   8. ZIP archive generation must stream directly to a temporary file (`fs.createWriteStream`) in `os.tmpdir()` and be piped to Supabase Storage before unlinking in `finally`, guaranteeing constant bounded memory usage.
+
+### 2.21 Private Storage Presigned Downloads & Compare-And-Swap Capacity Reconciliation
+- **Lesson**:
+  1. Defaulting to public bucket URLs or falling back to `getPublicUrl()` on signed URL failure violates zero-trust data protection for private credentials. Furthermore, browser security blocks the HTML5 `download` attribute across origins, causing tickets to open in tabs instead of saving to disk.
+  2. Background counter reconciliation that counts documents and blindly updates `confirmedCount` creates race conditions where concurrent in-flight reservations are clobbered by stale counts.
+  3. Legacy events with missing counters or 0 counters must be initialized accurately without doing full collection scans on every registration request.
+- **Invariant**:
+  1. Supabase Storage buckets for credentials must be strictly private (`public: false`).
+  2. Never fall back to public URLs on signed URL generation failure; throw typed `StorageError`.
+  3. Attach `Content-Disposition: attachment; filename="<CanonicalFileName>"` via `{ download: fileName }` in `createSignedUrl` with 900s (15m) expiry.
+  4. Authoritative capacity statuses are strictly `CONFIRMED` and `ATTENDED` (`CONFIRMED_CAPACITY_STATUSES`). Waitlisted and cancelled records never consume capacity slots.
+  5. Capacity counter reconciliation MUST use Compare-And-Swap (CAS) with monotonic `reconcileVersion`. If a concurrent reservation or release increments the version while counting is in flight, the CAS update fails and yields/retries, ensuring concurrent reservations can NEVER be overwritten by a stale count.
+  6. Once `reconciledAt` is set, reservations execute an atomic indexed query (`$lt: capacity`, `$inc: 1`) in O(1) time with ZERO collection scans on `event_registrations`.
+  7. Slot release (`releaseRegistrationSlot`) is idempotent and tracks recently released tokens (`releasedTokens` bounded to 100 entries via `$slice: -100`), guaranteeing that repeated cancellations or rollbacks never double-decrement capacity.
+
+### 2.22 Bulk Ticket Rendering Reliability, Terminal Job States & Non-Redundant Retries
+- **Lesson**: Reporting full `COMPLETED` success when some tickets failed to render creates phantom completion states where hosts believe passes were issued but attendees receive nothing. Additionally, naive retries that re-render already completed tickets waste CPU/memory and risk creating conflicting or orphaned storage files. Fabricated event-date fallbacks (`2026-10-10`) display invalid dates on attendee tickets.
+- **Invariant**:
+  1. Never mark a rendering job `COMPLETED` while any ticket remains unrendered (`finalRemaining > 0` or failures in the current pass).
+  2. Failed credentials must be recorded in `result.errorLog` with identifier and sanitized error.
+  3. If unrendered tickets remain and attempts < maxAttempts, release the job back to `QUEUED` with bounded exponential backoff. Transition to `FAILED` only after max attempts are exhausted.
+  4. Retries MUST query and process only unrendered credentials (`findUnrenderedBatch` with `{ 'asset.storagePath': { $in: [null, ''] } }`) and skip already rendered records. Never regenerate completed credentials.
+  5. Storage keys must be deterministic (`events/{eventId}/credentials/{credentialId}.png`) to guarantee idempotent overwrites on retry without orphaned files.
+  6. Workers must prove lease ownership (`lockedBy: workerId` AND `lockExpiresAt: { $gte: now }`) on progress updates and job completion. Stale workers are rejected.
+  7. Remove all hardcoded `2026-10-10` fallbacks. Resolve event date from `schedule.startAt` or default safely to `'Date TBA'`.
+
+### 2.23 Bounded-Memory Keyset ZIP Export, Cursor Streaming & Safe Error Cleanup (Fix 4)
+- **Lesson**: Synchronous or unbounded in-memory ZIP archiving (`archiver.pipe(res)` without backpressure or materializing whole arrays into Node.js heap) causes container OOM crashes and server freezes when exporting events with hundreds or thousands of passes. Furthermore, offset-based pagination (`skip`) suffers from O(N) database degradation and duplicate/omitted records during concurrent insertions.
+- **Invariant**:
+  1. Keyset pagination on monotonic sequence numbers (`sequenceNumber > lastSequenceNumber` sorted by `{ sequenceNumber: 1 }` with limit <= 50) guarantees stable, gap-free pagination without duplicate or omitted records.
+  2. Cursor-based streaming (`findExportCursor` returning an async iterable cursor) processes records incrementally in bounded batches of 50. Total concurrent in-memory records are strictly bounded to <= 50.
+  3. Archive outputs stream directly to disk (`fs.createWriteStream` in `os.tmpdir()`) rather than accumulating buffers in V8 memory.
+  4. Stream backpressure MUST be explicitly handled: check `writeStream.writableNeedDrain` after each archive append and `await new Promise((resolve) => writeStream.once('drain', resolve))` before processing next passes.
+  5. Temporary files must be reliably removed (`fs.promises.unlink`) in `finally` blocks on ALL exit paths (success, error, cancellation, lease loss).
+  6. Incomplete archives MUST NEVER be marked `COMPLETED`: if any ticket cannot be packaged or rendered, or if fewer files than expected are packaged, the job fails with a descriptive error and temp files are discarded.
+  7. Cancellation checks (`job.status === 'CANCELLED'`) and lease renewal (`renewLease`) must execute periodically (every 10–50 passes) during export streaming to abort orphaned jobs and terminate resource consumption promptly.
+### 2.24 Idempotent Bulk Attendee Import & Reusable Sequence Allocation (Fix 5)
+- **Lesson**: Bulk attendee roster imports from spreadsheets can fail midway through execution or worker lease expiration. If sequence allocations are re-calculated on every retry, large sequence numbering gaps are generated, and sequence counters drift unpredictably. Furthermore, re-running failed or partial imports with naive inserts throws duplicate key errors on `{ eventId: 1, sequenceNumber: 1 }` or duplicates records, while naive overwrites wipe out sensitive tokens or custom edits.
+- **Invariant**:
+  1. Monotonic sequence numbers allocated via `allocateSequenceBlock(eventId, count)` must be persisted into `job.payload.startingSequence` and `job.payload.endSequence` on the first attempt. On retries, the worker MUST reuse the persisted sequence block and NEVER re-increment the sequence counter.
+  2. Bulk credential writes must use `$setOnInsert` semantics matching `{ eventId, sequenceNumber }`. Existing committed records are detected and preserved, and sensitive fields (`verificationToken`, attendee details) remain intact.
+  3. Source files containing duplicate rows (e.g. identical emails) are detected via in-memory deduplication tracking (`Set<string>`). Duplicate rows are skipped, incrementing `skippedCount` and appending an explanatory entry to `result.errorLog` without crashing the batch.
+  4. Succeeded count strictly reflects actually created or already active credentials for the chunk, eliminating duplicate counting.
+  5. Error logs are deduplicated across chunk iterations and retries to avoid duplicate error entries for the same row.
+  6. Distributed worker lease ownership (`lockedBy: workerId` and valid lease expiry) is strictly enforced on all progress updates and completion calls.
+

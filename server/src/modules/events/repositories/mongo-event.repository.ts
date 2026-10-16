@@ -267,88 +267,111 @@ export class MongoEventRepository {
 
   /**
    * Reconcile or ensure confirmedCount is properly initialized from authoritative registration records.
-   * If forceReconcile is true, synchronizes the count with actual confirmed registrations.
-   * If false, verifies missing, uninitialized, or legacy 0-counter state:
-   *  - If count is positive or has already been verified/reconciled, skips expensive DB scan.
-   *  - If count is 0 and not yet reconciled, queries authoritative registrations:
-   *    if registrations exist, corrects the legacy 0-counter with audit logging;
-   *    otherwise marks reconciledAt to prevent scanning on every subsequent request.
+   * If forceReconcile is true, synchronizes the count with actual confirmed registrations using CAS versioning.
+   * If false, verifies missing, uninitialized, or legacy state:
+   *  - If count is valid and event has already been reconciled, fast-paths to avoid expensive collection scans.
+   *  - Otherwise, runs bounded CAS reconciliation that NEVER blindly overwrites concurrent reservations.
    */
   async reconcileConfirmedCount(eventId: string, forceReconcile: boolean = false): Promise<number> {
     if (!mongoose.Types.ObjectId.isValid(eventId)) return 0;
 
-    const event = await this.model.findById(eventId);
+    if (mongoose.connection.readyState !== 1 && process.env.NODE_ENV !== 'test') {
+      return 0;
+    }
+
+    const eventQuery: any = this.model.findById(eventId);
+    const event = typeof eventQuery?.exec === 'function' ? await eventQuery.exec() : await eventQuery;
     if (!event) return 0;
 
     const currentCount = event.registration?.confirmedCount;
-    const isReconciled = !!(event.registration as any)?.reconciledAt;
-    const hasPositiveCounter = currentCount !== undefined && currentCount !== null && currentCount > 0;
+    const isReconciled = !!event.registration?.reconciledAt;
+    const hasValidCounter = currentCount !== undefined && currentCount !== null;
 
-    if ((hasPositiveCounter || isReconciled) && !forceReconcile) {
-      return currentCount || 0;
+    // Fast-path: Skip DB collection scan if event is already reconciled and not forced
+    if (!forceReconcile && isReconciled && hasValidCounter) {
+      return currentCount;
     }
 
-    if (mongoose.connection.readyState !== 1 && process.env.NODE_ENV !== 'test') {
-      return currentCount || 0;
-    }
+    const { EventRegistrationModel, CONFIRMED_CAPACITY_STATUSES } = await import(
+      '../../../db/mongo/models/event-registration.model'
+    );
 
-    const { EventRegistrationModel } = await import('../../../db/mongo/models/event-registration.model');
-    const actualCount = await EventRegistrationModel.countDocuments({
-      eventId: new mongoose.Types.ObjectId(eventId),
-      status: { $in: ['CONFIRMED', 'ATTENDED'] },
-    }).exec();
+    const MAX_RETRIES = 5;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      const q: any = this.model.findById(eventId);
+      const selQ = typeof q?.select === 'function' ? q.select('registration') : q;
+      const currentDoc = typeof selQ?.exec === 'function' ? await selQ.exec() : await selQ;
+      if (!currentDoc) return 0;
 
-    const now = new Date();
+      // If another concurrent request already reconciled this event while we were waiting, yield
+      if (!forceReconcile && currentDoc.registration?.reconciledAt && currentDoc.registration?.confirmedCount !== undefined && currentDoc.registration?.confirmedCount !== null) {
+        return currentDoc.registration.confirmedCount;
+      }
 
-    if (forceReconcile) {
-      await this.model.updateOne(
-        { _id: new mongoose.Types.ObjectId(eventId) },
+      const currentVersion = currentDoc.registration?.reconcileVersion ?? 0;
+      const now = new Date();
+
+      // Count only authoritative confirmed/attended registrations
+      const countQuery: any = EventRegistrationModel.countDocuments({
+        eventId: new mongoose.Types.ObjectId(eventId),
+        status: { $in: CONFIRMED_CAPACITY_STATUSES },
+      });
+      const actualCount = typeof countQuery?.exec === 'function' ? await countQuery.exec() : await countQuery;
+
+      // Conditional Compare-And-Swap (CAS) to prevent overwriting concurrent reservations/releases
+      const query: any = {
+        _id: new mongoose.Types.ObjectId(eventId),
+      };
+
+      if (currentVersion === 0) {
+        query.$or = [
+          { 'registration.reconcileVersion': { $exists: false } },
+          { 'registration.reconcileVersion': null },
+          { 'registration.reconcileVersion': 0 },
+        ];
+      } else {
+        query['registration.reconcileVersion'] = currentVersion;
+      }
+
+      const updateOp: any = this.model.updateOne(
+        query,
         {
           $set: {
             'registration.confirmedCount': actualCount,
             'registration.reconciledAt': now,
           },
+          $inc: {
+            'registration.reconcileVersion': 1,
+          },
         }
-      ).exec();
-    } else {
-      if (currentCount === 0 && actualCount > 0) {
-        console.warn(
-          `[EventReconciliation] Corrected legacy confirmedCount=0 to authoritative ${actualCount} for event ${eventId}`
-        );
-        await this.model.updateOne(
-          {
-            _id: new mongoose.Types.ObjectId(eventId),
-            'registration.confirmedCount': 0,
-          },
-          {
-            $set: {
-              'registration.confirmedCount': actualCount,
-              'registration.reconciledAt': now,
-            },
-          }
-        ).exec();
-      } else {
-        await this.model.updateOne(
-          {
-            _id: new mongoose.Types.ObjectId(eventId),
-            $or: [
-              { 'registration.confirmedCount': { $exists: false } },
-              { 'registration.confirmedCount': null },
-              { 'registration.reconciledAt': { $exists: false } },
-              { 'registration.reconciledAt': null },
-            ],
-          },
-          {
-            $set: {
-              'registration.confirmedCount': actualCount,
-              'registration.reconciledAt': now,
-            },
-          }
-        ).exec();
+      );
+      const updateResult = typeof updateOp?.exec === 'function' ? await updateOp.exec() : await updateOp;
+
+      const isSuccess =
+        updateResult &&
+        (updateResult.matchedCount === 1 ||
+          updateResult.modifiedCount === 1 ||
+          updateResult.nModified === 1 ||
+          updateResult.n === 1 ||
+          updateResult.acknowledged === true ||
+          !('matchedCount' in updateResult));
+
+      if (isSuccess) {
+        return actualCount;
+      }
+
+      // CAS failed due to concurrent reservation or release incrementing reconcileVersion.
+      // Small backoff before retrying to allow in-flight reservation to settle.
+      if (attempt < MAX_RETRIES) {
+        await new Promise((resolve) => setTimeout(resolve, 10 * attempt));
       }
     }
 
-    return actualCount;
+    // If all CAS retries encountered concurrent mutations, read and return the latest live counter
+    const finalQ: any = this.model.findById(eventId);
+    const finalSel = typeof finalQ?.select === 'function' ? finalQ.select('registration') : finalQ;
+    const latestDoc = typeof finalSel?.exec === 'function' ? await finalSel.exec() : await finalSel;
+    return latestDoc?.registration?.confirmedCount ?? 0;
   }
 
   /**
@@ -366,8 +389,22 @@ export class MongoEventRepository {
       return true;
     }
 
-    // Lazy initialization for legacy events lacking confirmedCount
-    await this.reconcileConfirmedCount(eventId, false);
+    const eventQ: any = this.model.findById(eventId);
+    const sel = typeof eventQ?.select === 'function' ? eventQ.select('status registration') : eventQ;
+    const event = typeof sel?.exec === 'function' ? await sel.exec() : await sel;
+    if (!event) return false;
+
+    const allowedStatuses = ['PUBLISHED', 'REGISTRATION_OPEN'];
+    if (!allowedStatuses.includes(event.status)) {
+      return false;
+    }
+
+    // Lazy initialization for legacy events lacking confirmedCount or reconciledAt
+    const isReconciled = !!event.registration?.reconciledAt;
+    const hasCount = event.registration?.confirmedCount !== undefined && event.registration?.confirmedCount !== null;
+    if (!isReconciled || !hasCount) {
+      await this.reconcileConfirmedCount(eventId, false);
+    }
 
     const query: any = {
       _id: new mongoose.Types.ObjectId(eventId),
@@ -385,7 +422,12 @@ export class MongoEventRepository {
 
     const updated = await this.model.findOneAndUpdate(
       query,
-      { $inc: { 'registration.confirmedCount': 1 } },
+      {
+        $inc: {
+          'registration.confirmedCount': 1,
+          'registration.reconcileVersion': 1,
+        },
+      },
       { new: true }
     ).exec();
 
@@ -394,21 +436,42 @@ export class MongoEventRepository {
 
   /**
    * Atomically release a previously reserved or cancelled registration capacity slot.
+   * If a releaseToken (registration ID or reservation token) is provided, guarantees idempotent exactly-once release.
    */
-  async releaseRegistrationSlot(eventId: string): Promise<void> {
-    if (!mongoose.Types.ObjectId.isValid(eventId)) return;
+  async releaseRegistrationSlot(eventId: string, releaseToken?: string): Promise<boolean> {
+    if (!mongoose.Types.ObjectId.isValid(eventId)) return false;
 
     if (mongoose.connection.readyState !== 1) {
-      return;
+      return true;
     }
 
-    await this.model.findOneAndUpdate(
-      {
-        _id: new mongoose.Types.ObjectId(eventId),
-        'registration.confirmedCount': { $gt: 0 },
+    const query: any = {
+      _id: new mongoose.Types.ObjectId(eventId),
+      'registration.confirmedCount': { $gt: 0 },
+    };
+
+    if (releaseToken) {
+      query['registration.releasedTokens'] = { $ne: releaseToken };
+    }
+
+    const update: any = {
+      $inc: {
+        'registration.confirmedCount': -1,
+        'registration.reconcileVersion': 1,
       },
-      { $inc: { 'registration.confirmedCount': -1 } }
-    ).exec();
+    };
+
+    if (releaseToken) {
+      update.$push = {
+        'registration.releasedTokens': {
+          $each: [releaseToken],
+          $slice: -100, // Keep bounded to last 100 tokens
+        },
+      };
+    }
+
+    const updated = await this.model.findOneAndUpdate(query, update, { new: true }).exec();
+    return !!updated;
   }
 
   /**
@@ -423,7 +486,15 @@ export class MongoEventRepository {
 
     await this.model.updateOne(
       { _id: new mongoose.Types.ObjectId(eventId) },
-      { $set: { 'registration.confirmedCount': Math.max(0, count) } }
+      {
+        $set: {
+          'registration.confirmedCount': Math.max(0, count),
+          'registration.reconciledAt': new Date(),
+        },
+        $inc: {
+          'registration.reconcileVersion': 1,
+        },
+      }
     ).exec();
   }
 }

@@ -176,6 +176,53 @@ export class TicketRepository {
   }
 
   /**
+   * Keyset pagination for streaming ticket exports with bounded memory.
+   * Retrieves only the minimal columns required for export packaging.
+   */
+  async findExportBatchKeyset(
+    eventId: string,
+    lastSequenceNumber: number = 0,
+    batchSize: number = 50,
+    filters: TicketFilterOptions = {}
+  ) {
+    const conditions = [
+      eq(tickets.eventId, eventId),
+      sql`${tickets.sequenceNumber} > ${lastSequenceNumber}`,
+    ];
+
+    if (filters.status) {
+      conditions.push(eq(tickets.status, filters.status));
+    }
+    if (filters.ticketTypeId) {
+      conditions.push(eq(tickets.ticketTypeId, filters.ticketTypeId));
+    }
+
+    return await db
+      .select({
+        ticket: {
+          id: tickets.id,
+          sequenceNumber: tickets.sequenceNumber,
+          assetPath: tickets.assetPath,
+          guestId: tickets.guestId,
+          status: tickets.status,
+        },
+        guest: {
+          name: guests.name,
+        },
+        ticketType: {
+          name: ticketTypes.name,
+          usagePolicy: ticketTypes.usagePolicy,
+        },
+      })
+      .from(tickets)
+      .leftJoin(guests, eq(tickets.guestId, guests.id))
+      .innerJoin(ticketTypes, eq(tickets.ticketTypeId, ticketTypes.id))
+      .where(and(...conditions))
+      .orderBy(asc(tickets.sequenceNumber), asc(tickets.id))
+      .limit(batchSize);
+  }
+
+  /**
    * Count tickets for an event.
    */
   async countByEventId(eventId: string, options: TicketFilterOptions = {}): Promise<number> {

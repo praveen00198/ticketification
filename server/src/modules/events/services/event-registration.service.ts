@@ -165,6 +165,7 @@ export class EventRegistrationService {
     // Atomic capacity reservation
     const capacity = event.registration?.capacity;
     let slotReserved = false;
+    const reservationToken = new mongoose.Types.ObjectId().toString();
 
     if (capacity && capacity > 0) {
       const reserved = await this.eventRepo.reserveRegistrationSlot(eventId, capacity);
@@ -242,28 +243,32 @@ export class EventRegistrationService {
         registeredAt: new Date(),
       });
 
-      // Record immutable audit entry
-      await this.audit.record({
-        eventId,
-        actorId: callerUser._id,
-        actorEmail: callerUser.email,
-        actorRole: 'ATTENDEE',
-        action: 'ATTENDEE_REGISTERED',
-        targetEntity: 'EVENT_REGISTRATION',
-        targetId: registration._id.toString(),
-        metadata: {
-          registrationId: registration._id.toString(),
-          credentialId: credential._id.toString(),
-          formattedId: credential.formattedId,
-          attendeeEmail,
-        },
-      });
+      // Record immutable audit entry (wrapped to prevent audit transport failure from aborting registration)
+      try {
+        await this.audit.record({
+          eventId,
+          actorId: callerUser._id,
+          actorEmail: callerUser.email,
+          actorRole: 'ATTENDEE',
+          action: 'ATTENDEE_REGISTERED',
+          targetEntity: 'EVENT_REGISTRATION',
+          targetId: registration._id.toString(),
+          metadata: {
+            registrationId: registration._id.toString(),
+            credentialId: credential._id.toString(),
+            formattedId: credential.formattedId,
+            attendeeEmail,
+          },
+        });
+      } catch (auditErr: any) {
+        console.warn('[EventRegistration] Non-fatal audit log warning:', auditErr.message);
+      }
 
       return { registration, credential };
     } catch (err: any) {
-      // Rollback reserved slot upon failure
+      // Rollback reserved slot idempotently upon failure
       if (slotReserved) {
-        await this.eventRepo.releaseRegistrationSlot(eventId);
+        await this.eventRepo.releaseRegistrationSlot(eventId, reservationToken).catch(() => {});
       }
 
       // Rollback issued credential if registration failed
@@ -348,8 +353,8 @@ export class EventRegistrationService {
     );
 
     if (wasConfirmed && cancelledReg) {
-      // Exactly-once capacity release
-      await this.eventRepo.releaseRegistrationSlot(eventId);
+      // Exactly-once capacity release using registrationId as idempotent releaseToken
+      await this.eventRepo.releaseRegistrationSlot(eventId, registration._id.toString());
     }
 
     // Revoke linked credential if active

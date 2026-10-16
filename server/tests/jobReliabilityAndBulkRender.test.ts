@@ -455,16 +455,18 @@ describe('Job Reliability, Concurrency & Bulk Render Beyond 500 Records', () => 
         eventId: new mongoose.Types.ObjectId(eventId),
         jobType: 'BULK_RENDER_ASSETS',
         status: 'QUEUED',
+        maxAttempts: 1,
       });
 
       await service.executeJob(job._id.toString());
 
-      const completed = await jobRepo.findById(job._id.toString());
-      expect(completed?.status).toBe('COMPLETED');
-      expect(completed?.result?.renderedCount).toBe(9);
-      expect(completed?.result?.errorLog?.length).toBe(1);
-      expect(completed?.result?.errorLog?.[0]?.identifier).toBe('BDG-00003');
-      expect(completed?.result?.errorLog?.[0]?.error).toMatch(/Corrupt attendee badge/);
+      const terminalJob = await jobRepo.findById(job._id.toString());
+      expect(terminalJob?.status).toBe('FAILED');
+      expect(terminalJob?.status).not.toBe('COMPLETED');
+      expect(terminalJob?.result?.renderedCount).toBe(9);
+      expect(terminalJob?.result?.errorLog?.length).toBe(1);
+      expect(terminalJob?.result?.errorLog?.[0]?.identifier).toBe('BDG-00003');
+      expect(terminalJob?.result?.errorLog?.[0]?.error).toMatch(/Corrupt attendee badge/);
     });
   });
 });

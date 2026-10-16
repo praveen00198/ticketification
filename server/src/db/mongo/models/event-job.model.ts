@@ -8,6 +8,7 @@ export interface IJobProgress {
   processed: number;
   succeeded: number;
   failed: number;
+  skipped?: number;
   percentage: number;
 }
 
@@ -21,6 +22,8 @@ export interface IJobResult {
   importedCount: number;
   renderedCount: number;
   exportedCount?: number;
+  skippedCount?: number;
+  failedCount?: number;
   downloadUrl?: string | null;
   storagePath?: string | null;
   fileSizeBytes?: number | null;
@@ -57,6 +60,7 @@ const JobProgressSchema = new Schema<IJobProgress>(
     processed: { type: Number, default: 0 },
     succeeded: { type: Number, default: 0 },
     failed: { type: Number, default: 0 },
+    skipped: { type: Number, default: 0 },
     percentage: { type: Number, default: 0 },
   },
   { _id: false }
@@ -76,6 +80,8 @@ const JobResultSchema = new Schema<IJobResult>(
     importedCount: { type: Number, default: 0 },
     renderedCount: { type: Number, default: 0 },
     exportedCount: { type: Number, default: 0 },
+    skippedCount: { type: Number, default: 0 },
+    failedCount: { type: Number, default: 0 },
     downloadUrl: { type: String, default: null },
     storagePath: { type: String, default: null },
     fileSizeBytes: { type: Number, default: 0 },

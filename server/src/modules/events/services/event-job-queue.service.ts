@@ -31,6 +31,7 @@ import {
 import {
   IEventJobDocument,
   IJobResult,
+  IJobErrorEntry,
 } from '../../../db/mongo/models/event-job.model';
 import { eventStorageGovernanceService } from './event-storage-governance.service';
 import {
@@ -362,6 +363,24 @@ export class EventJobQueueService {
   }
 
   /**
+   * Safe date resolver: uses schedule.startAt or event.date, falls back to Date TBA.
+   * Never fabricates 2026-10-10.
+   */
+  public resolveEventDate(event: any): string {
+    if (!event) return 'Date TBA';
+    if (event.schedule?.startAt) {
+      const d = new Date(event.schedule.startAt);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString();
+      }
+    }
+    if (event.date && typeof event.date === 'string' && event.date.trim() && event.date !== '2026-10-10') {
+      return event.date.trim();
+    }
+    return 'Date TBA';
+  }
+
+  /**
    * Background Execution Engine for a claimed job with atomic ownership and bounded retry backoff.
    */
   private async executeClaimedJob(claimedJob: IEventJobDocument): Promise<void> {
@@ -388,7 +407,7 @@ export class EventJobQueueService {
         const backoffDelay = Math.min(30000, 1000 * Math.pow(2, attempts));
         await this.jobRepo.releaseJobForRetry(jobId, sanitized, backoffDelay, this.workerId);
       } else {
-        await this.jobRepo.markFailed(jobId, sanitized, undefined, this.workerId);
+        await this.jobRepo.markFailed(jobId, sanitized, refreshed?.result || claimedJob.result, this.workerId);
       }
     }
   }
@@ -407,20 +426,96 @@ export class EventJobQueueService {
     const terminology = event.credentialTerminology || 'Pass';
     const cleanPrefix = this.derivePrefix(terminology);
 
-    // Persist allocated sequence range before processing chunks so retries reuse the identical block
+    // Persist allocated sequence range and allocation metadata before processing chunks so retries reuse the identical block
     let startingSequence: number;
+    let endSequence: number;
     if (job.payload?.startingSequence) {
       startingSequence = job.payload.startingSequence;
+      endSequence = job.payload.endSequence || (startingSequence + total - 1);
     } else {
       startingSequence = await this.credentialRepo.allocateSequenceBlock(eventId, total);
-      job.payload = { ...(job.payload || {}), startingSequence };
+      endSequence = startingSequence + total - 1;
+      job.payload = {
+        ...(job.payload || {}),
+        startingSequence,
+        endSequence,
+        allocatedCount: total,
+        allocatedAt: new Date(),
+      };
       await this.jobRepo.updatePayload(job._id.toString(), job.payload);
+    }
+
+    // Deduplicate error log entries across retries and repeated progress updates
+    const errorLogMap = new Map<string, IJobErrorEntry>();
+    if (job.result?.errorLog && Array.isArray(job.result.errorLog)) {
+      for (const entry of job.result.errorLog) {
+        const key = `${entry.row ?? ''}:${entry.identifier ?? ''}:${entry.error}`;
+        errorLogMap.set(key, entry);
+      }
+    }
+
+    // Deduplicate records in source file (e.g. duplicate email, phone, or attendee identity)
+    const seenEmails = new Set<string>();
+    const seenPhones = new Set<string>();
+    const seenIdentities = new Set<string>();
+    const duplicateRowIndices = new Set<number>();
+
+    for (let idx = 0; idx < records.length; idx++) {
+      const rec = records[idx];
+      const rowNum = rec.rowNumber ?? (idx + 1);
+      const normEmail = rec.email ? rec.email.trim().toLowerCase() : null;
+      const normPhone = rec.phone ? rec.phone.trim() : null;
+      const normName = rec.name ? rec.name.trim().toLowerCase() : '';
+
+      let isDuplicate = false;
+      let duplicateReason = '';
+
+      if (normEmail) {
+        if (seenEmails.has(normEmail)) {
+          isDuplicate = true;
+          duplicateReason = `Duplicate email "${rec.email}" in source file`;
+        } else {
+          seenEmails.add(normEmail);
+        }
+      }
+
+      if (!isDuplicate && normPhone) {
+        if (seenPhones.has(normPhone)) {
+          isDuplicate = true;
+          duplicateReason = `Duplicate phone "${rec.phone}" in source file`;
+        } else {
+          seenPhones.add(normPhone);
+        }
+      }
+
+      if (!isDuplicate && normName && !normEmail && !normPhone) {
+        const identityKey = `${normName}|${rec.organization?.trim().toLowerCase() || ''}`;
+        if (seenIdentities.has(identityKey)) {
+          isDuplicate = true;
+          duplicateReason = `Duplicate attendee "${rec.name}" in source file`;
+        } else {
+          seenIdentities.add(identityKey);
+        }
+      }
+
+      if (isDuplicate) {
+        duplicateRowIndices.add(idx);
+        const errorEntry: IJobErrorEntry = {
+          row: rowNum,
+          identifier: rec.email || rec.phone || rec.name,
+          error: `${duplicateReason} (skipped)`,
+        };
+        const errorKey = `${errorEntry.row ?? ''}:${errorEntry.identifier ?? ''}:${errorEntry.error}`;
+        errorLogMap.set(errorKey, errorEntry);
+      }
     }
 
     const result: IJobResult = {
       importedCount: job.result?.importedCount || 0,
       renderedCount: job.result?.renderedCount || 0,
-      errorLog: job.result?.errorLog ? [...job.result.errorLog] : [],
+      skippedCount: duplicateRowIndices.size,
+      failedCount: Array.from(errorLogMap.values()).filter((e) => !e.error.includes('(skipped)')).length,
+      errorLog: Array.from(errorLogMap.values()),
     };
 
     const insertedCredentials: IEventCredentialDocument[] = [];
@@ -451,11 +546,21 @@ export class EventJobQueueService {
       const batchDocs: Partial<IEventCredentialDocument>[] = [];
 
       for (let j = 0; j < chunk.length; j++) {
+        const globalIndex = i + j;
         const record = chunk[j];
         const seqNum = startSeq + j;
+        const rowNum = record.rowNumber ?? (globalIndex + 1);
+
+        // Skip rows detected as duplicate in source file
+        if (duplicateRowIndices.has(globalIndex)) {
+          continue;
+        }
 
         if (existingSeqMap.has(seqNum)) {
-          insertedCredentials.push(existingSeqMap.get(seqNum)!);
+          const existingDoc = existingSeqMap.get(seqNum)!;
+          if (!insertedCredentials.some((c) => c._id.toString() === existingDoc._id.toString())) {
+            insertedCredentials.push(existingDoc);
+          }
           continue;
         }
 
@@ -473,14 +578,20 @@ export class EventJobQueueService {
           status: 'ACTIVE',
           holder: {
             name: record.name,
-            email: record.email || null,
-            phone: record.phone || null,
-            organization: record.organization || null,
+            email: record.email ? record.email.trim().toLowerCase() : null,
+            phone: record.phone ? record.phone.trim() : null,
+            organization: record.organization ? record.organization.trim() : null,
             category: record.category || 'PARTICIPANT',
             isAssigned: true,
           },
           asset: {
             mimeType: 'image/png',
+          },
+          metadata: {
+            ...(record.customFields || {}),
+            importJobId: job._id.toString(),
+            importRow: rowNum,
+            importKey: `${job._id.toString()}:${rowNum}`,
           },
           checkInCount: 0,
           createdBy: job.createdBy,
@@ -488,11 +599,48 @@ export class EventJobQueueService {
       }
 
       if (batchDocs.length > 0) {
-        const created = await this.credentialRepo.createMany(batchDocs);
-        insertedCredentials.push(...created);
+        try {
+          const created = await this.credentialRepo.createMany(batchDocs);
+          insertedCredentials.push(...created);
+        } catch (err: any) {
+          if (err.code === 11000 || err.message?.includes('duplicate key') || err.message?.includes('E11000')) {
+            // Safe recovery from duplicate-key race: reload existing records
+            const reFetched = await this.credentialRepo.findBySequenceRange(eventId, startSeq, endSeq);
+            for (const doc of reFetched) {
+              if (!insertedCredentials.some((c) => c._id.toString() === doc._id.toString())) {
+                insertedCredentials.push(doc);
+              }
+            }
+          } else {
+            const sanitized = this.sanitizeErrorMessage(err.message || 'Batch insertion failed');
+            const errorEntry: IJobErrorEntry = {
+              row: chunk[0]?.rowNumber,
+              identifier: `CHUNK-${Math.floor(i / CHUNK_SIZE) + 1}`,
+              error: sanitized,
+            };
+            const errorKey = `${errorEntry.row ?? ''}:${errorEntry.identifier ?? ''}:${errorEntry.error}`;
+            errorLogMap.set(errorKey, errorEntry);
+            throw err;
+          }
+        }
       }
 
-      result.importedCount = insertedCredentials.length;
+      // Read true persisted credentials from database for accurate cross-attempt counts
+      const blockCredentials = await this.credentialRepo.findBySequenceRange(
+        eventId,
+        startingSequence,
+        endSeq
+      );
+      const currentImported = blockCredentials.length > 0 ? blockCredentials.length : insertedCredentials.length;
+      const currentErrors = Array.from(errorLogMap.values());
+      const currentFailed = currentErrors.filter((e) => !e.error.includes('(skipped)')).length;
+      const currentSkipped = duplicateRowIndices.size;
+
+      result.importedCount = currentImported;
+      result.skippedCount = currentSkipped;
+      result.failedCount = currentFailed;
+      result.errorLog = currentErrors;
+
       const processed = Math.min(i + CHUNK_SIZE, total);
       const percentage = Math.round((processed / total) * 100);
 
@@ -501,8 +649,9 @@ export class EventJobQueueService {
         {
           total,
           processed,
-          succeeded: result.importedCount,
-          failed: result.errorLog.length,
+          succeeded: currentImported,
+          failed: currentFailed,
+          skipped: currentSkipped,
           percentage,
         },
         result,
@@ -514,16 +663,39 @@ export class EventJobQueueService {
       }
     }
 
+    // Load all credentials across the allocated block for rendering and final count verification
+    const finalCredentials = await this.credentialRepo.findBySequenceRange(
+      eventId,
+      startingSequence,
+      endSequence
+    );
+    const credentialsToRender = finalCredentials.length > 0 ? finalCredentials : insertedCredentials;
+
     // Optional background Sharp rendering if requested
-    if (job.payload?.renderAfterImport && insertedCredentials.length > 0) {
+    if (job.payload?.renderAfterImport && credentialsToRender.length > 0) {
       await this.renderCredentialsSequentially(
         eventId,
         event,
-        insertedCredentials,
+        credentialsToRender,
         job,
         result
       );
+      if (result.renderedCount === 0 && credentialsToRender.length > 0 && result.errorLog.length > 0) {
+        await this.jobRepo.markFailed(
+          job._id.toString(),
+          'Rendering credentials after import failed completely',
+          result,
+          this.workerId
+        );
+        return;
+      }
     }
+
+    const finalErrors = Array.from(errorLogMap.values());
+    result.importedCount = credentialsToRender.length;
+    result.skippedCount = duplicateRowIndices.size;
+    result.failedCount = finalErrors.filter((e) => !e.error.includes('(skipped)')).length;
+    result.errorLog = finalErrors;
 
     await this.jobRepo.markCompleted(job._id.toString(), result, this.workerId);
   }
@@ -537,14 +709,21 @@ export class EventJobQueueService {
     const event = await this.eventRepo.findById(eventId);
     if (!event) throw new NotFoundError('Event not found for job');
 
-    const totalUnrendered = await this.credentialRepo.countUnrenderedByEvent(eventId);
-    if (totalUnrendered === 0) {
+    const initialUnrendered = await this.credentialRepo.countUnrenderedByEvent(eventId);
+    const totalTarget = (job.progress?.total && job.progress.total > 0)
+      ? job.progress.total
+      : initialUnrendered;
+
+    // Baseline count of credentials already rendered before this run
+    const succeededBaseline = Math.max(0, totalTarget - initialUnrendered);
+
+    if (initialUnrendered === 0) {
       await this.jobRepo.markCompleted(
         job._id.toString(),
         {
           importedCount: 0,
-          renderedCount: 0,
-          errorLog: [],
+          renderedCount: totalTarget,
+          errorLog: job.result?.errorLog || [],
         },
         this.workerId
       );
@@ -553,7 +732,7 @@ export class EventJobQueueService {
 
     await eventStorageGovernanceService.assertStorageAllowance(
       eventId,
-      totalUnrendered * 400 * 1024
+      initialUnrendered * 400 * 1024
     );
 
     let template = job.payload?.templateId
@@ -571,11 +750,12 @@ export class EventJobQueueService {
 
     const result: IJobResult = {
       importedCount: 0,
-      renderedCount: job.result?.renderedCount || 0,
-      errorLog: job.result?.errorLog ? [...job.result.errorLog] : [],
+      renderedCount: succeededBaseline,
+      errorLog: [],
     };
 
-    let processedCount = 0;
+    let processedCount = succeededBaseline;
+    let newlyRendered = 0;
     const BATCH_SIZE = 50;
     let lastId: any = null;
 
@@ -596,6 +776,7 @@ export class EventJobQueueService {
         const checkJob = await this.jobRepo.findById(job._id.toString());
         if (checkJob?.status === 'CANCELLED') return;
 
+        // Skip if already rendered (e.g. from prior partial attempt)
         if (cred.asset?.storagePath) {
           processedCount++;
           continue;
@@ -608,10 +789,8 @@ export class EventJobQueueService {
             verificationToken: cred.verificationToken,
             qrPayload: `https://ticketification.app/verify/${cred.verificationToken}`,
             role: cred.holder?.category || 'PARTICIPANT',
-            eventName: event.name,
-            date: event.schedule?.startAt
-              ? new Date(event.schedule.startAt).toLocaleDateString()
-              : 'Date TBA',
+            eventName: event.name || 'Event',
+            date: this.resolveEventDate(event),
             venue: event.venue?.name || 'Main Venue',
           };
 
@@ -629,7 +808,8 @@ export class EventJobQueueService {
             mimeType: 'image/png',
           };
           await cred.save();
-          result.renderedCount += 1;
+          newlyRendered += 1;
+          result.renderedCount = succeededBaseline + newlyRendered;
         } catch (err: any) {
           result.errorLog.push({
             identifier: cred.formattedId,
@@ -639,14 +819,16 @@ export class EventJobQueueService {
 
         processedCount++;
 
-        if (processedCount % 5 === 0 || processedCount >= totalUnrendered) {
-          const percentage = totalUnrendered > 0 ? Math.min(100, Math.round((processedCount / totalUnrendered) * 100)) : 100;
+        if (processedCount % 5 === 0 || processedCount >= totalTarget) {
+          const percentage = totalTarget > 0
+            ? Math.min(100, Math.round((processedCount / totalTarget) * 100))
+            : 100;
           const updated = await this.jobRepo.updateProgress(
             job._id.toString(),
             {
-              total: totalUnrendered,
+              total: totalTarget,
               processed: processedCount,
-              succeeded: result.renderedCount,
+              succeeded: succeededBaseline + newlyRendered,
               failed: result.errorLog.length,
               percentage,
             },
@@ -659,28 +841,21 @@ export class EventJobQueueService {
         }
       }
 
-      if (processedCount >= totalUnrendered || batch.length < BATCH_SIZE) {
+      if (processedCount >= totalTarget || batch.length < BATCH_SIZE) {
         break;
       }
       lastId = batch[batch.length - 1]._id;
     }
 
-    if (totalUnrendered > 0 && result.renderedCount === 0 && result.errorLog.length === totalUnrendered) {
-      await this.jobRepo.markFailed(
-        job._id.toString(),
-        'All credentials failed to render',
-        result,
-        this.workerId
-      );
-      return;
-    }
+    const finalRemaining = await this.credentialRepo.countUnrenderedByEvent(eventId);
+    const hasFailures = result.errorLog.length > 0 || finalRemaining > 0;
 
     await this.jobRepo.updateProgress(
       job._id.toString(),
       {
-        total: totalUnrendered,
-        processed: processedCount,
-        succeeded: result.renderedCount,
+        total: totalTarget,
+        processed: totalTarget - finalRemaining,
+        succeeded: succeededBaseline + newlyRendered,
         failed: result.errorLog.length,
         percentage: 100,
       },
@@ -688,7 +863,33 @@ export class EventJobQueueService {
       this.workerId
     );
 
-    await this.jobRepo.markCompleted(job._id.toString(), result, this.workerId);
+    if (hasFailures) {
+      const detailedError = result.errorLog[0]?.error ? `: ${result.errorLog[0].error}` : '';
+      const errorMsg = (succeededBaseline + newlyRendered === 0)
+        ? `All credentials failed to render${detailedError}`
+        : `Bulk rendering incomplete: ${result.errorLog.length} failed, ${finalRemaining} remaining unrendered, ${succeededBaseline + newlyRendered} succeeded${detailedError}`;
+
+      const refreshed = await this.jobRepo.findById(job._id.toString());
+      const attempts = refreshed?.attempts || job.attempts || 1;
+      const maxAttempts = refreshed?.maxAttempts || job.maxAttempts || 3;
+
+      if (attempts >= maxAttempts) {
+        await this.jobRepo.markFailed(
+          job._id.toString(),
+          errorMsg,
+          result,
+          this.workerId
+        );
+      } else {
+        throw new Error(errorMsg);
+      }
+      return;
+    }
+
+    const completed = await this.jobRepo.markCompleted(job._id.toString(), result, this.workerId);
+    if (!completed) {
+      throw new Error('Worker ownership lost during bulk render completion');
+    }
   }
 
   /**
@@ -728,10 +929,8 @@ export class EventJobQueueService {
           verificationToken: cred.verificationToken,
           qrPayload: `https://ticketification.app/verify/${cred.verificationToken}`,
           role: cred.holder?.category || 'PARTICIPANT',
-          eventName: event.name,
-          date: event.schedule?.startAt
-            ? new Date(event.schedule.startAt).toLocaleDateString()
-            : 'Date TBA',
+          eventName: event.name || 'Event',
+          date: this.resolveEventDate(event),
           venue: event.venue?.name || 'Main Venue',
         };
 

@@ -17,6 +17,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { attendeeApi, AttendeeWalletItem, AttendeeTeamData } from '../api/attendee';
+import { ticketsApi, triggerBlobDownload } from '../api/tickets';
 import QRCode from 'qrcode';
 import { Button, Badge, Modal, EmptyState, Input, InView, AnimatedGroup } from '../components/ui';
 
@@ -30,6 +31,22 @@ export const AttendeeWalletPage: React.FC = () => {
   // QR Inspection Modal state
   const [selectedPassForQr, setSelectedPassForQr] = useState<AttendeeWalletItem | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [downloadingPassId, setDownloadingPassId] = useState<string | null>(null);
+
+  const handleDownloadPass = async (pass: AttendeeWalletItem) => {
+    try {
+      setDownloadingPassId(pass.credentialId);
+      const { blob, fileName } = await ticketsApi.downloadTicket(pass.credentialId, pass.eventId);
+      triggerBlobDownload(blob, fileName || `${pass.formattedId}.png`);
+    } catch (err: any) {
+      console.error('[AttendeeWallet] Failed to download pass:', err);
+      if (pass.asset?.publicUrl) {
+        window.open(pass.asset.publicUrl, '_blank');
+      }
+    } finally {
+      setDownloadingPassId(null);
+    }
+  };
 
   useEffect(() => {
     if (selectedPassForQr) {
@@ -411,18 +428,15 @@ export const AttendeeWalletPage: React.FC = () => {
                       View QR
                     </Button>
 
-                    {pass.asset?.publicUrl && (
-                      <a
-                        href={pass.asset.publicUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        download={`${pass.formattedId}.png`}
-                        className="inline-flex items-center justify-center font-semibold transition-all duration-150 rounded-xl bg-white hover:bg-stone-50 text-zinc-800 border border-stone-200/90 text-xs py-1.5 px-3 gap-1.5 min-h-[34px] shadow-2xs"
-                      >
-                        <Download className="w-3.5 h-3.5 text-stone-500" />
-                        <span>Pass PNG</span>
-                      </a>
-                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDownloadPass(pass)}
+                      disabled={downloadingPassId === pass.credentialId}
+                      iconLeft={<Download className="w-3.5 h-3.5 text-stone-500" />}
+                    >
+                      {downloadingPassId === pass.credentialId ? 'Downloading...' : 'Pass PNG'}
+                    </Button>
                   </div>
 
                   <div className="flex items-center gap-2">

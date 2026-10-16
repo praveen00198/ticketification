@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useEvent } from '../context/EventContext';
-import { ticketsApi, TicketListItem } from '../api/tickets';
+import { ticketsApi, TicketListItem, triggerBlobDownload } from '../api/tickets';
 import {
   Ticket,
   Search,
@@ -96,7 +96,7 @@ export const TicketList: React.FC = () => {
   };
 
   const handleDownloadSingleTicket = async (t: TicketListItem) => {
-    if (!t.assetUrl || !currentEvent) return;
+    if (!currentEvent) return;
     try {
       setDownloadingTicketId(t.id);
       const seqStr = t.sequenceNumber.toString().padStart(5, '0');
@@ -112,19 +112,14 @@ export const TicketList: React.FC = () => {
               .replace(/-+/g, '-')
               .replace(/^-+|-+$/g, '')
           : null;
-      const filename = cleanGuestName ? `${cleanGuestName}-${displayId}.png` : `${displayId}.png`;
+      const fallbackFilename = cleanGuestName ? `${cleanGuestName}-${displayId}.png` : `${displayId}.png`;
 
-      const pngBlob = await convertSvgUrlToPngBlob(t.assetUrl);
-      const blobUrl = window.URL.createObjectURL(pngBlob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(blobUrl);
-      document.body.removeChild(a);
+      const { blob, fileName } = await ticketsApi.downloadTicket(t.id, currentEvent.id);
+      triggerBlobDownload(blob, fileName || fallbackFilename);
     } catch (_err) {
-      window.open(t.assetUrl, '_blank');
+      if (t.assetUrl) {
+        window.open(t.assetUrl, '_blank');
+      }
     } finally {
       setDownloadingTicketId(null);
     }

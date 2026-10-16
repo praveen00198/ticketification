@@ -8,6 +8,11 @@ export const REGISTRATION_STATUSES: RegistrationStatus[] = [
   'ATTENDED',
 ];
 
+export const CONFIRMED_CAPACITY_STATUSES: readonly RegistrationStatus[] = [
+  'CONFIRMED',
+  'ATTENDED',
+] as const;
+
 export interface IRegistrationAttendeeDetails {
   name: string;
   email: string;

@@ -181,6 +181,7 @@ export const EventCredentialSchema = new Schema<IEventCredentialDocument>(
 // Compound & Performance Indexes
 EventCredentialSchema.index({ eventId: 1, sequenceNumber: 1 }, { unique: true });
 EventCredentialSchema.index({ verificationToken: 1 }, { unique: true });
+EventCredentialSchema.index({ eventId: 1, 'metadata.importKey': 1 }, { unique: true, sparse: true });
 EventCredentialSchema.index({ eventId: 1, status: 1 });
 EventCredentialSchema.index({ eventId: 1, credentialType: 1 });
 EventCredentialSchema.index({ eventId: 1, 'holder.email': 1 });

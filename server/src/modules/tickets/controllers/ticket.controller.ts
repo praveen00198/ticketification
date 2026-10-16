@@ -91,11 +91,20 @@ export class TicketController {
       if (!req.user) throw new AuthenticationError();
 
       const ticketId = validateTicketIdParam(req.params.ticketId || req.params.id);
+      const rawEventId = req.params.eventId || (req.query.eventId as string | undefined);
+      const scopedEventId = rawEventId ? validateEventIdParam(rawEventId) : undefined;
       const wantsRedirect = req.query.redirect === 'true' || req.query.direct === 'true';
       const wantsUrl = req.query.format === 'url';
 
+      const authContext = {
+        userId: req.user.id,
+        userEmail: req.user.email,
+        userRole: req.user.role,
+        scopedEventId,
+      };
+
       if (wantsRedirect || wantsUrl) {
-        const presigned = await ticketService.getPresignedTicketDownloadUrl(ticketId, req.user.id);
+        const presigned = await ticketService.getPresignedTicketDownloadUrl(ticketId, authContext);
         if (presigned) {
           if (wantsUrl) {
             res.json({ success: true, downloadUrl: presigned.url, fileName: presigned.fileName });
@@ -106,7 +115,7 @@ export class TicketController {
         }
       }
 
-      const result = await ticketService.downloadTicket(ticketId, req.user.id);
+      const result = await ticketService.downloadTicket(ticketId, authContext);
 
       res.setHeader('Content-Type', result.contentType);
       res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);

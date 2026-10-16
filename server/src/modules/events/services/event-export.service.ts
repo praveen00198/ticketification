@@ -150,16 +150,20 @@ export class EventExportService {
       cursor = this.credentialRepo.findExportCursor(eventId, filters, 50);
 
       for await (const cred of cursor) {
-        // Check cancellation
-        const currentJob = await this.jobRepo.findById(job._id.toString());
-        if (currentJob?.status === 'CANCELLED') {
-          archive.abort();
-          if (cursor && typeof cursor.close === 'function') await cursor.close();
-          return;
+        processedCount++;
+
+        // Check cancellation every 10 passes or on the first record
+        if (processedCount % 10 === 0 || processedCount === 1) {
+          const currentJob = await this.jobRepo.findById(job._id.toString());
+          if (currentJob?.status === 'CANCELLED') {
+            archive.abort();
+            if (cursor && typeof cursor.close === 'function') await cursor.close();
+            return;
+          }
         }
 
-        // Heartbeat lease renewal every 10 passes
-        if (workerId && processedCount % 10 === 0) {
+        // Heartbeat lease renewal every 50 passes
+        if (workerId && processedCount % 50 === 0) {
           const renewed = await this.jobRepo.renewLease(job._id.toString(), workerId);
           if (!renewed) {
             archive.abort();
@@ -167,8 +171,6 @@ export class EventExportService {
             throw new Error('Worker lease lost or expired during ZIP export');
           }
         }
-
-        processedCount++;
 
         try {
           let imageBuffer: Buffer | null = null;
@@ -208,6 +210,11 @@ export class EventExportService {
             const filename = `${cred.formattedId}-${safeName}.png`;
             archive.append(imageBuffer, { name: filename });
             succeededCount++;
+
+            // Respect writeStream backpressure
+            if (writeStream.writableNeedDrain || (writeStream as any)._writableState?.needDrain) {
+              await new Promise<void>((resolve) => writeStream.once('drain', () => resolve()));
+            }
           } else {
             result.errorLog.push({
               identifier: cred.formattedId,
@@ -221,8 +228,9 @@ export class EventExportService {
           });
         }
 
-        // Update progress every 10 records or on the last record
-        if (processedCount % 10 === 0 || processedCount === total) {
+        // Update progress at bounded intervals or on the last record
+        const progressInterval = total > 500 ? 50 : 10;
+        if (processedCount % progressInterval === 0 || processedCount === total) {
           const percentage = Math.round((processedCount / total) * 100);
           const updated = await this.jobRepo.updateProgress(
             job._id.toString(),
@@ -248,6 +256,13 @@ export class EventExportService {
         throw new Error('Failed to package any valid credential pass into archive');
       }
 
+      // Prevent incomplete archives from being marked COMPLETED (Requirement 10)
+      if (result.errorLog.length > 0 || (total > 0 && succeededCount < total)) {
+        throw new Error(
+          `ZIP export incomplete: packaged ${succeededCount} of ${total} passes (${result.errorLog.length} failures)`
+        );
+      }
+
       await archive.finalize();
       await archiveClosedPromise;
 
@@ -256,7 +271,7 @@ export class EventExportService {
         .toLowerCase()
         .replace(/[^a-z0-9_-]/g, '_')
         .replace(/_+/g, '_');
-      const zipFilename = `passes-${sanitizedEventName}-${Date.now()}.zip`;
+      const zipFilename = `passes-${sanitizedEventName}-${job._id.toString()}-att${job.attempts || 1}-${Date.now()}.zip`;
 
       const fileData = fs.createReadStream(tempFilePath);
       fileData.on('error', () => {});
@@ -281,13 +296,25 @@ export class EventExportService {
       await this.jobRepo.markCompleted(job._id.toString(), result, workerId);
     } catch (err: any) {
       if (!streamFinished) {
-        archive.abort();
+        try {
+          archive.abort();
+        } catch {}
+      }
+      if (!writeStream.destroyed) {
+        try {
+          writeStream.destroy();
+        } catch {}
       }
       throw err;
     } finally {
       if (cursor && typeof cursor.close === 'function') {
         try {
           await cursor.close();
+        } catch {}
+      }
+      if (!writeStream.destroyed) {
+        try {
+          writeStream.destroy();
         } catch {}
       }
       if (fs.existsSync(tempFilePath)) {

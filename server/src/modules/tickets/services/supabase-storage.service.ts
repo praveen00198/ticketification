@@ -54,7 +54,7 @@ export class SupabaseStorageService {
       const { data: bucket, error } = await this.client.storage.getBucket(this.bucket);
       if (error || !bucket) {
         const { error: createErr } = await this.client.storage.createBucket(this.bucket, {
-          public: true,
+          public: false,
         });
         if (createErr && !createErr.message.includes('already exists')) {
           console.warn('[SupabaseStorageService] Bucket creation note:', createErr.message);
@@ -492,40 +492,57 @@ export class SupabaseStorageService {
       throw new StorageError(`Failed to upload export file to Supabase Storage: ${uploadError.message}`);
     }
 
-    // Generate signed download URL valid for 24 hours (86400s)
+    // Generate signed download URL valid for 24 hours (86400s) with attachment content-disposition
     let signedUrl: string | undefined;
     const { data: signedData, error: signedErr } = await this.client.storage
       .from(this.bucket)
-      .createSignedUrl(storagePath, 86400);
+      .createSignedUrl(storagePath, 86400, { download: sanitizedBase } as any);
 
-    if (!signedErr && signedData?.signedUrl) {
-      signedUrl = signedData.signedUrl;
+    if (signedErr || !signedData?.signedUrl) {
+      throw new StorageError(
+        `Failed to generate signed download URL for export: ${signedErr?.message || 'Unknown error'}`
+      );
     }
-
-    const { data: urlData } = this.client.storage.from(this.bucket).getPublicUrl(storagePath);
+    signedUrl = signedData.signedUrl;
 
     return {
       storagePath,
-      publicUrl: urlData?.publicUrl,
-      signedUrl: signedUrl || urlData?.publicUrl,
+      signedUrl,
+      publicUrl: signedUrl,
     };
   }
 
   /**
    * Create a presigned download URL for a stored asset.
+   * Enforces private storage access; never falls back to public URLs.
    */
-  async createPresignedDownloadUrl(storagePath: string, expiresInSeconds = 86400): Promise<string> {
+  async createPresignedDownloadUrl(
+    storagePath: string,
+    expiresInSeconds: number = 900,
+    options?: { download?: string | boolean }
+  ): Promise<string> {
     if (!this.client) {
       throw new StorageError('Supabase Storage is not configured.');
     }
     const cleanPath = storagePath.replace(/^\/+/, '');
+
+    const signedOptions: any = {};
+    if (options?.download) {
+      signedOptions.download = options.download;
+    }
+
     const { data, error } = await this.client.storage
       .from(this.bucket)
-      .createSignedUrl(cleanPath, expiresInSeconds);
+      .createSignedUrl(
+        cleanPath,
+        expiresInSeconds,
+        Object.keys(signedOptions).length > 0 ? signedOptions : undefined
+      );
 
     if (error || !data?.signedUrl) {
-      const { data: pubData } = this.client.storage.from(this.bucket).getPublicUrl(cleanPath);
-      return pubData?.publicUrl || '';
+      throw new StorageError(
+        `Failed to generate signed download URL for private asset (${cleanPath}): ${error?.message || 'Unknown error'}`
+      );
     }
     return data.signedUrl;
   }

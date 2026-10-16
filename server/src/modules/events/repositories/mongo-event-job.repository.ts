@@ -77,16 +77,21 @@ export class MongoEventJobRepository {
     if (mongoose.connection.readyState !== 1) {
       const job = await this.findById(jobId);
       if (!job) return null;
-      if (workerId && job.lockedBy && job.lockedBy !== workerId) return null;
+      if (workerId && (job.lockedBy !== workerId || (job.lockExpiresAt && new Date(job.lockExpiresAt) < new Date()))) {
+        return null;
+      }
       if (progress.total !== undefined) job.progress.total = progress.total;
       if (progress.processed !== undefined) job.progress.processed = progress.processed;
       if (progress.succeeded !== undefined) job.progress.succeeded = progress.succeeded;
       if (progress.failed !== undefined) job.progress.failed = progress.failed;
+      if (progress.skipped !== undefined) job.progress.skipped = progress.skipped;
       if (progress.percentage !== undefined) job.progress.percentage = progress.percentage;
       if (partialResult) {
         if (partialResult.importedCount !== undefined) job.result.importedCount = partialResult.importedCount;
         if (partialResult.renderedCount !== undefined) job.result.renderedCount = partialResult.renderedCount;
         if (partialResult.exportedCount !== undefined) job.result.exportedCount = partialResult.exportedCount;
+        if (partialResult.skippedCount !== undefined) job.result.skippedCount = partialResult.skippedCount;
+        if (partialResult.failedCount !== undefined) job.result.failedCount = partialResult.failedCount;
         if (partialResult.errorLog) job.result.errorLog = partialResult.errorLog;
       }
       return job;
@@ -106,6 +111,7 @@ export class MongoEventJobRepository {
     if (progress.processed !== undefined) update.$set['progress.processed'] = progress.processed;
     if (progress.succeeded !== undefined) update.$set['progress.succeeded'] = progress.succeeded;
     if (progress.failed !== undefined) update.$set['progress.failed'] = progress.failed;
+    if (progress.skipped !== undefined) update.$set['progress.skipped'] = progress.skipped;
     if (progress.percentage !== undefined) update.$set['progress.percentage'] = progress.percentage;
 
     if (partialResult) {
@@ -117,6 +123,12 @@ export class MongoEventJobRepository {
       }
       if (partialResult.exportedCount !== undefined) {
         update.$set['result.exportedCount'] = partialResult.exportedCount;
+      }
+      if (partialResult.skippedCount !== undefined) {
+        update.$set['result.skippedCount'] = partialResult.skippedCount;
+      }
+      if (partialResult.failedCount !== undefined) {
+        update.$set['result.failedCount'] = partialResult.failedCount;
       }
       if (partialResult.errorLog !== undefined) {
         update.$set['result.errorLog'] = partialResult.errorLog;
@@ -140,7 +152,9 @@ export class MongoEventJobRepository {
     if (mongoose.connection.readyState !== 1) {
       const job = await this.findById(jobId);
       if (!job) return null;
-      if (workerId && job.lockedBy && job.lockedBy !== workerId) return null;
+      if (workerId && (job.lockedBy !== workerId || (job.lockExpiresAt && new Date(job.lockExpiresAt) < new Date()))) {
+        return null;
+      }
       job.status = 'COMPLETED';
       job.completedAt = new Date();
       job.progress.percentage = 100;

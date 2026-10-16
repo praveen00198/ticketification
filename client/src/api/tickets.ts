@@ -90,4 +90,50 @@ export const ticketsApi = {
 
     return await res.blob();
   },
+
+  async downloadTicket(ticketId: string, eventId?: string): Promise<{ blob: Blob; fileName?: string }> {
+    const token = getStoredAuthToken();
+    const endpoint = eventId
+      ? `${API_BASE_URL}/tickets/events/${eventId}/tickets/${ticketId}/download`
+      : `${API_BASE_URL}/tickets/${ticketId}/download`;
+
+    const res = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+
+    if (!res.ok) {
+      let errMsg = 'Failed to download ticket';
+      try {
+        const errJson = await res.json();
+        errMsg = errJson.error?.message || errJson.message || errMsg;
+      } catch (_) {}
+      throw new Error(errMsg);
+    }
+
+    const disposition = res.headers.get('Content-Disposition');
+    let fileName: string | undefined;
+    if (disposition && disposition.includes('filename=')) {
+      const match = disposition.match(/filename="?([^";]+)"?/);
+      if (match && match[1]) {
+        fileName = match[1];
+      }
+    }
+
+    const blob = await res.blob();
+    return { blob, fileName };
+  },
 };
+
+export function triggerBlobDownload(blob: Blob, fallbackFileName: string): void {
+  const blobUrl = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = blobUrl;
+  a.download = fallbackFileName;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(blobUrl);
+  document.body.removeChild(a);
+}
