@@ -97,6 +97,7 @@ export interface IEventRegistration {
   registrationRequired?: boolean;
   capacity?: number;
   confirmedCount?: number;
+  reconciledAt?: Date;
 }
 
 export type EventVerificationLevel = 'UNVERIFIED' | 'LOW' | 'MEDIUM' | 'HIGH';
@@ -234,6 +235,10 @@ const EventRegistrationSchema = new Schema<IEventRegistration>(
       type: Number,
       default: 0,
       min: 0,
+    },
+    reconciledAt: {
+      type: Date,
+      default: null,
     },
   },
   { _id: false }

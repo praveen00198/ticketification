@@ -386,7 +386,7 @@ export class EventJobQueueService {
       if (attempts < maxAttempts) {
         // Exponential backoff: 2s, 4s, 8s... capped at 30s
         const backoffDelay = Math.min(30000, 1000 * Math.pow(2, attempts));
-        await this.jobRepo.releaseJobForRetry(jobId, sanitized, backoffDelay);
+        await this.jobRepo.releaseJobForRetry(jobId, sanitized, backoffDelay, this.workerId);
       } else {
         await this.jobRepo.markFailed(jobId, sanitized, undefined, this.workerId);
       }

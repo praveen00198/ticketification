@@ -429,18 +429,23 @@ export class MongoEventJobRepository {
 
   /**
    * Release a job back to QUEUED for bounded retry after transient failure.
+   * If workerId is provided, validates that the releasing worker still owns the active lease.
    */
   async releaseJobForRetry(
     jobId: string,
     errorMessage: string,
-    delayMs: number = 5000
+    delayMs: number = 5000,
+    workerId?: string
   ): Promise<IEventJobDocument | null> {
     if (!mongoose.Types.ObjectId.isValid(jobId)) return null;
 
     if (mongoose.connection.readyState !== 1) {
       const job = await this.findById(jobId);
       if (job) {
+        if (workerId && job.lockedBy && job.lockedBy !== workerId) return null;
         job.status = 'QUEUED';
+        job.lockedBy = null;
+        job.lockExpiresAt = null;
         job.failureReason = errorMessage;
       }
       return job;
@@ -449,8 +454,15 @@ export class MongoEventJobRepository {
     const now = new Date();
     const nextRun = new Date(now.getTime() + delayMs);
 
-    return EventJobModel.findByIdAndUpdate(
-      jobId,
+    const query: any = { _id: new mongoose.Types.ObjectId(jobId) };
+    if (workerId) {
+      query.status = 'PROCESSING';
+      query.lockedBy = workerId;
+      query.lockExpiresAt = { $gte: now };
+    }
+
+    return EventJobModel.findOneAndUpdate(
+      query,
       {
         $set: {
           status: 'QUEUED',

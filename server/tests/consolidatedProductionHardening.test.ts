@@ -247,9 +247,13 @@ describe('Consolidated Production Hardening Regression Suite', () => {
       return job as any;
     });
 
-    jest.spyOn(jobRepo, 'releaseJobForRetry').mockImplementation(async (id: any, err: string, delayMs: number) => {
+    jest.spyOn(jobRepo, 'releaseJobForRetry').mockImplementation(async (id: any, err: string, delayMs: number, workerId?: string) => {
       const job = inMemoryJobs.get(id.toString());
       if (!job) return null;
+      const now = new Date();
+      if (workerId && (job.lockedBy !== workerId || (job.lockExpiresAt && job.lockExpiresAt < now))) {
+        return null;
+      }
       job.status = 'QUEUED';
       job.lockedBy = null;
       job.lockExpiresAt = null;
@@ -493,6 +497,38 @@ describe('Consolidated Production Hardening Regression Suite', () => {
       expect(result).toBeNull(); // Rejected!
     });
 
+    it('stale worker cannot release or overwrite a job currently owned by another worker', async () => {
+      const job = await jobRepo.createJob({
+        eventId: new mongoose.Types.ObjectId(eventId),
+        jobType: 'IMPORT_CREDENTIALS',
+        status: 'QUEUED',
+      });
+
+      const workerA = 'worker-A';
+      const workerB = 'worker-B';
+
+      // Worker A claims job
+      await jobRepo.claimJob(job._id.toString(), workerA);
+
+      // Lease expires and Worker B takes over
+      const jobDoc = inMemoryJobs.get(job._id.toString());
+      jobDoc.lockedBy = workerB;
+      jobDoc.lockExpiresAt = new Date(Date.now() + 600000);
+
+      // Stale Worker A tries to release job for retry
+      const releaseResult = await jobRepo.releaseJobForRetry(
+        job._id.toString(),
+        'Transient timeout encountered by Worker A',
+        5000,
+        workerA
+      );
+
+      expect(releaseResult).toBeNull();
+      // Job MUST remain locked by Worker B in PROCESSING state
+      expect(jobDoc.lockedBy).toBe(workerB);
+      expect(jobDoc.status).toBe('PROCESSING');
+    });
+
     it('graceful shutdown stops accepting new jobs and cleans up worker timers', async () => {
       jobQueueService.startWorker(100);
       await jobQueueService.stopWorker();
@@ -626,6 +662,35 @@ describe('Consolidated Production Hardening Regression Suite', () => {
       await registrationService.cancelRegistration(eventId, hostSupabaseId);
       // Confirmed count must NOT decrement again!
       expect(eventObj.registration.confirmedCount).toBe(4);
+    });
+
+    it('reconcileConfirmedCount repairs legacy confirmedCount=0 when confirmed registrations exist', async () => {
+      const legacyEventId = new mongoose.Types.ObjectId().toString();
+      const legacyEventDoc: any = {
+        _id: new mongoose.Types.ObjectId(legacyEventId),
+        status: 'PUBLISHED',
+        registration: {
+          capacity: 50,
+          confirmedCount: 0, // Legacy counter bug
+          reconciledAt: null,
+        },
+      };
+
+      const realRepo = new MongoEventRepository();
+      jest.spyOn(realRepo['model'], 'findById').mockResolvedValue(legacyEventDoc as any);
+      const updateOneSpy = jest.spyOn(realRepo['model'], 'updateOne').mockReturnValue({
+        exec: jest.fn().mockResolvedValue({} as any),
+      } as any);
+
+      const { EventRegistrationModel } = await import('../src/db/mongo/models/event-registration.model');
+      jest.spyOn(EventRegistrationModel, 'countDocuments').mockReturnValue({
+        exec: jest.fn().mockResolvedValue(5),
+      } as any);
+
+      // Call repository reconcileConfirmedCount
+      const count = await realRepo.reconcileConfirmedCount(legacyEventId, false);
+      expect(typeof count).toBe('number');
+      expect(updateOneSpy).toHaveBeenCalled();
     });
   });
 

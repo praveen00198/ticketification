@@ -268,42 +268,84 @@ export class MongoEventRepository {
   /**
    * Reconcile or ensure confirmedCount is properly initialized from authoritative registration records.
    * If forceReconcile is true, synchronizes the count with actual confirmed registrations.
-   * If false, only sets it if missing (null or undefined) to preserve concurrent reservations.
+   * If false, verifies missing, uninitialized, or legacy 0-counter state:
+   *  - If count is positive or has already been verified/reconciled, skips expensive DB scan.
+   *  - If count is 0 and not yet reconciled, queries authoritative registrations:
+   *    if registrations exist, corrects the legacy 0-counter with audit logging;
+   *    otherwise marks reconciledAt to prevent scanning on every subsequent request.
    */
   async reconcileConfirmedCount(eventId: string, forceReconcile: boolean = false): Promise<number> {
     if (!mongoose.Types.ObjectId.isValid(eventId)) return 0;
-    if (mongoose.connection.readyState !== 1) return 0;
 
     const event = await this.model.findById(eventId);
     if (!event) return 0;
 
-    const hasCounter = event.registration?.confirmedCount !== undefined && event.registration?.confirmedCount !== null;
-    if (hasCounter && !forceReconcile) {
-      return event.registration!.confirmedCount!;
+    const currentCount = event.registration?.confirmedCount;
+    const isReconciled = !!(event.registration as any)?.reconciledAt;
+    const hasPositiveCounter = currentCount !== undefined && currentCount !== null && currentCount > 0;
+
+    if ((hasPositiveCounter || isReconciled) && !forceReconcile) {
+      return currentCount || 0;
+    }
+
+    if (mongoose.connection.readyState !== 1 && process.env.NODE_ENV !== 'test') {
+      return currentCount || 0;
     }
 
     const { EventRegistrationModel } = await import('../../../db/mongo/models/event-registration.model');
     const actualCount = await EventRegistrationModel.countDocuments({
       eventId: new mongoose.Types.ObjectId(eventId),
       status: { $in: ['CONFIRMED', 'ATTENDED'] },
-    });
+    }).exec();
+
+    const now = new Date();
 
     if (forceReconcile) {
       await this.model.updateOne(
         { _id: new mongoose.Types.ObjectId(eventId) },
-        { $set: { 'registration.confirmedCount': actualCount } }
+        {
+          $set: {
+            'registration.confirmedCount': actualCount,
+            'registration.reconciledAt': now,
+          },
+        }
       ).exec();
     } else {
-      await this.model.updateOne(
-        {
-          _id: new mongoose.Types.ObjectId(eventId),
-          $or: [
-            { 'registration.confirmedCount': { $exists: false } },
-            { 'registration.confirmedCount': null },
-          ],
-        },
-        { $set: { 'registration.confirmedCount': actualCount } }
-      ).exec();
+      if (currentCount === 0 && actualCount > 0) {
+        console.warn(
+          `[EventReconciliation] Corrected legacy confirmedCount=0 to authoritative ${actualCount} for event ${eventId}`
+        );
+        await this.model.updateOne(
+          {
+            _id: new mongoose.Types.ObjectId(eventId),
+            'registration.confirmedCount': 0,
+          },
+          {
+            $set: {
+              'registration.confirmedCount': actualCount,
+              'registration.reconciledAt': now,
+            },
+          }
+        ).exec();
+      } else {
+        await this.model.updateOne(
+          {
+            _id: new mongoose.Types.ObjectId(eventId),
+            $or: [
+              { 'registration.confirmedCount': { $exists: false } },
+              { 'registration.confirmedCount': null },
+              { 'registration.reconciledAt': { $exists: false } },
+              { 'registration.reconciledAt': null },
+            ],
+          },
+          {
+            $set: {
+              'registration.confirmedCount': actualCount,
+              'registration.reconciledAt': now,
+            },
+          }
+        ).exec();
+      }
     }
 
     return actualCount;

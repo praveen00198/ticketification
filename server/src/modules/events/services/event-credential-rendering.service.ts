@@ -217,7 +217,7 @@ export class EventCredentialRenderingService {
           value = data.eventName || 'EVENT NAME';
           break;
         case 'date':
-          value = data.date || 'OCTOBER 10, 2026';
+          value = data.date || 'Date TBA';
           break;
         case 'venue':
           value = data.venue || 'MAIN ARENA';
