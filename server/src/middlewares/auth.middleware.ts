@@ -1,9 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
-import { supabaseAdmin } from '../config/supabase';
 import { userRepository } from '../modules/auth/repositories/user.repository';
 import config from '../config/env';
 import { PlatformRole } from '../db/schema';
 import { AuthenticationError, AppError } from './error.middleware';
+import { verifyJwtToken } from '../utils/local-auth';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -14,9 +14,10 @@ export interface AuthenticatedRequest extends Request {
 }
 
 /**
- * Validates Supabase JWT Bearer token from the Authorization header.
- * Resolves user platform role from trusted server database, never client metadata.
- * Attaches user information to req.user upon successful verification.
+ * Validates custom backend-issued JWT Bearer token from the Authorization header.
+ * Resolves user platform role directly from authoritative MongoDB role store.
+ * Never trusts client metadata or client-supplied roles.
+ * Attaches verified user information to req.user upon successful verification.
  */
 export async function authMiddleware(
   req: AuthenticatedRequest,
@@ -35,149 +36,116 @@ export async function authMiddleware(
     return next(new AuthenticationError('Authentication required. Bearer token is empty.'));
   }
 
-  // 1. Try local JWT token verification if local auth is enabled in this environment
-  if (config.env.enableLocalAuth) {
-    try {
-      const { verifyJwtToken } = await import('../utils/local-auth');
-      const localPayload = verifyJwtToken(token);
-      if (localPayload && localPayload.id) {
-        const { mongoUserRepository } = await import('../modules/auth/repositories/mongo-user.repository');
-        let mongoUser = null;
-        try {
-          mongoUser = await mongoUserRepository.findBySupabaseId(localPayload.id);
-        } catch (dbErr: any) {
-          console.error('[authMiddleware] Database error during local user lookup:', dbErr);
-          return next(new AppError('Unable to verify user profile due to database error.', 500));
-        }
-
-        if (!mongoUser) {
-          return next(new AuthenticationError('Invalid authentication token. User profile not found.'));
-        }
-
-        if (mongoUser.status === 'SUSPENDED') {
-          return next(new AuthenticationError('Account is suspended. Please contact platform administrators.'));
-        }
-
-        req.user = {
-          id: mongoUser.supabaseUserId,
-          email: mongoUser.email,
-          role: mongoUser.platformRole,
-        };
-        return next();
-      }
-    } catch (err: any) {
-      if (err instanceof AppError || err instanceof AuthenticationError) {
-        return next(err);
-      }
-      // If local token parsing failed, proceed to Supabase verification
-    }
-  }
-
-  // 2. Fall back to Supabase verification if configured
-  if (!supabaseAdmin) {
+  // 1. Verify custom backend JWT access token
+  const payload = verifyJwtToken(token);
+  if (!payload || !payload.id) {
     return next(new AuthenticationError('Invalid or expired authentication token.'));
   }
 
+  const userId = String(payload.id);
+  const email = (payload.email || '').toLowerCase().trim();
+
+  // 2. Resolve user from authoritative MongoDB role store
   try {
-    const {
-      data: { user },
-      error,
-    } = await supabaseAdmin.auth.getUser(token);
+    const { isMongoConnected } = await import('../db/mongodb');
+    const mongoConfigured = Boolean(config.env.mongoUri);
 
-    if (error || !user) {
-      return next(new AuthenticationError('Invalid or expired authentication token.'));
-    }
-
-    const email = (user.email || '').toLowerCase().trim();
-
-    // Resolve application platform role from trusted server database record
-    let userRole: PlatformRole = 'USER';
-    try {
-      const { isMongoConnected } = await import('../db/mongodb');
-      const mongoConfigured = Boolean(config.env.mongoUri);
-
-      // In production, the authoritative MongoDB role store is mandatory. Fail closed!
-      if (config.env.isProduction && mongoConfigured && !isMongoConnected()) {
-        console.error('[authMiddleware] Authoritative MongoDB role store is configured but disconnected.');
-        return next(new AppError('Unable to verify user profile due to database error.', 500));
-      }
-
-      let mongoUser: any = null;
-      try {
-        const { mongoUserRepository } = await import('../modules/auth/repositories/mongo-user.repository');
-        mongoUser = await mongoUserRepository.findBySupabaseId(user.id);
-        if (!mongoUser && email) {
-          mongoUser = await mongoUserRepository.findByEmail(email);
-        }
-      } catch (mErr) {
-        if (config.env.isProduction) {
-          throw mErr;
-        }
-      }
-
-      if (mongoUser) {
-        if (mongoUser.status === 'SUSPENDED') {
-          return next(new AuthenticationError('Account is suspended. Please contact platform administrators.'));
-        }
-        userRole = mongoUser.platformRole;
-      } else if (isMongoConnected()) {
-        // Connected to MongoDB but no profile exists: reject unauthenticated access
-        return next(
-          new AuthenticationError(
-            'User profile not found. Please register for a Ticketification account.',
-            undefined,
-            'ACCOUNT_NOT_FOUND'
-          )
-        );
-      } else if (config.env.isProduction && mongoConfigured) {
-        return next(new AppError('Unable to verify user profile due to database error.', 500));
-      } else {
-        // Fall back to PostgreSQL in legacy non-production environments
-        let dbUser = await userRepository.findById(user.id);
-        if (!dbUser && email) {
-          dbUser = await userRepository.findByEmail(email);
-        }
-        if (!dbUser) {
-          return next(
-            new AuthenticationError(
-              'User profile not found. Please register for a Ticketification account.',
-              undefined,
-              'ACCOUNT_NOT_FOUND'
-            )
-          );
-        }
-        if ((dbUser as any)?.status === 'SUSPENDED') {
-          return next(new AuthenticationError('Account is suspended. Please contact platform administrators.'));
-        }
-        // A PostgreSQL fallback must never grant an elevated role that contradicts the authoritative platform role store!
-        if (dbUser.role === 'ADMIN' || dbUser.role === 'SUPER_ADMIN') {
-          userRole = 'USER';
-        } else {
-          userRole = (dbUser.role as PlatformRole) || 'USER';
-        }
-      }
-    } catch (syncErr: any) {
-      if (syncErr instanceof AuthenticationError) {
-        return next(syncErr);
-      }
-      console.error('[authMiddleware] Profile lookup/sync error:', syncErr);
+    // In production, the authoritative MongoDB role store is mandatory. Fail closed!
+    if (config.env.isProduction && mongoConfigured && !isMongoConnected()) {
+      console.error('[authMiddleware] Authoritative MongoDB role store is configured but disconnected in production.');
       return next(new AppError('Unable to verify user profile due to database error.', 500));
     }
 
-    req.user = {
-      id: user.id,
-      email,
-      role: userRole,
-    };
+    let mongoUser: any = null;
+    if (isMongoConnected()) {
+      const { mongoUserRepository } = await import('../modules/auth/repositories/mongo-user.repository');
+      mongoUser = await mongoUserRepository.findBySupabaseId(userId);
+      if (!mongoUser && email) {
+        mongoUser = await mongoUserRepository.findByEmail(email);
+      }
+    }
 
-    next();
+    if (mongoUser) {
+      if (mongoUser.status === 'SUSPENDED') {
+        return next(new AuthenticationError('Account is suspended. Please contact platform administrators.'));
+      }
+
+      req.user = {
+        id: mongoUser.supabaseUserId,
+        email: mongoUser.email,
+        role: mongoUser.platformRole || 'USER',
+      };
+      return next();
+    }
+
+    // If connected to MongoDB but user profile does not exist: reject!
+    if (isMongoConnected()) {
+      return next(
+        new AuthenticationError(
+          'User profile not found. Please register for a Ticketification account.',
+          undefined,
+          'ACCOUNT_NOT_FOUND'
+        )
+      );
+    }
+
+    // In production, fail closed if Mongo is configured but disconnected
+    if (config.env.isProduction && mongoConfigured) {
+      return next(new AppError('Unable to verify user profile due to database error.', 500));
+    }
+
+    // Fall back to PostgreSQL in non-production/test environments when MongoDB is not connected
+    if (config.env.databaseUrl) {
+      let dbUser = await userRepository.findById(userId);
+      if (!dbUser && email) {
+        dbUser = await userRepository.findByEmail(email);
+      }
+
+      if (dbUser) {
+        if ((dbUser as any)?.status === 'SUSPENDED') {
+          return next(new AuthenticationError('Account is suspended. Please contact platform administrators.'));
+        }
+
+        const safeRole =
+          dbUser.role === 'ADMIN' || dbUser.role === 'SUPER_ADMIN'
+            ? 'USER'
+            : ((dbUser.role as PlatformRole) || 'USER');
+
+        req.user = {
+          id: dbUser.id,
+          email: dbUser.email,
+          role: safeRole,
+        };
+        return next();
+      }
+    }
+
+    // If payload has email and role in test environment where DB is unconfigured, allow safe test resolution
+    if (!config.env.isProduction && payload.email) {
+      req.user = {
+        id: userId,
+        email: payload.email,
+        role: (payload.role as PlatformRole) || 'USER',
+      };
+      return next();
+    }
+
+    return next(
+      new AuthenticationError(
+        'User profile not found. Please register for a Ticketification account.',
+        undefined,
+        'ACCOUNT_NOT_FOUND'
+      )
+    );
   } catch (err: any) {
-    if (err instanceof AppError || err instanceof AuthenticationError) {
+    if (err instanceof AuthenticationError || err instanceof AppError) {
       return next(err);
     }
-    return next(new AuthenticationError('Authentication failed. Please sign in again.'));
+    console.error('[authMiddleware] Profile verification error:', err);
+    return next(new AppError('Unable to verify user profile due to database error.', 500));
   }
 }
 
 export const authenticateUser = authMiddleware;
+export const requireAuth = authMiddleware;
 export default authMiddleware;

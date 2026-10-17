@@ -18,7 +18,7 @@ import {
 import { apiClient } from '../api/client';
 
 interface LoginProps {
-  onLoginSuccess: (token: string, user: { name: string; email: string; eventName?: string }) => void;
+  onLoginSuccess: (token: string, user: { name: string; email: string; eventName?: string }, refreshToken?: string) => void;
   onNavigateToRegister?: () => void;
 }
 
@@ -85,7 +85,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToRegist
     try {
       const res: any = await apiClient.post('/auth/login', { email: email.trim(), password });
       if (res.success && res.data) {
-        onLoginSuccess(res.data.token, res.data.user);
+        onLoginSuccess(res.data.token, res.data.user, res.data.refreshToken);
         navigate(redirectTarget);
       }
     } catch (err: any) {

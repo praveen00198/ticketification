@@ -46,6 +46,14 @@ export const apiClient = axios.create({
  * Reads canonical 'ticketification_token' with seamless one-time migration from legacy 'admin_token'.
  * Eliminates duplicate token exposure in browser storage.
  */
+export function getStoredRefreshToken(): string | null {
+  return localStorage.getItem('ticketification_refresh_token');
+}
+
+export function setStoredRefreshToken(token: string): void {
+  localStorage.setItem('ticketification_refresh_token', token);
+}
+
 export function getStoredAuthToken(): string | null {
   const token = localStorage.getItem('ticketification_token');
   if (token) return token;
@@ -61,14 +69,18 @@ export function getStoredAuthToken(): string | null {
   return null;
 }
 
-export function setStoredAuthToken(token: string): void {
+export function setStoredAuthToken(token: string, refreshToken?: string): void {
   localStorage.setItem('ticketification_token', token);
+  if (refreshToken) {
+    setStoredRefreshToken(refreshToken);
+  }
   // Remove legacy storage key to prevent duplicate credentials in storage
   localStorage.removeItem('admin_token');
 }
 
 export function clearStoredAuthToken(): void {
   localStorage.removeItem('ticketification_token');
+  localStorage.removeItem('ticketification_refresh_token');
   localStorage.removeItem('admin_token');
 }
 
@@ -80,11 +92,78 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
+let isRefreshing = false;
+let failedQueue: Array<{
+  resolve: (token: string) => void;
+  reject: (error: any) => void;
+}> = [];
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token!);
+    }
+  });
+  failedQueue = [];
+};
+
 apiClient.interceptors.response.use(
   (response) => response.data,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Cleanly evict expired authentication token from browser storage
+  async (error) => {
+    const originalRequest = error.config;
+
+    // Attempt token refresh on 401 if a refresh token is present (and not already retrying / auth endpoint)
+    if (
+      error.response?.status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !originalRequest.url?.includes('/auth/login') &&
+      !originalRequest.url?.includes('/auth/register') &&
+      !originalRequest.url?.includes('/auth/refresh')
+    ) {
+      const storedRefreshToken = getStoredRefreshToken();
+
+      if (storedRefreshToken) {
+        if (isRefreshing) {
+          return new Promise((resolve, reject) => {
+            failedQueue.push({ resolve, reject });
+          })
+            .then((newToken) => {
+              originalRequest.headers.Authorization = `Bearer ${newToken}`;
+              return apiClient(originalRequest);
+            })
+            .catch((err) => Promise.reject(err));
+        }
+
+        originalRequest._retry = true;
+        isRefreshing = true;
+
+        try {
+          const res = await axios.post(`${API_BASE_URL}/auth/refresh`, {
+            refreshToken: storedRefreshToken,
+          });
+
+          if (res.data?.success && res.data?.data?.token) {
+            const newToken = res.data.data.token;
+            const newRefreshToken = res.data.data.refreshToken;
+            setStoredAuthToken(newToken, newRefreshToken);
+
+            originalRequest.headers.Authorization = `Bearer ${newToken}`;
+            processQueue(null, newToken);
+            isRefreshing = false;
+            return apiClient(originalRequest);
+          }
+        } catch (refreshErr) {
+          processQueue(refreshErr, null);
+          isRefreshing = false;
+          clearStoredAuthToken();
+        }
+      } else {
+        clearStoredAuthToken();
+      }
+    } else if (error.response?.status === 401) {
       clearStoredAuthToken();
     }
 

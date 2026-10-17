@@ -19,7 +19,7 @@ import { apiClient } from '../api/client';
 
 interface RegisterProps {
   initialEmail?: string;
-  onRegisterSuccess: (token: string, user: { name: string; email: string; eventName?: string }) => void;
+  onRegisterSuccess: (token: string, user: { name: string; email: string; eventName?: string }, refreshToken?: string) => void;
   onNavigateToLogin?: () => void;
 }
 
@@ -101,7 +101,7 @@ export const Register: React.FC<RegisterProps> = ({
         password,
       });
       if (res.success && res.data) {
-        onRegisterSuccess(res.data.token, res.data.user);
+        onRegisterSuccess(res.data.token, res.data.user, res.data.refreshToken);
         // Unified navigation: directs user to redirect target or events catalog
         navigate(redirectTarget);
       }

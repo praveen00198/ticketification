@@ -17,10 +17,10 @@
 ---
 
 ## ADR-003: Supabase Auth for Authentication
-- **Status**: ACCEPTED
+- **Status**: SUPERSEDED (by ADR-041)
 - **Context**: Custom password hashing and session management introduce security risks and maintenance overhead.
-- **Decision**: Use Supabase Auth exclusively as the identity and authentication provider. Supabase Auth manages email/password, social logins, password resets, and JWT issuance.
-- **Consequences**: The backend server validates Supabase JWTs without managing raw password hashes. Service role keys remain strictly server-side.
+- **Decision**: (Legacy) Used Supabase Auth as the identity provider.
+- **Consequences**: Superseded by ADR-041 (Custom Backend JWT Authentication & MongoDB Single Source of Truth).
 
 ---
 
@@ -878,5 +878,35 @@
   1. Full crash-resilience: an import job interrupted at any point can be re-run safely with 0 duplicate credentials, 0 sequence numbering gaps, and 0 duplicate key crashes.
   2. In-file duplicate rows are cleanly handled and logged without failing valid rows.
   3. Memory consumption remains strictly bounded during large spreadsheet ingestion.
+
+---
+
+## ADR-041: Complete Removal of Supabase Auth & Adoption of Custom MongoDB-Backed JWT Authentication
+- **Status**: ACCEPTED
+- **Context**:
+  1. Ticketification previously relied on Supabase Auth for user authentication, token issuance, and password recovery, while user profiles, event scopes, and RBAC resided in MongoDB.
+  2. Supabase Auth created dual-source-of-truth friction, dependency on third-party cloud auth rate limits, and tight coupling with external auth SDKs.
+  3. Supabase must be preserved **EXCLUSIVELY for file/object storage** (ticket PNGs, PDFs, ZIP exports) via `supabaseStorageAdmin`.
+- **Decision**:
+  1. **MongoDB as Single Source of Truth**:
+     - All application users (attendees, hosts, mentors, judges, admins, and super admins) are persisted in MongoDB `users` collection.
+     - Password hashes are stored using PBKDF2 (SHA-512, 10,000 iterations, 64-byte derived key, unique random 16-byte salt) via Node.js native `crypto`.
+  2. **Custom Backend HS256 JWT Access Tokens**:
+     - Tokens are issued directly by the Node backend with configurable expiration (`JWT_ACCESS_EXPIRATION`), signed with `JWT_SECRET`, validated with `crypto.timingSafeEqual`, and issued under `ticketification-auth`.
+  3. **MongoDB Refresh Sessions & Reuse Detection**:
+     - Refresh tokens are 96-character opaque cryptographically secure hex strings.
+     - Only SHA-256 hashes of refresh tokens are stored in the MongoDB `sessions` collection (`tokenHash`).
+     - Includes automatic refresh token rotation, family-based reuse detection (revokes entire token family if a previously used token is presented), and MongoDB TTL index expiry.
+  4. **Strict Authorization & Middleware Enforcement**:
+     - `authMiddleware` validates custom backend JWTs and resolves user identity and role directly from MongoDB.
+     - Never trusts frontend role claims or client headers.
+  5. **Supabase Preserved Exclusively for Object Storage**:
+     - `supabaseStorageAdmin` (`@supabase/supabase-js`) is retained strictly for binary asset storage (bucket: `ticket-assets`).
+     - Private signed URLs and direct streaming downloads are preserved.
+- **Consequences**:
+  1. Zero external auth dependencies or cloud auth limits.
+  2. MongoDB is the unified, authoritative database for all identities and access permissions.
+  3. Storage layer remains high-performance and fully compatible with existing tickets and exports.
+
 
 

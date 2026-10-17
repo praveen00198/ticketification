@@ -79,18 +79,9 @@ function validateAndLoadEnv(): EnvConfig {
       missing.push('MONGODB_URI (mandatory application database connection)');
     }
 
-    // 2. Strict Authentication Provider Configuration
-    if (enableLocalAuth) {
-      if (!jwtSecret || jwtSecret === 'Ticketification_Default_Secret_2026' || jwtSecret.length < 32) {
-        missing.push('JWT_SECRET (secure production secret with at least 32 characters required when ENABLE_LOCAL_AUTH=true)');
-      }
-    } else {
-      if (!supabaseUrl) {
-        missing.push('SUPABASE_URL (required authentication provider in production when local auth is disabled)');
-      }
-      if (!supabaseServiceRoleKey) {
-        missing.push('SUPABASE_SERVICE_ROLE_KEY (required production service role key when local auth is disabled)');
-      }
+    // 2. Strict Custom Authentication Security Invariants
+    if (!jwtSecret || jwtSecret === 'Ticketification_Default_Secret_2026' || jwtSecret.length < 32) {
+      missing.push('JWT_SECRET (secure production secret with at least 32 characters is mandatory for custom JWT authentication)');
     }
 
     // 3. Mandatory Explicit CORS Origins for Browser Frontend

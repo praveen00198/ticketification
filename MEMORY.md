@@ -10,9 +10,9 @@ This file serves as the permanent institutional memory for Ticketification. All 
 5. **One Global User Identity**: Every human has exactly one global user account. Roles (Host, Coordinator, Volunteer, Mentor, Evaluator, Attendee) are **event-scoped relationships** in `event_members`, NOT separate identity tables.
 6. **Platform Roles vs. Event Roles**: Platform roles (`USER`, `ADMIN`, `SUPER_ADMIN`) are global and distinct from event roles (`HOST`, `COORDINATOR`, `VOLUNTEER`, `MENTOR`, `EVALUATOR`).
 7. **Infrastructure Triad**:
-   - **Supabase Auth** = Authentication (*"Who are you?"*).
-   - **MongoDB** = Application profiles, authorization, events, teams, evaluations, credential metadata, and audit logs (*"What can you do?"*).
-   - **Supabase Storage** = Binary files (PNG passes, PDFs, templates, spreadsheets, ZIP archives).
+   - **Custom Backend JWT Authentication + PBKDF2** = Authentication (*"Who are you?"*), with MongoDB as the single source of truth for users, password hashes, and refresh sessions.
+   - **MongoDB** = Application profiles, authorization, events, teams, evaluations, credential metadata, sessions, and audit logs (*"What can you do?"*).
+   - **Supabase Storage** = Binary files exclusively (PNG passes, PDFs, templates, spreadsheets, ZIP archives). Supabase Auth is completely removed from the runtime.
 8. **Zero Binaries in Database**: MongoDB MUST NEVER store image binaries, base64 strings, or large files.
 9. **Backend is the Sole Security Boundary**: Frontend route guards and `localStorage` states are UX conveniences only. The backend validates authorization on every request.
 10. **Modular Monolith**: The architecture is a Modular Monolith. No microservices unless explicitly justified by scale.

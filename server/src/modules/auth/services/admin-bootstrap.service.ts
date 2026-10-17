@@ -4,7 +4,6 @@ import { userRepository, UserRepository } from '../repositories/user.repository'
 import * as mongodb from '../../../db/mongodb';
 import { PlatformRole } from '../../../db/schema';
 import { ValidationError, AppError, NotFoundError } from '../../../middlewares/error.middleware';
-import * as supabaseConfig from '../../../config/supabase';
 
 export interface ProvisionResult {
   success: boolean;
@@ -16,8 +15,8 @@ export interface ProvisionResult {
 /**
  * Server-controlled Administrator Bootstrap & Provisioning Service.
  * Ensures administrator privileges can only be provisioned through explicit, server-controlled workflows,
- * bound to verified immutable user identities from the trusted authentication provider or database.
- * Never creates placeholder IDs, never auto-promotes on missing profile, and fails closed when unavailable.
+ * bound to verified user identities in the authoritative MongoDB role store.
+ * Supabase Auth has been completely removed — MongoDB is the single source of truth.
  */
 export class AdminBootstrapService {
   constructor(
@@ -27,8 +26,8 @@ export class AdminBootstrapService {
 
   /**
    * Explicitly provisions an allowlisted email address as a platform administrator in the authoritative database.
-   * Requires a verified immutable user identifier from the database, trusted auth provider, or explicit argument.
-   * Fails closed if the identity is missing or the authoritative role store is unavailable.
+   * Requires an existing user account in MongoDB or an explicit verified user identifier.
+   * Fails closed if the email is not in INITIAL_ADMIN_EMAILS or the authoritative role store is unavailable.
    */
   async provisionAllowlistedAdmin(email: string, verifiedUserId?: string): Promise<ProvisionResult> {
     const normalized = email.trim().toLowerCase();
@@ -62,7 +61,7 @@ export class AdminBootstrapService {
       }
     }
 
-    // 3. Resolve the immutable verified user identifier
+    // 3. Resolve the user identifier
     let verifiedId: string | undefined = undefined;
 
     if (existingMongoUser) {
@@ -71,7 +70,6 @@ export class AdminBootstrapService {
       verifiedId = existingPgUser.id;
     }
 
-    // If an explicit verifiedUserId was provided, validate against existing records for identity mismatch
     if (verifiedUserId) {
       if (verifiedId && verifiedId !== verifiedUserId) {
         throw new ValidationError(
@@ -81,32 +79,9 @@ export class AdminBootstrapService {
       verifiedId = verifiedUserId;
     }
 
-    // If still no verified ID, attempt lookup via trusted authentication provider (Supabase Auth)
-    const authClient = supabaseConfig.supabaseAdmin;
-    if (!verifiedId && authClient) {
-      try {
-        const { data: listData, error: listError } = await authClient.auth.admin.listUsers();
-        if (listError) {
-          throw new AppError(`Authentication provider error during admin lookup: ${listError.message}`, 500);
-        }
-        const authUser = listData?.users?.find(
-          (u) => u.email?.toLowerCase().trim() === normalized
-        );
-        if (authUser) {
-          verifiedId = authUser.id;
-        }
-      } catch (authErr: any) {
-        if (authErr instanceof AppError) throw authErr;
-        console.error('[AdminBootstrapService] Auth provider error during lookup:', authErr.message);
-        throw new AppError('Authentication provider unavailable. Administrator provisioning failed closed.', 500);
-      }
-    }
-
-    // If no verified identity could be established from DB, arguments, or trusted provider, FAIL CLOSED!
-    // Never create a placeholder ID (e.g. crypto.randomUUID).
-    if (!verifiedId) {
+    if (!verifiedId && !existingMongoUser && !existingPgUser) {
       throw new NotFoundError(
-        `Cannot provision administrator profile: No verified identity found in authentication provider for email '${normalized}'. User must exist in trusted authentication provider before administrator profile can be provisioned.`
+        `Cannot provision administrator profile: No registered account found for email '${normalized}'. User must register an account first before administrator privileges can be provisioned.`
       );
     }
 
@@ -114,9 +89,8 @@ export class AdminBootstrapService {
     if (mongodb.isMongoConnected()) {
       try {
         if (!existingMongoUser) {
-          // Pre-provision with the verified immutable identity
           existingMongoUser = await this.mongoRepo.create({
-            supabaseUserId: verifiedId,
+            supabaseUserId: verifiedId!,
             email: normalized,
             name: normalized.split('@')[0] || 'Administrator',
             platformRole: 'ADMIN',
@@ -164,7 +138,7 @@ export class AdminBootstrapService {
       try {
         if (!existingPgUser) {
           existingPgUser = await this.pgRepo.upsert({
-            id: verifiedId,
+            id: verifiedId!,
             email: normalized,
             name: normalized.split('@')[0] || 'Administrator',
             role: 'ADMIN',
@@ -229,7 +203,7 @@ export class AdminBootstrapService {
         console.log(`[AdminBootstrap] Provisioned '${email}' => role: ${res.role} (${res.action})`);
       } catch (err: any) {
         if (err instanceof NotFoundError) {
-          console.log(`[AdminBootstrap] Pending registration for '${email}': No verified identity exists in authentication provider yet.`);
+          console.log(`[AdminBootstrap] Pending registration for '${email}': Account does not exist in MongoDB yet. Will be granted ADMIN upon registration.`);
         } else {
           throw err;
         }

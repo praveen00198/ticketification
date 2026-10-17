@@ -29,7 +29,8 @@ export function verifyPassword(password: string, stored: string): boolean {
   }
 }
 
-export const LOCAL_JWT_ISSUER = 'ticketification-local';
+export const LOCAL_JWT_ISSUER = 'ticketification-auth';
+export const TRUSTED_JWT_ISSUERS = ['ticketification-auth', 'ticketification-local'];
 export const LOCAL_JWT_AUDIENCE = 'ticketification-api';
 
 function getEffectiveSecret(customSecret?: string): string {
@@ -47,21 +48,51 @@ function getEffectiveSecret(customSecret?: string): string {
 }
 
 /**
- * Creates a signed HS256 JWT token using Node.js native HMAC.
+ * Generates an opaque, cryptographically secure 96-character hex refresh token.
+ */
+export function generateRefreshToken(): string {
+  return crypto.randomBytes(48).toString('hex');
+}
+
+/**
+ * Hashes an opaque token using SHA-256 for secure persistence.
+ */
+export function hashToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+/**
+ * Creates a signed HS256 JWT access token using Node.js native HMAC.
+ * Default access token lifespan: 1 hour (3600 seconds) or configurable.
  */
 export function createJwtToken(
   payload: Record<string, any>,
-  secret?: string
+  secretOrExpiresIn?: string | number,
+  expiresInSeconds?: number
 ): string {
-  const signingSecret = getEffectiveSecret(secret);
+  let customSecret: string | undefined;
+  let customExpiry: number | undefined;
+
+  if (typeof secretOrExpiresIn === 'number') {
+    customExpiry = secretOrExpiresIn;
+  } else if (typeof secretOrExpiresIn === 'string') {
+    customSecret = secretOrExpiresIn;
+    customExpiry = expiresInSeconds;
+  } else if (expiresInSeconds !== undefined) {
+    customExpiry = expiresInSeconds;
+  }
+
+  const signingSecret = getEffectiveSecret(customSecret);
   const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
   const now = Math.floor(Date.now() / 1000);
-  const exp = now + 86400 * 7; // 7 days expiration
+  const defaultLifespan = parseInt(process.env.JWT_ACCESS_EXPIRATION || '3600', 10);
+  const exp = now + (customExpiry !== undefined ? customExpiry : defaultLifespan);
   const tokenPayload = {
     iss: LOCAL_JWT_ISSUER,
     aud: LOCAL_JWT_AUDIENCE,
     iat: now,
     exp,
+    type: 'access',
     ...payload,
   };
   const body = Buffer.from(JSON.stringify(tokenPayload)).toString('base64url');
@@ -70,7 +101,7 @@ export function createJwtToken(
 }
 
 /**
- * Decodes and cryptographically verifies an HS256 JWT token.
+ * Decodes and cryptographically verifies an HS256 JWT access token.
  * Returns decoded payload if valid and non-expired; null otherwise.
  */
 export function verifyJwtToken(
@@ -95,7 +126,7 @@ export function verifyJwtToken(
       return null; // Expired or missing expiry
     }
     // Strictly verify trusted issuer and audience claims
-    if (!payload.iss || payload.iss !== LOCAL_JWT_ISSUER) {
+    if (!payload.iss || !TRUSTED_JWT_ISSUERS.includes(payload.iss)) {
       return null; // Untrusted or missing issuer
     }
     if (!payload.aud || payload.aud !== LOCAL_JWT_AUDIENCE) {

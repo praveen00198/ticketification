@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { authService } from '../services/auth.service';
 import { AuthenticatedRequest } from '../../../middlewares/auth.middleware';
-import { AuthenticationError } from '../../../middlewares/error.middleware';
+import { AuthenticationError, ValidationError } from '../../../middlewares/error.middleware';
 import {
   validateRegisterInput,
   validateLoginInput,
@@ -29,6 +29,24 @@ export class AuthController {
     }
   }
 
+  async refresh(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const refreshToken =
+        req.body?.refreshToken ||
+        (req.headers['x-refresh-token'] as string) ||
+        (req as any).cookies?.refreshToken;
+
+      if (!refreshToken) {
+        throw new ValidationError('Refresh token is required.');
+      }
+
+      const result = await authService.refreshSession(refreshToken);
+      res.status(200).json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async me(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {
@@ -41,8 +59,19 @@ export class AuthController {
     }
   }
 
-  async logout(_req: Request, res: Response): Promise<void> {
-    res.status(200).json({ success: true, message: 'Logged out successfully' });
+  async logout(req: Request, res: Response): Promise<void> {
+    try {
+      const refreshToken =
+        req.body?.refreshToken ||
+        (req.headers['x-refresh-token'] as string) ||
+        (req as any).cookies?.refreshToken;
+      const userId = (req as any).user?.id;
+
+      await authService.logout(refreshToken, userId);
+      res.status(200).json({ success: true, message: 'Logged out successfully' });
+    } catch {
+      res.status(200).json({ success: true, message: 'Logged out successfully' });
+    }
   }
 
   async changePassword(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
@@ -60,3 +89,4 @@ export class AuthController {
 }
 
 export const authController = new AuthController();
+export default authController;

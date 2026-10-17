@@ -73,8 +73,12 @@ const AppContent: React.FC = () => {
     checkAuth();
   }, [token]);
 
-  const handleLoginSuccess = (newToken: string, userData: { id?: string; name: string; email: string; role?: string; eventName?: string }) => {
-    setStoredAuthToken(newToken);
+  const handleLoginSuccess = (
+    newToken: string,
+    userData: { id?: string; name: string; email: string; role?: string; eventName?: string },
+    refreshToken?: string
+  ) => {
+    setStoredAuthToken(newToken, refreshToken);
     setToken(newToken);
     setUser(userData);
   };

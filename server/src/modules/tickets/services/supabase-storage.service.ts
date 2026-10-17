@@ -1,6 +1,6 @@
 import fs from 'fs';
 import config from '../../../config/env';
-import { supabaseStorageAdmin, supabaseAdmin } from '../../../config/supabase';
+import { supabaseStorageAdmin } from '../../../config/supabase';
 import { StorageError } from '../../../middlewares/error.middleware';
 
 export class SupabaseStorageService {
@@ -8,7 +8,7 @@ export class SupabaseStorageService {
   private bucketEnsured = false;
 
   private get client() {
-    return supabaseStorageAdmin || supabaseAdmin;
+    return supabaseStorageAdmin;
   }
 
   constructor() {
