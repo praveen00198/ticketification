@@ -9,6 +9,8 @@ import axios from 'axios';
  * - 'https://ticketification.onrender.com/api'  -> 'https://ticketification.onrender.com/api'
  * - 'https://ticketification.onrender.com/api/' -> 'https://ticketification.onrender.com/api'
  */
+export const DEFAULT_PRODUCTION_API_URL = 'https://ticketification.onrender.com/api';
+
 function resolveApiBaseUrl(): string {
   // In development, route through Vite's local proxy to reach the local backend
   if (import.meta.env.DEV && !import.meta.env.VITE_FORCE_REMOTE_API) {
@@ -16,20 +18,29 @@ function resolveApiBaseUrl(): string {
   }
 
   const envUrl = (import.meta.env.VITE_API_URL || '').trim();
-  if (!envUrl) {
+  if (envUrl) {
+    // Remove any trailing slashes
+    const cleanUrl = envUrl.replace(/\/+$/, '');
+
+    // If already ends with /api, use as is
+    if (cleanUrl.endsWith('/api')) {
+      return cleanUrl;
+    }
+
+    // Otherwise append /api
+    return `${cleanUrl}/api`;
+  }
+
+  // If running in browser on localhost/127.0.0.1 (e.g. vite preview), route via local proxy
+  if (
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ) {
     return '/api';
   }
 
-  // Remove any trailing slashes
-  const cleanUrl = envUrl.replace(/\/+$/, '');
-
-  // If already ends with /api, use as is
-  if (cleanUrl.endsWith('/api')) {
-    return cleanUrl;
-  }
-
-  // Otherwise append /api
-  return `${cleanUrl}/api`;
+  // In production builds without explicit VITE_API_URL, default to the live backend API
+  return DEFAULT_PRODUCTION_API_URL;
 }
 
 export const API_BASE_URL = resolveApiBaseUrl();
