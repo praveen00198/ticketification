@@ -19,6 +19,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
+  User,
 } from "lucide-react";
 import { useEvent } from "../../context/EventContext";
 import { ChangePasswordModal } from "../auth/ChangePasswordModal";
@@ -35,6 +36,8 @@ interface SidebarProps {
   onLogout: () => void;
   isMobile?: boolean;
   onCloseMobile?: () => void;
+  isCollapsed?: boolean;
+  setIsCollapsed?: (collapsed: boolean) => void;
 }
 
 interface NavItem {
@@ -56,12 +59,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onLogout,
   isMobile = false,
   onCloseMobile,
+  isCollapsed: propIsCollapsed,
+  setIsCollapsed: propSetIsCollapsed,
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { events, currentEvent, setCurrentEvent } = useEvent();
 
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [internalCollapsed, setInternalCollapsed] = useState(false);
+  const isCollapsed = propIsCollapsed !== undefined ? propIsCollapsed : internalCollapsed;
+  const setIsCollapsed = propSetIsCollapsed || setInternalCollapsed;
   const [eventMenuOpen, setEventMenuOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
@@ -141,18 +148,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
           isMobile
             ? "w-64 h-full bg-[#FAFAF9]"
             : isCollapsed
-              ? "w-20 h-screen sticky top-0 bg-transparent border-none"
+              ? "w-16 h-screen sticky top-0 bg-transparent border-none"
               : "w-64 h-screen sticky top-0 bg-transparent border-none"
         }`}
       >
         {/* ── Brand Header (No Separation Line) ── */}
-        <div className="h-14 sm:h-16 flex items-center justify-between px-2 shrink-0">
+        <div className="h-14 sm:h-16 relative flex items-center justify-between px-3 shrink-0">
           <Link
             to="/dashboard"
             onClick={handleLinkClick}
-            className="flex items-center gap-2.5 overflow-hidden group"
+            title={isCollapsed && !isMobile ? "Ticketification - Dashboard" : undefined}
+            className={`flex items-center gap-2.5 overflow-hidden group ${
+              isCollapsed && !isMobile ? "w-full justify-center" : ""
+            }`}
           >
-            <div className="w-8 h-8 rounded-lg bg-stone-900 flex items-center justify-center text-white shadow-2xs shrink-0 group-hover:scale-105 transition-transform">
+            <div className="w-9 h-9 rounded-xl bg-stone-900 flex items-center justify-center text-white shadow-2xs shrink-0 group-hover:scale-105 transition-transform">
               <Ticket className="w-4 h-4 stroke-[2.2]" />
             </div>
             {(!isCollapsed || isMobile) && (
@@ -170,12 +180,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {!isMobile && (
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-stone-200/50 transition-colors cursor-pointer"
+              className={`rounded-full bg-stone-50 hover:bg-stone-200 text-stone-700 border border-stone-50 transition-colors cursor-pointer shadow-2xs shrink-0 ${
+                isCollapsed ? "absolute right-0.5 top-6" : ""
+              }`}
               title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
               aria-label={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
             >
               {isCollapsed ? (
-                <ChevronRight className="w-4 h-4" />
+                <ChevronRight className="w-3.5 h-3.5" />
               ) : (
                 <ChevronLeft className="w-4 h-4" />
               )}
@@ -184,12 +196,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* ── Active Event Switcher (Seamless, No Box, No Separation Line) ── */}
-        {!isCollapsed || isMobile ? (
-          <div className="px-3 py-1.5 shrink-0">
-            <div className="relative">
+        {(!isCollapsed || isMobile) && (
+          <div className="py-1.5 shrink-0">
+            <div>
               <button
                 onClick={() => setEventMenuOpen(!eventMenuOpen)}
-                className="w-full flex items-center justify-between gap-2.5 px-2.5 py-2 rounded-xl text-left hover:bg-stone-200/50 transition-all cursor-pointer group"
+                className="w-full flex items-center justify-between gap-2.5 px-3 py-2 rounded-xl text-left hover:bg-stone-200/50 transition-all cursor-pointer group"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className="w-7 h-7 rounded bg-stone-200/70 flex items-center justify-center text-stone-700 shrink-0 group-hover:bg-stone-300/60 transition-colors">
@@ -205,93 +217,94 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </div>
                   </div>
                 </div>
-                <ChevronDown className="w-3.5 h-3.5 text-stone-400 group-hover:text-stone-700 shrink-0 ml-1 transition-colors" />
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-stone-400 group-hover:text-stone-700 shrink-0 ml-1 transition-transform duration-200 ${
+                    eventMenuOpen ? "rotate-180" : ""
+                  }`}
+                />
               </button>
 
-              {/* Event Selector Dropdown (Aligned with button above it, not touching screen edge) */}
+              {/* Inline Event Selector (Shifts sidebar elements below instead of floating overlay) */}
               {eventMenuOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setEventMenuOpen(false)}
-                  />
-                  <div className="absolute left-0 top-full mt-1.5 w-full bg-white border border-stone-200 rounded-xl shadow-lg overflow-hidden z-50 animate-in fade-in zoom-in-95">
-                    <div className="px-3 py-2 text-[10px] font-semibold tracking-wider text-stone-400 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
-                      <span>Active Events</span>
-                      <span className="text-stone-700 font-mono">
-                        {events.length}
-                      </span>
-                    </div>
-                    <div className="max-h-52 overflow-y-auto sidebar-scrollbar p-1 space-y-0.5">
-                      {events.length === 0 ? (
-                        <div className="px-2 py-3 text-center text-xs text-stone-400">
-                          No events found
-                        </div>
-                      ) : (
-                        events.map((e) => {
-                          const isSelected = currentEvent?.id === e.id;
-                          return (
-                            <button
-                              key={e.id}
-                              onClick={() => {
-                                setCurrentEvent(e);
-                                setEventMenuOpen(false);
-                              }}
-                              className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center justify-between transition-colors ${
-                                isSelected
-                                  ? "bg-stone-900 text-white font-semibold"
-                                  : "text-stone-700 hover:bg-stone-100 hover:text-stone-900"
-                              }`}
-                            >
-                              <span className="truncate">{e.name}</span>
-                              {isSelected && (
-                                <CheckCircle2 className="w-3.5 h-3.5 text-white shrink-0 ml-1" />
-                              )}
-                            </button>
-                          );
-                        })
-                      )}
-                    </div>
-                    <div className="border-t border-stone-100">
-                      <button
-                        onClick={() => {
-                          setEventMenuOpen(false);
-                          handleLinkClick();
-                          navigate("/events/create");
-                        }}
-                        className="w-full text-left px-2 py-1.5 rounded-lg text-xs font-bold text-stone-900 hover:bg-stone-100 flex items-center gap-1.5 transition-colors"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Create New Event</span>
-                      </button>
-                    </div>
+                <div className="mt-1.5 w-full bg-white border border-stone-200 rounded-xl shadow-xs overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
+                  <div className="px-3 py-2 text-[10px] font-semibold tracking-wider text-stone-400 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
+                    <span>Active Events</span>
+                    <span className="text-stone-700 font-mono">
+                      {events.length}
+                    </span>
                   </div>
-                </>
+                  <div className="max-h-52 overflow-y-auto sidebar-scrollbar p-1 space-y-0.5">
+                    {events.length === 0 ? (
+                      <div className="px-2 py-3 text-center text-xs text-stone-400">
+                        No events found
+                      </div>
+                    ) : (
+                      events.map((e) => {
+                        const isSelected = currentEvent?.id === e.id;
+                        return (
+                          <button
+                            key={e.id}
+                            onClick={() => {
+                              setCurrentEvent(e);
+                              setEventMenuOpen(false);
+                            }}
+                            className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
+                              isSelected
+                                ? "bg-stone-900 text-white font-semibold"
+                                : "text-stone-700 hover:bg-stone-100 hover:text-stone-900"
+                            }`}
+                          >
+                            <span className="truncate">{e.name}</span>
+                            {isSelected && (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-white shrink-0 ml-1" />
+                            )}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                  <div className="border-t border-stone-100 p-1">
+                    <button
+                      onClick={() => {
+                        setEventMenuOpen(false);
+                        handleLinkClick();
+                        navigate("/events/create");
+                      }}
+                      className="w-full text-left px-2 py-1.5 rounded-lg text-xs font-bold text-stone-900 hover:bg-stone-100 flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Create New Event</span>
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
-          </div>
-        ) : (
-          <div className=" py-2 flex justify-center shrink-0">
-            <button
-              onClick={() => navigate("/events")}
-              title={currentEvent ? currentEvent.name : "Select Event"}
-              className="w-9 h-9 rounded-xl text-stone-700 hover:bg-stone-200/50 flex items-center justify-center transition-colors cursor-pointer"
-            >
-              <Calendar className="w-4 h-4" />
-            </button>
           </div>
         )}
 
         {/* ── Category-wise Navigation List ── */}
-        <div className="flex-1 overflow-y-auto sidebar-scrollbar px-3 py-3 space-y-5">
+        <div
+          className={`flex-1 overflow-y-auto sidebar-scrollbar py-3 space-y-4 ${
+            isCollapsed && !isMobile ? "px-2" : "px-3"
+          }`}
+        >
           {categories.map((category, catIdx) => (
-            <div key={catIdx} className="space-y-1">
+            <div
+              key={catIdx}
+              className={`space-y-1 ${
+                isCollapsed && !isMobile ? "flex flex-col items-center" : ""
+              }`}
+            >
               {(!isCollapsed || isMobile) && (
                 <div className="pb-1 text-[10px] font-bold tracking-wider text-stone-400 uppercase">
                   {category.title}
                 </div>
               )}
-              <div className="space-y-0.5">
+              <div
+                className={`space-y-1 ${
+                  isCollapsed && !isMobile ? "flex flex-col items-center w-full" : "space-y-0.5"
+                }`}
+              >
                 {category.items.map((item) => {
                   const Icon = item.icon;
                   const isActive =
@@ -304,11 +317,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       to={item.path}
                       onClick={handleLinkClick}
                       title={isCollapsed && !isMobile ? item.label : undefined}
-                      className={`group flex items-center gap-2.5 px-3 py-2 rounded text-xs font-medium transition-all ${
+                      className={`group flex items-center transition-all ${
+                        isCollapsed && !isMobile
+                          ? "w-9 h-9 rounded-xl justify-center"
+                          : "gap-2.5 px-3 py-2 rounded text-xs font-medium"
+                      } ${
                         isActive
                           ? "bg-stone-900 text-white font-semibold shadow-2xs"
                           : "text-stone-600 hover:text-stone-950 hover:bg-stone-200/50"
-                      } ${isCollapsed && !isMobile ? "justify-center px-0" : ""}`}
+                      }`}
                     >
                       <Icon
                         className={`w-4 h-4 shrink-0 transition-colors ${
@@ -341,15 +358,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* ── User & Workspace Bottom Footer (No Box, No Line) ── */}
-        <div className="px-3 py-3 shrink-0">
+        <div
+          className={`${
+            isCollapsed && !isMobile ? "px-2" : "px-3"
+          } py-3 shrink-0`}
+        >
           {user && (!isCollapsed || isMobile) ? (
             <div className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl hover:bg-stone-200/40 transition-colors">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-full bg-stone-900 text-white font-bold text-xs flex items-center justify-center shrink-0">
+              <Link
+                to="/settings/profile"
+                onClick={handleLinkClick}
+                className="flex items-center gap-2.5 min-w-0 flex-1 group"
+                title="View Profile"
+              >
+                <div className="w-8 h-8 rounded-full bg-stone-900 text-white font-bold text-xs flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                   {user.name.charAt(0).toUpperCase()}
                 </div>
                 <div className="min-w-0">
-                  <div className="text-xs font-semibold text-stone-900 truncate">
+                  <div className="text-xs font-semibold text-stone-900 truncate group-hover:text-stone-950">
                     {user.organizationName || user.name}
                   </div>
                   <div className="text-[10px] text-stone-500 truncate flex items-center gap-1">
@@ -365,7 +391,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </span>
                   </div>
                 </div>
-              </div>
+              </Link>
 
               <div className="flex items-center gap-0.5 shrink-0">
                 <button
@@ -385,21 +411,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-1">
-              <button
-                onClick={() => setIsChangePasswordOpen(true)}
-                title="Change Password"
-                className="w-9 h-9 rounded-xl text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 flex items-center justify-center transition-colors cursor-pointer"
+            <div className="flex justify-center">
+              <Link
+                to="/settings/profile"
+                onClick={handleLinkClick}
+                title={user ? `${user.name} - Profile` : "Profile"}
+                className="w-9 h-9 rounded-xl bg-stone-900 text-white font-bold text-xs flex items-center justify-center hover:bg-stone-800 transition-colors shadow-2xs cursor-pointer"
               >
-                <KeyRound className="w-4 h-4" />
-              </button>
-              <button
-                onClick={onLogout}
-                title="Sign Out"
-                className="w-9 h-9 rounded-xl text-stone-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-colors cursor-pointer"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
+                {user?.name ? (
+                  user.name.charAt(0).toUpperCase()
+                ) : (
+                  <User className="w-4 h-4 text-white" />
+                )}
+              </Link>
             </div>
           )}
         </div>

@@ -38,6 +38,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
   const navigate = useNavigate();
   const { currentEvent } = useEvent();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // Dynamic breadcrumb resolution
   const getBreadcrumbs = () => {
@@ -129,10 +130,19 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
   const breadcrumbs = getBreadcrumbs();
 
   return (
-    <div className="h-screen w-screen flex bg-stone-100 text-[#18181B] font-sans selection:bg-stone-200 selection:text-stone-900 overflow-hidden gap-2">
+    <div className="h-screen w-screen flex bg-stone-50 text-[#18181B] font-sans selection:bg-stone-200 selection:text-stone-900 overflow-hidden gap-2">
       {/* ── Desktop Fixed Sidebar (No background, No separation lines) ── */}
-      <div className="hidden md:flex shrink-0 w-64 h-full flex-col bg-transparent">
-        <Sidebar user={user} onLogout={onLogout} />
+      <div
+        className={`hidden md:flex shrink-0 h-full flex-col bg-transparent transition-all duration-300 ${
+          isSidebarCollapsed ? 'w-20' : 'w-64'
+        }`}
+      >
+        <Sidebar
+          user={user}
+          onLogout={onLogout}
+          isCollapsed={isSidebarCollapsed}
+          setIsCollapsed={setIsSidebarCollapsed}
+        />
       </div>
 
       {/* ── Mobile Sidebar Drawer & Overlay ── */}
@@ -164,7 +174,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
       {/* ── Right Workspace Area ── */}
       <div className="flex-1 h-full flex flex-col min-w-0 pr-0 pb-0 overflow-hidden">
         {/* ── Topbar (No Box, No Background, No Separation Line) ── */}
-        <header className="h-14 sm:h-16 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 shrink-0 bg-transparent border-none">
+        <header className="h-14 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 shrink-0 bg-transparent border-none">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
             {/* Mobile Hamburger Button */}
             <button
@@ -221,7 +231,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
             {/* Quick Action: New Event */}
             <button
               onClick={() => navigate('/events/create')}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-stone-900 hover:bg-black rounded-xl shadow-2xs transition-all active:scale-95 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-stone-900 hover:bg-black rounded-full shadow-2xs transition-all active:scale-95 cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
               <span>New Event</span>
@@ -240,8 +250,8 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
         </header>
 
         {/* ── Single Content Box with Subtle BG & Border (0 Margin from Right & Bottom) ── */}
-        <main className="flex-1 min-h-0 bg-white border-t border-l border-stone-200/80 rounded-tl-2xl sm:rounded-tl-3xl shadow-xs mr-0 mb-0 p-5 sm:p-7 lg:p-9 overflow-y-auto">
-          <div className="w-full">
+        <main className="flex-1 min-h-0 bg-white border-t border-l border-stone-200/80 rounded-tl-2xl sm:rounded-tl-3xl shadow-xs mr-0 mb-0 p-5 sm:p-7 lg:p-9 overflow-y-auto flex flex-col">
+          <div className="w-full flex-1 flex flex-col">
             {children}
           </div>
         </main>

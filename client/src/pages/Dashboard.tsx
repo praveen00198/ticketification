@@ -58,15 +58,14 @@ export const Dashboard: React.FC = () => {
 
   if (!currentEvent) {
     return (
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-4xl w-full mx-auto my-auto py-3">
         <InView direction="up" distance={16}>
-          <div className="bg-white border border-stone-200/90 rounded-2xl p-6 sm:p-10 shadow-xs text-center space-y-4">
-            <div className="w-14 h-14 bg-stone-100 text-stone-900 rounded-2xl flex items-center justify-center mx-auto mb-2 border border-stone-200 shadow-2xs">
+          <div className="text-center space-y-6">
+            <div className="w-14 h-14 bg-stone-100 text-stone-900 rounded-full flex items-center justify-center mx-auto mb-2 border border-stone-200 shadow-2xs">
               <Sparkles className="w-7 h-7" />
             </div>
             <div>
-              <Badge variant="neutral" className="mb-2">Operational Command Center</Badge>
-              <h2 className="text-xl sm:text-2xl font-extrabold text-zinc-900 tracking-tight">
+              <h2 className="text-xl sm:text-3xl font-semibold text-zinc-900 tracking-tight">
                 Welcome to Ticketification
               </h2>
               <p className="text-xs sm:text-sm text-stone-500 max-w-lg mx-auto leading-relaxed mt-1">
@@ -99,7 +98,7 @@ export const Dashboard: React.FC = () => {
                   <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-900 flex items-center justify-center mb-3 border border-stone-200 group-hover:scale-105 transition-transform">
                     <Sparkles className="w-5 h-5" />
                   </div>
-                  <h4 className="text-sm font-bold text-zinc-900">Host an Event</h4>
+                  <h4 className="text-base font-bold text-zinc-900">Host an Event</h4>
                   <p className="text-xs text-stone-500 mt-1 leading-relaxed">
                     Configure custom credentials, guest imports, turnstile scanning, and judging rubrics.
                   </p>
@@ -109,7 +108,7 @@ export const Dashboard: React.FC = () => {
                   size="sm"
                   onClick={() => navigate('/events/create')}
                   iconRight={<ArrowRight className="w-3.5 h-3.5" />}
-                  className="w-full"
+                  className="w-full !rounded-full"
                 >
                   Create Event Wizard
                 </Button>
@@ -120,7 +119,7 @@ export const Dashboard: React.FC = () => {
                   <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-900 flex items-center justify-center mb-3 border border-stone-200 group-hover:scale-105 transition-transform">
                     <Compass className="w-5 h-5" />
                   </div>
-                  <h4 className="text-sm font-bold text-zinc-900">Explore Catalog</h4>
+                  <h4 className="text-base font-bold text-zinc-900">Explore Catalog</h4>
                   <p className="text-xs text-stone-500 mt-1 leading-relaxed">
                     Discover upcoming hackathons, conferences, and workshops open for attendance.
                   </p>
@@ -130,7 +129,7 @@ export const Dashboard: React.FC = () => {
                   size="sm"
                   onClick={() => navigate('/explore')}
                   iconRight={<ArrowRight className="w-3.5 h-3.5" />}
-                  className="w-full"
+                  className="w-full !rounded-full"
                 >
                   Explore Events
                 </Button>
@@ -151,7 +150,7 @@ export const Dashboard: React.FC = () => {
                   size="sm"
                   onClick={() => navigate('/wallet')}
                   iconRight={<ArrowRight className="w-3.5 h-3.5" />}
-                  className="w-full"
+                  className="w-full !rounded-full"
                 >
                   Open Wallet
                 </Button>
