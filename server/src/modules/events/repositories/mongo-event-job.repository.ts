@@ -77,6 +77,7 @@ export class MongoEventJobRepository {
     if (mongoose.connection.readyState !== 1) {
       const job = await this.findById(jobId);
       if (!job) return null;
+      if (job.status !== 'PROCESSING') return null;
       if (workerId && (job.lockedBy !== workerId || (job.lockExpiresAt && new Date(job.lockExpiresAt) < new Date()))) {
         return null;
       }
@@ -98,9 +99,11 @@ export class MongoEventJobRepository {
     }
 
     const now = new Date();
-    const query: any = { _id: new mongoose.Types.ObjectId(jobId) };
+    const query: any = {
+      _id: new mongoose.Types.ObjectId(jobId),
+      status: 'PROCESSING',
+    };
     if (workerId) {
-      query.status = 'PROCESSING';
       query.lockedBy = workerId;
       query.lockExpiresAt = { $gte: now };
     }
@@ -152,6 +155,7 @@ export class MongoEventJobRepository {
     if (mongoose.connection.readyState !== 1) {
       const job = await this.findById(jobId);
       if (!job) return null;
+      if (job.status !== 'PROCESSING') return null;
       if (workerId && (job.lockedBy !== workerId || (job.lockExpiresAt && new Date(job.lockExpiresAt) < new Date()))) {
         return null;
       }
@@ -164,9 +168,11 @@ export class MongoEventJobRepository {
       return job;
     }
 
-    const query: any = { _id: new mongoose.Types.ObjectId(jobId) };
+    const query: any = {
+      _id: new mongoose.Types.ObjectId(jobId),
+      status: 'PROCESSING',
+    };
     if (workerId) {
-      query.status = 'PROCESSING';
       query.lockedBy = workerId;
       query.lockExpiresAt = { $gte: new Date() };
     }
@@ -201,6 +207,10 @@ export class MongoEventJobRepository {
     if (mongoose.connection.readyState !== 1) {
       const job = await this.findById(jobId);
       if (!job) return null;
+      if (job.status === 'COMPLETED' || job.status === 'CANCELLED') return null;
+      if (workerId && (job.lockedBy !== workerId || (job.lockExpiresAt && new Date(job.lockExpiresAt) < new Date()))) {
+        return null;
+      }
       job.status = 'FAILED';
       job.failedAt = new Date();
       job.errorMessage = errorMessage;
@@ -211,13 +221,14 @@ export class MongoEventJobRepository {
       return job;
     }
 
-    const query: any = { _id: new mongoose.Types.ObjectId(jobId) };
+    const query: any = {
+      _id: new mongoose.Types.ObjectId(jobId),
+      status: { $in: ['QUEUED', 'PROCESSING'] },
+    };
     if (workerId) {
-      query.$or = [
-        { lockedBy: workerId },
-        { lockedBy: null },
-        { lockExpiresAt: { $lt: new Date() } },
-      ];
+      query.status = 'PROCESSING';
+      query.lockedBy = workerId;
+      query.lockExpiresAt = { $gte: new Date() };
     }
 
     const update: any = {
@@ -511,22 +522,44 @@ export class MongoEventJobRepository {
 
     for (const job of abandonedJobs) {
       if (job.attempts >= job.maxAttempts) {
-        await this.markFailed(
-          job._id.toString(),
-          'Abandoned by worker and exceeded maximum retry attempts'
-        );
-        failed++;
-      } else {
-        await EventJobModel.findByIdAndUpdate(job._id, {
-          $set: {
-            status: 'QUEUED',
-            lockedBy: null,
-            lockExpiresAt: null,
-            failureReason: 'Recovered from abandoned worker process',
-            nextRunAt: new Date(),
+        const failedJob = await EventJobModel.findOneAndUpdate(
+          {
+            _id: job._id,
+            status: 'PROCESSING',
+            lockExpiresAt: { $lt: now },
           },
-        }).exec();
-        recovered++;
+          {
+            $set: {
+              status: 'FAILED',
+              failedAt: new Date(),
+              errorMessage: 'Abandoned by worker and exceeded maximum retry attempts',
+              failureReason: 'Abandoned by worker and exceeded maximum retry attempts',
+              lockedBy: null,
+              lockExpiresAt: null,
+            },
+          },
+          { new: true }
+        ).exec();
+        if (failedJob) failed++;
+      } else {
+        const recoveredJob = await EventJobModel.findOneAndUpdate(
+          {
+            _id: job._id,
+            status: 'PROCESSING',
+            lockExpiresAt: { $lt: now },
+          },
+          {
+            $set: {
+              status: 'QUEUED',
+              lockedBy: null,
+              lockExpiresAt: null,
+              failureReason: 'Recovered from abandoned worker process',
+              nextRunAt: new Date(),
+            },
+          },
+          { new: true }
+        ).exec();
+        if (recoveredJob) recovered++;
       }
     }
 
