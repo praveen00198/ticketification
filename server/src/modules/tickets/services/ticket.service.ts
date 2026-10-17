@@ -1025,12 +1025,19 @@ export class TicketService {
         throw new ValidationError('No tickets found to export for this event.');
       }
 
-      if (packagedCount === 0 && totalDiscovered > 0) {
+      if (totalDiscovered > 0 && packagedCount < totalDiscovered) {
         try {
           archive.abort();
           archiveAborted = true;
         } catch {}
-        throw new ValidationError('No valid ticket assets could be packaged into archive.');
+        if (packagedCount === 0) {
+          throw new ValidationError('No valid ticket assets could be packaged into archive.');
+        } else {
+          const missingCount = totalDiscovered - packagedCount;
+          throw new ValidationError(
+            `Incomplete export: only ${packagedCount} of ${totalDiscovered} ticket assets could be packaged (${missingCount} missing or inaccessible). Export aborted to prevent incomplete delivery.`
+          );
+        }
       }
 
       await archive.finalize();

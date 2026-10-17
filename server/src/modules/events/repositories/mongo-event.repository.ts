@@ -347,14 +347,18 @@ export class MongoEventRepository {
       );
       const updateResult = typeof updateOp?.exec === 'function' ? await updateOp.exec() : await updateOp;
 
+      // IMPORTANT: acknowledged === true means the MongoDB server received the command,
+      // NOT that a document was matched or modified. A zero-match CAS update still has
+      // acknowledged: true. We must check matchedCount or modifiedCount explicitly.
+      // Only fall back to the !('matchedCount' in updateResult) guard for legacy
+      // driver versions that genuinely don't expose matchedCount.
       const isSuccess =
         updateResult &&
         (updateResult.matchedCount === 1 ||
           updateResult.modifiedCount === 1 ||
           updateResult.nModified === 1 ||
           updateResult.n === 1 ||
-          updateResult.acknowledged === true ||
-          !('matchedCount' in updateResult));
+          (!('matchedCount' in updateResult) && !('modifiedCount' in updateResult) && !('nModified' in updateResult)));
 
       if (isSuccess) {
         return actualCount;
@@ -384,9 +388,11 @@ export class MongoEventRepository {
   async reserveRegistrationSlot(eventId: string, capacity?: number): Promise<boolean> {
     if (!mongoose.Types.ObjectId.isValid(eventId)) return false;
 
-    // Guard against buffering in disconnected test environments
+    // Never report success for a reservation when MongoDB is unavailable.
+    // Returning true here would allow over-capacity registrations to succeed
+    // when the database is disconnected, corrupting production counters on reconnect.
     if (mongoose.connection.readyState !== 1) {
-      return true;
+      return false;
     }
 
     const eventQ: any = this.model.findById(eventId);
@@ -441,8 +447,10 @@ export class MongoEventRepository {
   async releaseRegistrationSlot(eventId: string, releaseToken?: string): Promise<boolean> {
     if (!mongoose.Types.ObjectId.isValid(eventId)) return false;
 
+    // Never report success for a release when MongoDB is unavailable.
+    // A false positive here would hide the fact that the counter was not decremented.
     if (mongoose.connection.readyState !== 1) {
-      return true;
+      return false;
     }
 
     const query: any = {
