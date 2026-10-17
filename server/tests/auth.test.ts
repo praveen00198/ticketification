@@ -153,5 +153,20 @@ describe('Phase 1: Auth & Error Handling Subsystem', () => {
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('OK');
     });
+
+    it('POST /api/auth/login with nonexistent account should reject with 401 and ACCOUNT_NOT_FOUND', async () => {
+      const res = await request(app)
+        .post('/api/auth/login')
+        .send({
+          email: 'nonexistent-user-12345@testdomain.org',
+          password: 'somepassword123',
+        });
+
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error).toBeDefined();
+      expect(res.body.error.code).toBe('ACCOUNT_NOT_FOUND');
+      expect(res.body.error.message).toContain('No Ticketification account found');
+    });
   });
 });

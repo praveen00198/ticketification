@@ -4,13 +4,21 @@ import { eq } from 'drizzle-orm';
 
 export class UserRepository {
   async findById(id: string) {
-    const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
-    return result[0] || null;
+    try {
+      const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+      return result[0] || null;
+    } catch {
+      return null;
+    }
   }
 
   async findByEmail(email: string) {
-    const result = await db.select().from(users).where(eq(users.email, email.toLowerCase())).limit(1);
-    return result[0] || null;
+    try {
+      const result = await db.select().from(users).where(eq(users.email, email.toLowerCase())).limit(1);
+      return result[0] || null;
+    } catch {
+      return null;
+    }
   }
 
   async upsert(data: { id: string; name: string; email: string; role?: string }) {

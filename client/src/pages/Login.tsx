@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   Ticket,
@@ -11,6 +11,9 @@ import {
   ShieldCheck,
   Sparkles,
   Compass,
+  Eye,
+  EyeOff,
+  UserPlus,
 } from 'lucide-react';
 import { apiClient } from '../api/client';
 
@@ -23,25 +26,92 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToRegist
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [accountNotFound, setAccountNotFound] = useState(false);
+
+  const passwordInputRef = useRef<HTMLInputElement>(null);
+  const redirectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const searchParams = new URLSearchParams(window.location.search);
   const redirectTarget = searchParams.get('redirect') || '/events';
 
+  useEffect(() => {
+    return () => {
+      if (redirectTimeoutRef.current) {
+        clearTimeout(redirectTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleEmailChange = (val: string) => {
+    if (redirectTimeoutRef.current) {
+      clearTimeout(redirectTimeoutRef.current);
+    }
+    setAccountNotFound(false);
+    setEmail(val);
+  };
+
+  const togglePasswordVisibility = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setShowPassword((prev) => !prev);
+    setTimeout(() => {
+      passwordInputRef.current?.focus();
+    }, 0);
+  };
+
+  const handleNavigateToSignup = () => {
+    if (redirectTimeoutRef.current) {
+      clearTimeout(redirectTimeoutRef.current);
+    }
+    if (onNavigateToRegister) {
+      onNavigateToRegister();
+    } else {
+      navigate(`/register?email=${encodeURIComponent(email.trim())}`);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (redirectTimeoutRef.current) {
+      clearTimeout(redirectTimeoutRef.current);
+    }
     setLoading(true);
     setError(null);
+    setAccountNotFound(false);
 
     try {
-      const res: any = await apiClient.post('/auth/login', { email, password });
+      const res: any = await apiClient.post('/auth/login', { email: email.trim(), password });
       if (res.success && res.data) {
         onLoginSuccess(res.data.token, res.data.user);
         navigate(redirectTarget);
       }
     } catch (err: any) {
-      setError(err?.response?.data?.message || err?.message || 'Login failed. Please verify your email and password.');
+      const responseData = err?.response?.data;
+      const errorCode = responseData?.error?.code;
+      const errorMessage =
+        responseData?.error?.message ||
+        responseData?.message ||
+        err?.message ||
+        'Login failed. Please verify your email and password.';
+
+      if (
+        errorCode === 'ACCOUNT_NOT_FOUND' ||
+        errorMessage.toLowerCase().includes('no ticketification account') ||
+        responseData?.error?.details?.notFound === true
+      ) {
+        setAccountNotFound(true);
+        setError('No Ticketification account exists with this email address.');
+        // Automatically redirect to registration with the email prefilled after 2.5 seconds
+        redirectTimeoutRef.current = setTimeout(() => {
+          handleNavigateToSignup();
+        }, 2500);
+      } else {
+        setAccountNotFound(false);
+        setError(errorMessage);
+      }
     } finally {
       setLoading(false);
     }
@@ -150,15 +220,37 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToRegist
                 </p>
               </div>
 
-              {/* Error Banner */}
-              {error && (
-                <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2.5">
-                  <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-bold">Authentication Failed</span>
-                    <p className="mt-0.5">{error}</p>
+              {/* Account Not Found vs Error Banner */}
+              {accountNotFound ? (
+                <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-in fade-in">
+                  <div className="flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold text-amber-950">Account Not Found</span>
+                      <p className="mt-0.5 text-amber-800">
+                        No Ticketification account exists for <span className="font-semibold">{email}</span>. Redirecting you to sign up...
+                      </p>
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={handleNavigateToSignup}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-900 hover:bg-black text-white text-xs font-bold rounded-lg transition-colors shrink-0 shadow-xs cursor-pointer self-start sm:self-auto"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    Create Account
+                  </button>
                 </div>
+              ) : (
+                error && (
+                  <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold">Authentication Failed</span>
+                      <p className="mt-0.5">{error}</p>
+                    </div>
+                  </div>
+                )
               )}
 
               {/* Form */}
@@ -168,12 +260,12 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToRegist
                     Email Address
                   </label>
                   <div className="relative">
-                    <Mail className="w-4 h-4 text-stone-400 absolute left-3.5 top-3.5" />
+                    <Mail className="w-4 h-4 text-stone-400 absolute left-3.5 top-3.5 pointer-events-none" />
                     <input
                       type="email"
                       required
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      onChange={(e) => handleEmailChange(e.target.value)}
                       placeholder="you@example.com"
                       className="w-full pl-10 pr-4 py-2.5 bg-white border border-stone-200 focus:border-stone-900 focus:ring-2 focus:ring-stone-400/20 rounded-xl text-sm text-[#111827] placeholder-stone-400 focus:outline-none transition-all shadow-sm"
                     />
@@ -185,15 +277,29 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToRegist
                     Password
                   </label>
                   <div className="relative">
-                    <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-3.5" />
+                    <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-3.5 pointer-events-none" />
                     <input
-                      type="password"
+                      ref={passwordInputRef}
+                      type={showPassword ? 'text' : 'password'}
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••••••"
-                      className="w-full pl-10 pr-4 py-2.5 bg-white border border-stone-200 focus:border-stone-900 focus:ring-2 focus:ring-stone-400/20 rounded-xl text-sm text-[#111827] placeholder-stone-400 focus:outline-none transition-all shadow-sm"
+                      className="w-full pl-10 pr-10 py-2.5 bg-white border border-stone-200 focus:border-stone-900 focus:ring-2 focus:ring-stone-400/20 rounded-xl text-sm text-[#111827] placeholder-stone-400 focus:outline-none transition-all shadow-sm"
                     />
+                    <button
+                      type="button"
+                      onClick={togglePasswordVisibility}
+                      className="absolute right-3 top-2.5 text-stone-400 hover:text-stone-700 p-1 rounded-md focus:outline-none focus:ring-2 focus:ring-stone-400/30 transition-colors"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      title={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="w-4 h-4" aria-hidden="true" />
+                      ) : (
+                        <Eye className="w-4 h-4" aria-hidden="true" />
+                      )}
+                    </button>
                   </div>
                 </div>
 

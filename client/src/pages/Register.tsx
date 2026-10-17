@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   Ticket,
@@ -12,6 +12,8 @@ import {
   ShieldCheck,
   Compass,
   Sparkles,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { apiClient } from '../api/client';
 
@@ -27,12 +29,20 @@ export const Register: React.FC<RegisterProps> = ({
   onNavigateToLogin,
 }) => {
   const navigate = useNavigate();
+  const searchParams = new URLSearchParams(window.location.search);
+  const emailParam = searchParams.get('email') || initialEmail;
+
   const [name, setName] = useState('');
-  const [email, setEmail] = useState(initialEmail);
+  const [email, setEmail] = useState(emailParam);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const passwordInputRef = useRef<HTMLInputElement>(null);
+  const confirmPasswordInputRef = useRef<HTMLInputElement>(null);
 
   // Field validation touched state
   const [touchedPassword, setTouchedPassword] = useState(false);
@@ -48,8 +58,25 @@ export const Register: React.FC<RegisterProps> = ({
       ? 'Passwords do not match'
       : null;
 
-  const searchParams = new URLSearchParams(window.location.search);
   const redirectTarget = searchParams.get('redirect') || '/events';
+
+  const togglePasswordVisibility = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setShowPassword((prev) => !prev);
+    setTimeout(() => {
+      passwordInputRef.current?.focus();
+    }, 0);
+  };
+
+  const toggleConfirmPasswordVisibility = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setShowConfirmPassword((prev) => !prev);
+    setTimeout(() => {
+      confirmPasswordInputRef.current?.focus();
+    }, 0);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,8 +96,8 @@ export const Register: React.FC<RegisterProps> = ({
 
     try {
       const res: any = await apiClient.post('/auth/register', {
-        name,
-        email,
+        name: name.trim(),
+        email: email.trim(),
         password,
       });
       if (res.success && res.data) {
@@ -79,7 +106,13 @@ export const Register: React.FC<RegisterProps> = ({
         navigate(redirectTarget);
       }
     } catch (err: any) {
-      setError(err?.response?.data?.message || err?.message || 'Registration failed. Please try again.');
+      const responseData = err?.response?.data;
+      setError(
+        responseData?.error?.message ||
+        responseData?.message ||
+        err?.message ||
+        'Registration failed. Please try again.'
+      );
     } finally {
       setLoading(false);
     }
@@ -240,20 +273,34 @@ export const Register: React.FC<RegisterProps> = ({
                     Password
                   </label>
                   <div className="relative">
-                    <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-3.5" />
+                    <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-3.5 pointer-events-none" />
                     <input
-                      type="password"
+                      ref={passwordInputRef}
+                      type={showPassword ? 'text' : 'password'}
                       required
                       value={password}
                       onBlur={() => setTouchedPassword(true)}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="At least 6 characters"
-                      className={`w-full pl-10 pr-4 py-2.5 bg-white border rounded-xl text-sm text-[#111827] placeholder-stone-400 focus:outline-none transition-all shadow-sm ${
+                      className={`w-full pl-10 pr-10 py-2.5 bg-white border rounded-xl text-sm text-[#111827] placeholder-stone-400 focus:outline-none transition-all shadow-sm ${
                         passwordError
                           ? 'border-rose-300 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20'
                           : 'border-stone-200 focus:border-stone-900 focus:ring-2 focus:ring-stone-400/20'
                       }`}
                     />
+                    <button
+                      type="button"
+                      onClick={togglePasswordVisibility}
+                      className="absolute right-3 top-2.5 text-stone-400 hover:text-stone-700 p-1 rounded-md focus:outline-none focus:ring-2 focus:ring-stone-400/30 transition-colors"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      title={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="w-4 h-4" aria-hidden="true" />
+                      ) : (
+                        <Eye className="w-4 h-4" aria-hidden="true" />
+                      )}
+                    </button>
                   </div>
                   {passwordError && (
                     <p className="text-[11px] text-rose-600 mt-1 font-medium">{passwordError}</p>
@@ -265,20 +312,34 @@ export const Register: React.FC<RegisterProps> = ({
                     Confirm Password
                   </label>
                   <div className="relative">
-                    <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-3.5" />
+                    <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-3.5 pointer-events-none" />
                     <input
-                      type="password"
+                      ref={confirmPasswordInputRef}
+                      type={showConfirmPassword ? 'text' : 'password'}
                       required
                       value={confirmPassword}
                       onBlur={() => setTouchedConfirm(true)}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="Repeat your password"
-                      className={`w-full pl-10 pr-4 py-2.5 bg-white border rounded-xl text-sm text-[#111827] placeholder-stone-400 focus:outline-none transition-all shadow-sm ${
+                      className={`w-full pl-10 pr-10 py-2.5 bg-white border rounded-xl text-sm text-[#111827] placeholder-stone-400 focus:outline-none transition-all shadow-sm ${
                         confirmError
                           ? 'border-rose-300 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20'
                           : 'border-stone-200 focus:border-stone-900 focus:ring-2 focus:ring-stone-400/20'
                       }`}
                     />
+                    <button
+                      type="button"
+                      onClick={toggleConfirmPasswordVisibility}
+                      className="absolute right-3 top-2.5 text-stone-400 hover:text-stone-700 p-1 rounded-md focus:outline-none focus:ring-2 focus:ring-stone-400/30 transition-colors"
+                      aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                      title={showConfirmPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="w-4 h-4" aria-hidden="true" />
+                      ) : (
+                        <Eye className="w-4 h-4" aria-hidden="true" />
+                      )}
+                    </button>
                   </div>
                   {confirmError && (
                     <p className="text-[11px] text-rose-600 mt-1 font-medium">{confirmError}</p>

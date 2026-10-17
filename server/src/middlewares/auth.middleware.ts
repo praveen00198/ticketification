@@ -106,6 +106,9 @@ export async function authMiddleware(
       try {
         const { mongoUserRepository } = await import('../modules/auth/repositories/mongo-user.repository');
         mongoUser = await mongoUserRepository.findBySupabaseId(user.id);
+        if (!mongoUser && email) {
+          mongoUser = await mongoUserRepository.findByEmail(email);
+        }
       } catch (mErr) {
         if (config.env.isProduction) {
           throw mErr;
@@ -118,34 +121,30 @@ export async function authMiddleware(
         }
         userRole = mongoUser.platformRole;
       } else if (isMongoConnected()) {
-        // Connected to MongoDB but no profile exists: auto-create baseline USER
-        const { mongoUserRepository } = await import('../modules/auth/repositories/mongo-user.repository');
-        mongoUser = await mongoUserRepository.create({
-          supabaseUserId: user.id,
-          email,
-          name: user.user_metadata?.name || email.split('@')[0] || 'User',
-          platformRole: 'USER',
-          status: 'ACTIVE',
-        });
-        if (!mongoUser) {
-          return next(new AppError('Unable to verify user profile due to database error.', 500));
-        }
-        userRole = mongoUser.platformRole;
+        // Connected to MongoDB but no profile exists: reject unauthenticated access
+        return next(
+          new AuthenticationError(
+            'User profile not found. Please register for a Ticketification account.',
+            undefined,
+            'ACCOUNT_NOT_FOUND'
+          )
+        );
       } else if (config.env.isProduction && mongoConfigured) {
         return next(new AppError('Unable to verify user profile due to database error.', 500));
       } else {
         // Fall back to PostgreSQL in legacy non-production environments
         let dbUser = await userRepository.findById(user.id);
-        if (!dbUser) {
-          dbUser = await userRepository.upsert({
-            id: user.id,
-            name: user.user_metadata?.name || email.split('@')[0] || 'User',
-            email,
-            role: 'USER',
-          });
+        if (!dbUser && email) {
+          dbUser = await userRepository.findByEmail(email);
         }
         if (!dbUser) {
-          return next(new AppError('Unable to verify user profile due to database error.', 500));
+          return next(
+            new AuthenticationError(
+              'User profile not found. Please register for a Ticketification account.',
+              undefined,
+              'ACCOUNT_NOT_FOUND'
+            )
+          );
         }
         if ((dbUser as any)?.status === 'SUSPENDED') {
           return next(new AuthenticationError('Account is suspended. Please contact platform administrators.'));

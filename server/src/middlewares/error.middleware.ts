@@ -26,8 +26,12 @@ export class ValidationError extends AppError {
 }
 
 export class AuthenticationError extends AppError {
-  constructor(message: string = 'Authentication required or token expired.', details?: any) {
-    super(message, 401, details, 'AUTHENTICATION_ERROR');
+  constructor(
+    message: string = 'Authentication required or token expired.',
+    details?: any,
+    errorCode: string = 'AUTHENTICATION_ERROR'
+  ) {
+    super(message, 401, details, errorCode);
     this.name = 'AuthenticationError';
     Object.setPrototypeOf(this, AuthenticationError.prototype);
   }

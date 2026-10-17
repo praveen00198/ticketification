@@ -144,6 +144,40 @@ export class AuthService {
     const { email, password } = input;
     const normalizedEmail = email.trim().toLowerCase();
 
+    // 0. Verify that a valid Ticketification account exists for this email.
+    // Under no circumstances should an account be auto-created during login.
+    const mongoConfigured = Boolean(config.env.mongoUri);
+    let existingMongoUser: any = null;
+    let existingPgUser: any = null;
+
+    if (mongoConfigured) {
+      const { isMongoConnected } = await import('../../../db/mongodb');
+      if (isMongoConnected()) {
+        existingMongoUser = await this.mongoUserRepo.findByEmail(normalizedEmail);
+      }
+    }
+    if (!existingMongoUser && Boolean(config.env.databaseUrl)) {
+      try {
+        existingPgUser = await this.userRepo.findByEmail(normalizedEmail);
+      } catch {
+        existingPgUser = null;
+      }
+    }
+
+    const accountExists = Boolean(existingMongoUser || existingPgUser);
+
+    if (!accountExists) {
+      throw new AuthenticationError(
+        'No Ticketification account found with this email. Please sign up to create an account.',
+        { email: normalizedEmail, notFound: true },
+        'ACCOUNT_NOT_FOUND'
+      );
+    }
+
+    if (existingMongoUser?.status === 'SUSPENDED' || (existingPgUser as any)?.status === 'SUSPENDED') {
+      throw new AuthenticationError('Account is suspended. Please contact platform administrators.');
+    }
+
     // 1. If Supabase is configured, authenticate via Supabase
     if (supabaseAdmin || supabasePublic) {
       const authClient = supabasePublic || supabaseAdmin!;
@@ -158,10 +192,18 @@ export class AuthService {
           error.message.includes('invalid_grant') ||
           error.message.includes('user_not_found')
         ) {
-          throw new AuthenticationError('Invalid email or password. Please check your credentials and try again.');
+          throw new AuthenticationError(
+            'Incorrect password. Please check your credentials and try again.',
+            undefined,
+            'INVALID_CREDENTIALS'
+          );
         }
         if (error.message.includes('Email not confirmed')) {
-          throw new AuthenticationError('Email address has not been confirmed.');
+          throw new AuthenticationError(
+            'Email address has not been confirmed.',
+            undefined,
+            'EMAIL_NOT_CONFIRMED'
+          );
         }
         throw new AuthenticationError(error.message);
       }
@@ -173,79 +215,16 @@ export class AuthService {
       let resolvedRole: PlatformRole = 'USER';
       let profileName = data.user.user_metadata?.name || normalizedEmail.split('@')[0] || 'User';
 
-      try {
-        const mongoConfigured = Boolean(config.env.mongoUri);
-        if (mongoConfigured) {
-          const { isMongoConnected } = await import('../../../db/mongodb');
-          if (isMongoConnected()) {
-            let mongoUser = await this.mongoUserRepo.findBySupabaseId(data.user.id);
-            if (!mongoUser) {
-              mongoUser = await this.mongoUserRepo.create({
-                supabaseUserId: data.user.id,
-                name: profileName,
-                email: normalizedEmail,
-                platformRole: 'USER',
-                status: 'ACTIVE',
-              });
-            }
-            if (mongoUser.status === 'SUSPENDED') {
-              throw new AuthenticationError('Account is suspended. Please contact platform administrators.');
-            }
-            resolvedRole = mongoUser.platformRole || 'USER';
-            profileName = mongoUser.name || profileName;
-          } else if (config.env.isProduction) {
-            throw new AppError('Authentication service temporarily unavailable due to database error.', 500);
-          } else {
-            // Pure legacy PostgreSQL mode in non-production
-            let dbUser = await this.userRepo.findById(data.user.id);
-            if (!dbUser) {
-              dbUser = await this.userRepo.upsert({
-                id: data.user.id,
-                name: profileName,
-                email: normalizedEmail,
-                role: 'USER',
-              });
-            }
-            if (dbUser) {
-              if ((dbUser as any).status === 'SUSPENDED') {
-                throw new AuthenticationError('Account is suspended. Please contact platform administrators.');
-              }
-              const safeRole = (dbUser.role === 'ADMIN' || dbUser.role === 'SUPER_ADMIN') ? 'USER' : ((dbUser.role as PlatformRole) || 'USER');
-              resolvedRole = safeRole;
-              profileName = dbUser.name || profileName;
-            } else {
-              throw new AppError('Unable to resolve user profile.', 500);
-            }
-          }
-        } else {
-          // Pure legacy PostgreSQL mode (only when MongoDB is not configured at all)
-          let dbUser = await this.userRepo.findById(data.user.id);
-          if (!dbUser) {
-            // Missing application profile created on login defaults strictly to USER.
-            dbUser = await this.userRepo.upsert({
-              id: data.user.id,
-              name: profileName,
-              email: normalizedEmail,
-              role: 'USER',
-            });
-          }
-
-          if (dbUser) {
-            if ((dbUser as any).status === 'SUSPENDED') {
-              throw new AuthenticationError('Account is suspended. Please contact platform administrators.');
-            }
-            resolvedRole = (dbUser.role as PlatformRole) || 'USER';
-            profileName = dbUser.name || profileName;
-          } else {
-            throw new AppError('Unable to resolve user profile.', 500);
-          }
-        }
-      } catch (dbErr: any) {
-        if (dbErr instanceof AuthenticationError) {
-          throw dbErr;
-        }
-        console.error('[AuthService] Could not resolve user profile from database during login:', dbErr);
-        throw new AppError('Authentication service temporarily unavailable due to database error.', 500);
+      if (existingMongoUser) {
+        resolvedRole = existingMongoUser.platformRole || 'USER';
+        profileName = existingMongoUser.name || profileName;
+      } else if (existingPgUser) {
+        const safeRole =
+          existingPgUser.role === 'ADMIN' || existingPgUser.role === 'SUPER_ADMIN'
+            ? 'USER'
+            : ((existingPgUser.role as PlatformRole) || 'USER');
+        resolvedRole = safeRole;
+        profileName = existingPgUser.name || profileName;
       }
 
       return {
@@ -260,9 +239,21 @@ export class AuthService {
     }
 
     // 2. Native MongoDB Auth Fallback
-    const mongoUser = await this.mongoUserRepo.findByEmail(normalizedEmail);
-    if (!mongoUser || !mongoUser.passwordHash || !verifyPassword(password, mongoUser.passwordHash)) {
-      throw new AuthenticationError('Invalid email or password. Please check your credentials and try again.');
+    const mongoUser = existingMongoUser || (await this.mongoUserRepo.findByEmail(normalizedEmail));
+    if (!mongoUser) {
+      throw new AuthenticationError(
+        'No Ticketification account found with this email. Please sign up to create an account.',
+        { email: normalizedEmail, notFound: true },
+        'ACCOUNT_NOT_FOUND'
+      );
+    }
+
+    if (!mongoUser.passwordHash || !verifyPassword(password, mongoUser.passwordHash)) {
+      throw new AuthenticationError(
+        'Incorrect password. Please check your credentials and try again.',
+        undefined,
+        'INVALID_CREDENTIALS'
+      );
     }
 
     if (mongoUser.status === 'SUSPENDED') {
