@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Search,
   Calendar,
@@ -13,31 +13,31 @@ import {
   X,
   Compass,
   AlertCircle,
-} from 'lucide-react';
-import { publicApi, PublicEventSummary } from '../api/public';
+} from "lucide-react";
+import { publicApi, PublicEventSummary } from "../api/public";
 
 const EVENT_TYPE_OPTIONS = [
-  { label: 'All Categories', value: 'ALL' },
-  { label: 'Hackathons', value: 'HACKATHON' },
-  { label: 'Conferences', value: 'CONFERENCE' },
-  { label: 'Concerts & Music', value: 'CONCERT' },
-  { label: 'Festivals', value: 'FESTIVAL' },
-  { label: 'Workshops', value: 'WORKSHOP' },
-  { label: 'College Fests', value: 'COLLEGE_EVENT' },
-  { label: 'Exhibitions', value: 'EXHIBITION' },
+  { label: "All Categories", value: "ALL" },
+  { label: "Hackathons", value: "HACKATHON" },
+  { label: "Conferences", value: "CONFERENCE" },
+  { label: "Concerts & Music", value: "CONCERT" },
+  { label: "Festivals", value: "FESTIVAL" },
+  { label: "Workshops", value: "WORKSHOP" },
+  { label: "College Fests", value: "COLLEGE_EVENT" },
+  { label: "Exhibitions", value: "EXHIBITION" },
 ];
 
 const VENUE_TYPE_OPTIONS = [
-  { label: 'All Formats', value: 'ALL' },
-  { label: 'In-Person', value: 'PHYSICAL' },
-  { label: 'Virtual', value: 'ONLINE' },
-  { label: 'Hybrid', value: 'HYBRID' },
+  { label: "All Formats", value: "ALL" },
+  { label: "In-Person", value: "PHYSICAL" },
+  { label: "Virtual", value: "ONLINE" },
+  { label: "Hybrid", value: "HYBRID" },
 ];
 
 const PRICING_OPTIONS = [
-  { label: 'All Pricing', value: 'ALL' },
-  { label: 'Free Passes', value: 'FREE' },
-  { label: 'Paid Admission', value: 'PAID' },
+  { label: "All Pricing", value: "ALL" },
+  { label: "Free Passes", value: "FREE" },
+  { label: "Paid Admission", value: "PAID" },
 ];
 
 export const PublicEventsPage: React.FC = () => {
@@ -51,11 +51,11 @@ export const PublicEventsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   // Filters
-  const [search, setSearch] = useState('');
-  const [selectedType, setSelectedType] = useState('ALL');
-  const [selectedVenue, setSelectedVenue] = useState('ALL');
-  const [selectedPricing, setSelectedPricing] = useState('ALL');
-  const [cityInput, setCityInput] = useState('');
+  const [search, setSearch] = useState("");
+  const [selectedType, setSelectedType] = useState("ALL");
+  const [selectedVenue, setSelectedVenue] = useState("ALL");
+  const [selectedPricing, setSelectedPricing] = useState("ALL");
+  const [cityInput, setCityInput] = useState("");
 
   const fetchEvents = useCallback(async () => {
     setLoading(true);
@@ -65,9 +65,9 @@ export const PublicEventsPage: React.FC = () => {
         page,
         limit: 12,
         search: search.trim() || undefined,
-        eventType: selectedType !== 'ALL' ? selectedType : undefined,
-        venueType: selectedVenue !== 'ALL' ? selectedVenue : undefined,
-        pricingModel: selectedPricing !== 'ALL' ? selectedPricing : undefined,
+        eventType: selectedType !== "ALL" ? selectedType : undefined,
+        venueType: selectedVenue !== "ALL" ? selectedVenue : undefined,
+        pricingModel: selectedPricing !== "ALL" ? selectedPricing : undefined,
         city: cityInput.trim() || undefined,
       });
 
@@ -75,8 +75,11 @@ export const PublicEventsPage: React.FC = () => {
       setTotal(res.total || 0);
       setTotalPages(res.totalPages || 1);
     } catch (err: any) {
-      console.error('Failed to load public events:', err);
-      setError(err?.response?.data?.message || 'Unable to connect to the events catalog. Please try again.');
+      console.error("Failed to load public events:", err);
+      setError(
+        err?.response?.data?.message ||
+          "Unable to connect to the events catalog. Please try again.",
+      );
       setEvents([]);
     } finally {
       setLoading(false);
@@ -94,25 +97,29 @@ export const PublicEventsPage: React.FC = () => {
   };
 
   const handleResetFilters = () => {
-    setSearch('');
-    setSelectedType('ALL');
-    setSelectedVenue('ALL');
-    setSelectedPricing('ALL');
-    setCityInput('');
+    setSearch("");
+    setSelectedType("ALL");
+    setSelectedVenue("ALL");
+    setSelectedPricing("ALL");
+    setCityInput("");
     setPage(1);
   };
 
   const hasActiveFilters = Boolean(
-    search || selectedType !== 'ALL' || selectedVenue !== 'ALL' || selectedPricing !== 'ALL' || cityInput
+    search ||
+    selectedType !== "ALL" ||
+    selectedVenue !== "ALL" ||
+    selectedPricing !== "ALL" ||
+    cityInput,
   );
 
   const formatDate = (dateString?: string) => {
-    if (!dateString) return 'Date TBA';
+    if (!dateString) return "Date TBA";
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
     });
   };
 
@@ -130,13 +137,18 @@ export const PublicEventsPage: React.FC = () => {
               Discover & Attend Gatherings
             </h1>
             <p className="text-sm sm:text-base text-stone-600 leading-relaxed">
-              Explore hackathons, developer summits, workshops, and cultural fests. Claim verified credentials and access dynamic QR passes from a single account.
+              Explore hackathons, developer summits, workshops, and cultural
+              fests. Claim verified credentials and access dynamic QR passes
+              from a single account.
             </p>
           </div>
 
           {/* ── Search & Filter Bar ── */}
           <div className="mt-8 space-y-4">
-            <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-3">
+            <form
+              onSubmit={handleSearchSubmit}
+              className="flex flex-col sm:flex-row gap-3"
+            >
               <div className="relative flex-1">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
                 <input
@@ -149,7 +161,7 @@ export const PublicEventsPage: React.FC = () => {
                 {search && (
                   <button
                     type="button"
-                    onClick={() => setSearch('')}
+                    onClick={() => setSearch("")}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-1"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -191,8 +203,8 @@ export const PublicEventsPage: React.FC = () => {
                       }}
                       className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all shrink-0 ${
                         isSelected
-                          ? 'bg-stone-900 text-white shadow-xs border border-stone-800'
-                          : 'bg-stone-100 text-stone-600 hover:bg-stone-200/80 hover:text-stone-900'
+                          ? "bg-stone-900 text-white shadow-xs border border-stone-800"
+                          : "bg-stone-100 text-stone-600 hover:bg-stone-200/80 hover:text-stone-900"
                       }`}
                     >
                       {opt.label}
@@ -259,8 +271,8 @@ export const PublicEventsPage: React.FC = () => {
         {/* Results Metadata Bar */}
         <div className="flex items-center justify-between text-xs text-stone-500">
           <span>
-            Showing <strong className="text-stone-900">{events.length}</strong> of{' '}
-            <strong className="text-stone-900">{total}</strong> live events
+            Showing <strong className="text-stone-900">{events.length}</strong>{" "}
+            of <strong className="text-stone-900">{total}</strong> live events
           </span>
           {totalPages > 1 && (
             <span>
@@ -291,7 +303,9 @@ export const PublicEventsPage: React.FC = () => {
               <AlertCircle className="w-6 h-6" />
             </div>
             <div className="space-y-1">
-              <h3 className="text-base font-bold text-stone-900">Failed to Load Catalog</h3>
+              <h3 className="text-base font-bold text-stone-900">
+                Failed to Load Catalog
+              </h3>
               <p className="text-xs text-stone-600 leading-relaxed">{error}</p>
             </div>
             <button
@@ -310,12 +324,14 @@ export const PublicEventsPage: React.FC = () => {
             </div>
             <div className="space-y-1">
               <h3 className="text-lg font-bold text-stone-900">
-                {hasActiveFilters ? 'No Events Match Your Filters' : 'No Public Events Published Yet'}
+                {hasActiveFilters
+                  ? "No Events Match Your Filters"
+                  : "No Public Events Published Yet"}
               </h3>
               <p className="text-xs text-stone-500 leading-relaxed max-w-md mx-auto">
                 {hasActiveFilters
-                  ? 'Try broadening your search term or resetting category filters to view other live gatherings.'
-                  : 'Organizers publish events frequently. Check back soon or create your own event now.'}
+                  ? "Try broadening your search term or resetting category filters to view other live gatherings."
+                  : "Organizers publish events frequently. Check back soon or create your own event now."}
               </p>
             </div>
             <div className="pt-2 flex flex-wrap items-center justify-center gap-2">
@@ -328,7 +344,7 @@ export const PublicEventsPage: React.FC = () => {
                 </button>
               ) : (
                 <button
-                  onClick={() => navigate('/events/create')}
+                  onClick={() => navigate("/events/create")}
                   className="px-4 py-2 rounded-lg bg-stone-900 text-white font-semibold text-xs hover:bg-black transition-colors shadow-xs border border-stone-800"
                 >
                   Create an Event
@@ -362,9 +378,9 @@ export const PublicEventsPage: React.FC = () => {
                   {/* Badges Overlay */}
                   <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
                     <span className="px-2.5 py-1 rounded-md bg-white/95 backdrop-blur-md text-stone-800 text-[11px] font-bold uppercase tracking-wider shadow-sm border border-stone-200/50">
-                      {event.eventType.replace('_', ' ')}
+                      {event.eventType.replace("_", " ")}
                     </span>
-                    {event.verificationStatus === 'VERIFIED' && (
+                    {event.verificationStatus === "VERIFIED" && (
                       <span className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-800 text-[11px] font-semibold border border-emerald-200 shadow-sm">
                         <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                         Verified
@@ -380,7 +396,8 @@ export const PublicEventsPage: React.FC = () => {
                       {event.name}
                     </h3>
                     <p className="text-xs text-stone-500 line-clamp-2 leading-relaxed">
-                      {event.description || 'Join attendees for this high-impact gathering and networking opportunity.'}
+                      {event.description ||
+                        "Join attendees for this high-impact gathering and networking opportunity."}
                     </p>
                   </div>
 
@@ -391,7 +408,7 @@ export const PublicEventsPage: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {event.venue?.type === 'ONLINE' ? (
+                      {event.venue?.type === "ONLINE" ? (
                         <>
                           <Video className="w-3.5 h-3.5 text-stone-500 shrink-0" />
                           <span className="truncate">Virtual Gathering</span>
@@ -400,8 +417,8 @@ export const PublicEventsPage: React.FC = () => {
                         <>
                           <MapPin className="w-3.5 h-3.5 text-stone-400 shrink-0" />
                           <span className="truncate">
-                            {event.venue?.city ? `${event.venue.city}, ` : ''}
-                            {event.venue?.name || 'Venue TBA'}
+                            {event.venue?.city ? `${event.venue.city}, ` : ""}
+                            {event.venue?.name || "Venue TBA"}
                           </span>
                         </>
                       )}
@@ -412,7 +429,9 @@ export const PublicEventsPage: React.FC = () => {
                   <div className="pt-3 border-t border-stone-100 flex items-center justify-between text-xs">
                     <span className="inline-flex items-center gap-1.5 font-semibold text-stone-700 bg-stone-100 px-2.5 py-0.5 rounded-full border border-stone-200">
                       <Ticket className="w-3.5 h-3.5 text-stone-600" />
-                      {event.registration?.pricingModel === 'PAID' ? 'Paid Admission' : 'Free Pass'}
+                      {event.registration?.pricingModel === "PAID"
+                        ? "Paid Admission"
+                        : "Free Pass"}
                     </span>
 
                     <span className="inline-flex items-center gap-1 font-semibold text-stone-800 group-hover:text-black transition-colors">

@@ -197,11 +197,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* ── Active Event Switcher (Seamless, No Box, No Separation Line) ── */}
         {(!isCollapsed || isMobile) && (
-          <div className="py-1.5 shrink-0">
+          <div className="py-1.5 shrink-0 px-3">
             <div>
               <button
                 onClick={() => setEventMenuOpen(!eventMenuOpen)}
-                className="w-full flex items-center justify-between gap-2.5 px-3 py-2 rounded-xl text-left hover:bg-stone-200/50 transition-all cursor-pointer group"
+                className="w-full flex items-center justify-between gap-2.5 py-2 rounded-xl text-left transition-all cursor-pointer group"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className="w-7 h-7 rounded bg-stone-200/70 flex items-center justify-center text-stone-700 shrink-0 group-hover:bg-stone-300/60 transition-colors">

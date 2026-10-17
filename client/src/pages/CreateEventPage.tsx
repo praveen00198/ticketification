@@ -1,11 +1,15 @@
 import React from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Sparkles } from 'lucide-react';
 import { EventCreationWizard } from '../components/events/EventCreationWizard';
 import { useEvent } from '../context/EventContext';
+import { EventType } from '../api/events';
 
 export const CreateEventPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const rawType = searchParams.get('type');
+  const initialEventType = rawType ? (rawType.toUpperCase() as EventType) : undefined;
   const { refreshEvents, setCurrentEvent } = useEvent();
 
   const handleSuccess = async (createdEvent: any) => {
@@ -73,7 +77,11 @@ export const CreateEventPage: React.FC = () => {
       {/* Main Wizard Card */}
       <div className="bg-white rounded-2xl border border-stone-200/90 shadow-xs overflow-hidden">
         <div className="p-6 sm:p-8">
-          <EventCreationWizard onSuccess={handleSuccess} onCancel={handleCancel} />
+          <EventCreationWizard
+            initialEventType={initialEventType}
+            onSuccess={handleSuccess}
+            onCancel={handleCancel}
+          />
         </div>
       </div>
     </div>

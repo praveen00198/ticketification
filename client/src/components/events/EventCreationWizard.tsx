@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Users,
@@ -40,6 +40,7 @@ import {
 interface EventCreationWizardProps {
   onSuccess?: (event: any) => void;
   onCancel?: () => void;
+  initialEventType?: EventType;
 }
 
 const EVENT_TYPE_CARDS: {
@@ -156,8 +157,19 @@ const COMMON_TIMEZONES = [
   { value: 'Australia/Sydney', label: 'Australia/Sydney (AEST/AEDT, UTC+10:00)' },
 ];
 
-export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({ onSuccess, onCancel }) => {
+export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
+  onSuccess,
+  onCancel,
+  initialEventType,
+}) => {
   const navigate = useNavigate();
+
+  // Resolve initial event type safely
+  const resolvedInitialType: EventType =
+    initialEventType && EVENT_TYPE_CARDS.some((c) => c.type === initialEventType)
+      ? initialEventType
+      : 'HACKATHON';
+  const initialCard = EVENT_TYPE_CARDS.find((c) => c.type === resolvedInitialType);
 
   // Wizard Step State (1 to 7)
   const [step, setStep] = useState<number>(1);
@@ -166,12 +178,25 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({ onSucc
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Form State
-  const [eventType, setEventType] = useState<EventType>('HACKATHON');
+  const [eventType, setEventType] = useState<EventType>(resolvedInitialType);
   const [name, setName] = useState<string>('');
   const [description, setDescription] = useState<string>('');
   const [bannerUrl, setBannerUrl] = useState<string>('');
-  const [credentialTerminology, setCredentialTerminology] = useState<string>('Participant Pass');
+  const [credentialTerminology, setCredentialTerminology] = useState<string>(
+    initialCard?.defaultCredential || 'Participant Pass'
+  );
   const [attendanceMode, setAttendanceMode] = useState<AttendanceMode>('TICKETIFICATION_REGISTRATION');
+
+  // Keep state in sync if initialEventType changes externally
+  useEffect(() => {
+    if (initialEventType && EVENT_TYPE_CARDS.some((c) => c.type === initialEventType)) {
+      setEventType(initialEventType);
+      const card = EVENT_TYPE_CARDS.find((c) => c.type === initialEventType);
+      if (card) {
+        setCredentialTerminology(card.defaultCredential);
+      }
+    }
+  }, [initialEventType]);
 
   // Registration options
   const [pricingModel, setPricingModel] = useState<'FREE' | 'PAID'>('FREE');

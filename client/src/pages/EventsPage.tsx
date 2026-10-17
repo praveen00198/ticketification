@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useEvent } from '../context/EventContext';
-import { eventsApi, CreateEventPayload } from '../api/events';
+import { eventsApi, CreateEventPayload, EventType } from '../api/events';
 import {
   Calendar,
   MapPin,
@@ -15,7 +15,10 @@ import {
   Users,
   Settings,
   Ticket as TicketIcon,
+  Compass,
+  Wallet,
 } from 'lucide-react';
+import { RiMacbookLine, RiMicLine, RiMusic2Line, RiToolsLine } from '@remixicon/react';
 import { Button, Badge, Modal, Input, InView, AnimatedGroup } from '../components/ui';
 
 export const EventsPage: React.FC = () => {
@@ -91,33 +94,35 @@ export const EventsPage: React.FC = () => {
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Top Banner (Seamless in single container box) */}
       <InView direction="up" distance={12}>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-stone-100">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2">
           <div>
-            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
               <Badge variant="neutral">Event Management</Badge>
               <span className="text-xs text-stone-300">•</span>
-              <span className="text-xs text-stone-500 font-semibold">{events.length} Total Events</span>
+              <span className="text-xs text-stone-500 font-semibold">{events.length} {events.length === 1 ? 'Event' : 'Total Events'}</span>
             </div>
-            <h1 className="text-xl sm:text-2xl font-extrabold text-zinc-900 tracking-tight">Your Events</h1>
-            <p className="text-xs text-stone-500 mt-1 max-w-xl leading-relaxed">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-zinc-900 tracking-tight">Your Events</h1>
+            <p className="text-[10px] sm:text-xs text-stone-500 mt-1 max-w-xl leading-relaxed">
               Manage your event configurations, ticket categories, and guest lists in one place.
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5 self-start sm:self-auto shrink-0 flex-wrap">
+          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 flex-wrap">
             <Button
               variant="primary"
               size="sm"
               onClick={() => navigate('/events/create')}
-              iconLeft={<Sparkles className="w-4 h-4 text-white" />}
+              iconLeft={<Sparkles className="w-3.5 h-3.5 text-white" />}
+              className="!rounded-full px-4 sm:px-5 py-2 shadow-xs hover:shadow-sm"
             >
               Create Event Wizard
             </Button>
             <Button
-              variant="secondary"
+              variant="ghost"
               size="sm"
               onClick={() => setIsCreateOpen(true)}
               iconLeft={<Plus className="w-3.5 h-3.5 text-stone-500" />}
+              className="!rounded-full !border-0 text-stone-600 hover:text-stone-900 hover:bg-stone-100/80"
             >
               Quick Add
             </Button>
@@ -132,79 +137,160 @@ export const EventsPage: React.FC = () => {
           Loading your events...
         </div>
       ) : events.length === 0 ? (
-        <div className="py-6 sm:py-8 space-y-6">
-          <div className="text-center max-w-lg mx-auto space-y-2">
-            <div className="w-12 h-12 bg-stone-100 text-stone-900 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-stone-200/80 shadow-2xs">
-              <Calendar className="w-6 h-6" />
+        <div className="py-2 sm:py-4 space-y-6">
+          {/* Interactive Bento Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-1">
+            {/* Card 1: Featured Host Card */}
+            <div className="relative p-6 rounded-2xl border-2 border-stone-900/90 bg-gradient-to-b from-white to-stone-50/60 hover:shadow-lg transition-all flex flex-col justify-between space-y-5 shadow-xs group">
+              <div className="absolute -top-3.5 left-6">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-stone-900 text-white shadow-2xs tracking-wide uppercase">
+                  Featured Action
+                </span>
+              </div>
+
+              <div>
+                <div className="w-11 h-11 rounded-xl bg-stone-900 text-white flex items-center justify-center mb-3 shadow-2xs group-hover:scale-105 transition-transform">
+                  <Sparkles className="w-5 h-5 stroke-[2.2]" />
+                </div>
+                <h4 className="text-base font-bold text-zinc-900">Host an Event</h4>
+                <p className="text-xs text-stone-500 mt-1.5 leading-relaxed">
+                  Build custom credential badges, import guest rosters, configure live gate turnstiles, and coordinate staff.
+                </p>
+
+                {/* Feature Tags */}
+                <div className="flex flex-wrap gap-1.5 pt-3">
+                  <span className="px-2 py-0.5 rounded-md bg-stone-100 text-stone-700 text-[10px] font-semibold border border-stone-200/60">
+                    Dynamic QR
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md bg-stone-100 text-stone-700 text-[10px] font-semibold border border-stone-200/60">
+                    Live Turnstiles
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md bg-stone-100 text-stone-700 text-[10px] font-semibold border border-stone-200/60">
+                    Staff Console
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-2">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => navigate('/events/create')}
+                  iconRight={<ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />}
+                  className="w-full !rounded-full py-2"
+                >
+                  Create Event Wizard
+                </Button>
+                <button
+                  onClick={() => setIsCreateOpen(true)}
+                  className="w-full text-center text-[11px] font-semibold text-stone-500 hover:text-stone-900 transition-colors py-1 cursor-pointer"
+                >
+                  or Quick Add (Single Step)
+                </button>
+              </div>
             </div>
-            <h3 className="text-lg font-bold text-zinc-900 tracking-tight">You Haven&apos;t Created Any Events Yet</h3>
-            <p className="text-xs text-stone-500 leading-relaxed">
-              Ticketification is your unified platform to attend and organize events. Choose your journey below:
-            </p>
+
+            {/* Card 2: Discover Events */}
+            <div className="p-6 rounded-2xl border border-stone-200/90 hover:border-stone-400/80 bg-white hover:bg-stone-50/40 transition-all flex flex-col justify-between space-y-5 shadow-2xs hover:shadow-md group">
+              <div>
+                <div className="w-11 h-11 rounded-xl bg-stone-100 text-stone-800 flex items-center justify-center mb-3 border border-stone-200/80 group-hover:scale-105 transition-transform">
+                  <Compass className="w-5 h-5 stroke-[2]" />
+                </div>
+                <h4 className="text-base font-bold text-zinc-900">Explore Catalog</h4>
+                <p className="text-xs text-stone-500 mt-1.5 leading-relaxed">
+                  Discover published hackathons, developer conferences, and technical workshops open for registration.
+                </p>
+
+                {/* Feature Tags */}
+                <div className="flex flex-wrap gap-1.5 pt-3">
+                  <span className="px-2 py-0.5 rounded-md bg-stone-100 text-stone-700 text-[10px] font-semibold border border-stone-200/60">
+                    Public Events
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md bg-stone-100 text-stone-700 text-[10px] font-semibold border border-stone-200/60">
+                    Instant RSVP
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md bg-stone-100 text-stone-700 text-[10px] font-semibold border border-stone-200/60">
+                    Schedule Sync
+                  </span>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => navigate('/explore')}
+                  iconRight={<ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />}
+                  className="w-full !rounded-full py-2"
+                >
+                  Browse Events
+                </Button>
+              </div>
+            </div>
+
+            {/* Card 3: Pass Wallet */}
+            <div className="p-6 rounded-2xl border border-stone-200/90 hover:border-stone-400/80 bg-white hover:bg-stone-50/40 transition-all flex flex-col justify-between space-y-5 shadow-2xs hover:shadow-md group">
+              <div>
+                <div className="w-11 h-11 rounded-xl bg-stone-100 text-stone-800 flex items-center justify-center mb-3 border border-stone-200/80 group-hover:scale-105 transition-transform">
+                  <Wallet className="w-5 h-5 stroke-[2]" />
+                </div>
+                <h4 className="text-base font-bold text-zinc-900">My Pass Wallet</h4>
+                <p className="text-xs text-stone-500 mt-1.5 leading-relaxed">
+                  Access your confirmed attendance passes, cryptographic QR entry tokens, and hackathon team rosters.
+                </p>
+
+                {/* Feature Tags */}
+                <div className="flex flex-wrap gap-1.5 pt-3">
+                  <span className="px-2 py-0.5 rounded-md bg-stone-100 text-stone-700 text-[10px] font-semibold border border-stone-200/60">
+                    Offline Passes
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md bg-stone-100 text-stone-700 text-[10px] font-semibold border border-stone-200/60">
+                    Team Roster
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md bg-stone-100 text-stone-700 text-[10px] font-semibold border border-stone-200/60">
+                    Turnstile Ready
+                  </span>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => navigate('/wallet')}
+                  iconRight={<ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />}
+                  className="w-full !rounded-full py-2"
+                >
+                  Open Pass Wallet
+                </Button>
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-            <div className="p-5 rounded-2xl border border-stone-200/90 hover:border-stone-900 transition-all flex flex-col justify-between space-y-4 bg-stone-50/50 hover:bg-white shadow-2xs group">
-              <div>
-                <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-900 flex items-center justify-center mb-3 border border-stone-200 group-hover:scale-105 transition-transform">
-                  <Sparkles className="w-5 h-5" />
-                </div>
-                <h4 className="text-sm font-bold text-zinc-900">Host an Event</h4>
-                <p className="text-xs text-stone-500 mt-1 leading-relaxed">
-                  Configure custom credential badges, venue logistics, registration caps, and real-time gate turnstiles.
-                </p>
-              </div>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => navigate('/events/create')}
-                iconRight={<ArrowRight className="w-3.5 h-3.5" />}
-                className="w-full"
-              >
-                Create Event Wizard
-              </Button>
-            </div>
-
-            <div className="p-5 rounded-2xl border border-stone-200/90 hover:border-stone-900 transition-all flex flex-col justify-between space-y-4 bg-stone-50/50 hover:bg-white shadow-2xs group">
-              <div>
-                <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-900 flex items-center justify-center mb-3 border border-stone-200 group-hover:scale-105 transition-transform">
-                  <Calendar className="w-5 h-5" />
-                </div>
-                <h4 className="text-sm font-bold text-zinc-900">Discover Events to Attend</h4>
-                <p className="text-xs text-stone-500 mt-1 leading-relaxed">
-                  Explore published hackathons, conferences, and workshops. Check eligibility and claim your pass.
-                </p>
-              </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => navigate('/explore')}
-                iconRight={<ArrowRight className="w-3.5 h-3.5" />}
-                className="w-full"
-              >
-                Explore Events Catalog
-              </Button>
-            </div>
-
-            <div className="p-5 rounded-2xl border border-stone-200/90 hover:border-stone-900 transition-all flex flex-col justify-between space-y-4 bg-stone-50/50 hover:bg-white shadow-2xs group">
-              <div>
-                <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-900 flex items-center justify-center mb-3 border border-stone-200 group-hover:scale-105 transition-transform">
-                  <TicketIcon className="w-5 h-5" />
-                </div>
-                <h4 className="text-sm font-bold text-zinc-900">Access Your Passes</h4>
-                <p className="text-xs text-stone-500 mt-1 leading-relaxed">
-                  View your active registration credentials, dynamic QR entry tokens, and hackathon team rosters.
-                </p>
-              </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => navigate('/wallet')}
-                iconRight={<ArrowRight className="w-3.5 h-3.5" />}
-                className="w-full"
-              >
-                Open Pass Wallet
-              </Button>
+          {/* Quick Template Starters */}
+          <div className="py-3 text-center">
+            <span className="text-[11px] font-semibold text-stone-400 uppercase tracking-wider block mb-2.5">
+              Popular Event Types to Launch
+            </span>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {[
+                { label: 'Hackathon', type: 'HACKATHON' as EventType, icon: RiMacbookLine },
+                { label: 'Conference', type: 'CONFERENCE' as EventType, icon: RiMicLine },
+                { label: 'Concert & Music', type: 'CONCERT' as EventType, icon: RiMusic2Line },
+                { label: 'Workshop & Bootcamp', type: 'WORKSHOP' as EventType, icon: RiToolsLine },
+              ].map((template) => {
+                const IconComponent = template.icon;
+                return (
+                  <button
+                    key={template.label}
+                    onClick={() => navigate(`/events/create?type=${template.type}`)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-stone-100/90 hover:bg-stone-200/80 text-stone-700 hover:text-stone-900 text-xs font-semibold border border-stone-200/70 transition-all cursor-pointer shadow-2xs hover:scale-102"
+                  >
+                    <IconComponent className="w-3.5 h-3.5 text-stone-600" />
+                    <span>{template.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
