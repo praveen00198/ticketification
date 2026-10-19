@@ -19,7 +19,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { ChangePasswordModal } from '../components/auth/ChangePasswordModal';
-import { Button, Card, Badge, StatCard, InView, AnimatedGroup } from '../components/ui';
+import { Button, Card, Badge, StatCard, InView, AnimatedGroup, EmptyEventsState } from '../components/ui';
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -359,8 +359,16 @@ export const Dashboard: React.FC = () => {
         </div>
 
         {recentActivity.length === 0 ? (
-          <div className="text-center py-8 text-xs text-stone-400">
-            No credentials generated yet for this event. Use &quot;Import Guest Data&quot; to begin.
+          <div className="py-1 w-full flex flex-col items-center justify-center">
+            <EmptyEventsState
+              title="No Credential Activity Logged"
+              description="No admission passes or guest badges have been generated or scanned for this event yet. Import your guest roster to begin generating verified credentials."
+              slotText="ACTIVITY STANDBY"
+              categoryText="GUEST ACTIVITY • 0 PASSES"
+              actionText="Import Guest Roster"
+              actionIcon={<FileSpreadsheet className="w-3.5 h-3.5" />}
+              onAction={() => navigate('/import')}
+            />
           </div>
         ) : (
           <div className="overflow-x-auto -mx-4 sm:mx-0">

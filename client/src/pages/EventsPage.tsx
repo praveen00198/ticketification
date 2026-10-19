@@ -185,7 +185,7 @@ export const EventsPage: React.FC = () => {
                   onClick={() => setIsCreateOpen(true)}
                   className="w-full text-center text-[11px] font-semibold text-stone-500 hover:text-stone-900 transition-colors py-1 cursor-pointer"
                 >
-                  or Quick Add (Single Step)
+                  Quick Add (Single Step)
                 </button>
               </div>
             </div>

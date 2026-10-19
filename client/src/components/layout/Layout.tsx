@@ -250,7 +250,11 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
         </header>
 
         {/* ── Single Content Box with Subtle BG & Border (0 Margin from Right & Bottom) ── */}
-        <main className="flex-1 min-h-0 bg-white border-t border-l border-stone-200/80 rounded-tl-2xl sm:rounded-tl-3xl shadow-xs mr-0 mb-0 p-5 sm:p-7 lg:p-9 overflow-y-auto flex flex-col">
+        <main className={`flex-1 min-h-0 bg-white border-t border-l border-stone-200/80 rounded-tl-2xl sm:rounded-tl-3xl shadow-xs mr-0 mb-0 overflow-y-auto flex flex-col ${
+          location.pathname === '/explore'
+            ? 'p-3 sm:p-5 lg:p-6'
+            : 'p-5 sm:p-7 lg:p-9'
+        }`}>
           <div className="w-full flex-1 flex flex-col">
             {children}
           </div>

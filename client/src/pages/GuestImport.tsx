@@ -26,6 +26,7 @@ import {
   Check,
   Calendar,
 } from 'lucide-react';
+import { EmptyEventsState } from '../components/ui';
 
 type WizardStep = 'upload' | 'mapping' | 'categories' | 'preview' | 'complete';
 
@@ -226,21 +227,18 @@ export const GuestImport: React.FC = () => {
 
   if (!currentEvent) {
     return (
-      <div className="max-w-2xl mx-auto py-16 text-center bg-white border border-surface-border rounded-2xl p-8 shadow-sm">
-        <div className="w-12 h-12 bg-zinc-100 text-brand-600 rounded-full flex items-center justify-center mx-auto mb-3">
-          <Calendar className="w-6 h-6" />
-        </div>
-        <h2 className="text-lg font-bold text-zinc-900 mb-2">No Active Event Selected</h2>
-        <p className="text-xs text-zinc-500 max-w-md mx-auto mb-6">
-          Please select or create an event before importing guests.
-        </p>
-        <button
-          onClick={() => navigate('/events')}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
-        >
-          <Calendar className="w-4 h-4" />
-          <span>Manage Events</span>
-        </button>
+      <div className="w-full flex-1 flex flex-col items-center justify-center my-auto min-h-[420px]">
+        <EmptyEventsState
+          title="No Active Event Selected for Guest Import"
+          description="Please select an existing event or launch a new gathering before uploading attendee rosters or mapping CSV columns."
+          slotText="IMPORT STANDBY"
+          categoryText="GUEST ROSTER • STANDBY"
+          actionText="Manage Events"
+          actionIcon={<Calendar className="w-3.5 h-3.5" />}
+          onAction={() => navigate('/events')}
+          secondaryActionText="Create New Event"
+          onSecondaryAction={() => navigate('/events/create')}
+        />
       </div>
     );
   }

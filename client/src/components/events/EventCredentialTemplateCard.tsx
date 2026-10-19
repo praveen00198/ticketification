@@ -21,6 +21,7 @@ import {
   TemplatePresetId,
   EventCredentialTemplateField,
 } from '../../api/events';
+import { EmptyEventsState } from '../ui';
 
 interface EventCredentialTemplateCardProps {
   eventId: string;
@@ -437,6 +438,18 @@ export const EventCredentialTemplateCard: React.FC<EventCredentialTemplateCardPr
 
         {loading && templates.length === 0 ? (
           <div className="p-8 text-center text-xs text-zinc-400">Loading templates...</div>
+        ) : templates.length === 0 ? (
+          <div className="py-2 bg-white rounded-2xl border border-stone-200/80 w-full flex flex-col items-center justify-center">
+            <EmptyEventsState
+              title="No Credential Templates Configured"
+              description="Create visual ticket layouts, attendee badges, or VIP passes with customized Sharp dimensions, fonts, colors, and dynamic QR placeholders."
+              slotText="CANVAS STANDBY"
+              categoryText="STUDIO • 0 TEMPLATES"
+              actionText={isHostOrCoordinator ? "Create Custom Template" : undefined}
+              actionIcon={<Plus className="w-3.5 h-3.5" />}
+              onAction={isHostOrCoordinator ? () => handleOpenEdit() : undefined}
+            />
+          </div>
         ) : (
           <div className="overflow-x-auto border border-zinc-200 rounded-xl">
             <table className="w-full text-left border-collapse text-xs">

@@ -16,7 +16,7 @@ import {
   UserPlus,
   RefreshCw,
 } from 'lucide-react';
-import { Button, Badge, Card, InView } from '../components/ui';
+import { Button, Badge, Card, InView, EmptyEventsState } from '../components/ui';
 
 export const ScannerPage: React.FC = () => {
   const navigate = useNavigate();
@@ -123,21 +123,18 @@ export const ScannerPage: React.FC = () => {
 
   if (!currentEvent) {
     return (
-      <div className="max-w-2xl mx-auto py-16 text-center bg-white border border-stone-200/90 rounded-2xl p-6 sm:p-8 shadow-xs">
-        <div className="w-12 h-12 bg-stone-100 text-stone-900 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-stone-200/80 shadow-2xs">
-          <Calendar className="w-6 h-6" />
-        </div>
-        <h2 className="text-base sm:text-lg font-bold text-zinc-900 mb-1.5">No Active Event Selected</h2>
-        <p className="text-xs text-stone-500 max-w-md mx-auto mb-6 leading-relaxed">
-          Please select or create an event before launching the turnstile verification scanner.
-        </p>
-        <Button
-          variant="primary"
-          onClick={() => navigate('/events')}
-          iconLeft={<Calendar className="w-4 h-4" />}
-        >
-          Manage Events
-        </Button>
+      <div className="w-full flex-1 flex flex-col items-center justify-center my-auto min-h-[420px]">
+        <EmptyEventsState
+          title="No Active Event Selected for Turnstiles"
+          description="Turnstile gate verification requires an active event context. Select your event to initialize cryptographic QR validation and real-time admission tracking."
+          slotText="GATE OFFLINE"
+          categoryText="TURNSTILE • NO EVENT"
+          actionText="Manage Events"
+          actionIcon={<Calendar className="w-3.5 h-3.5" />}
+          onAction={() => navigate('/events')}
+          secondaryActionText="Create New Event"
+          onSecondaryAction={() => navigate('/events/create')}
+        />
       </div>
     );
   }

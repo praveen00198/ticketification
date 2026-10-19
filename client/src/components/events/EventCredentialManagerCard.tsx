@@ -19,6 +19,7 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { EventImportBulkModal } from './EventImportBulkModal';
+import { EmptyEventsState } from '../ui';
 import {
   eventsApi,
   EventCredentialItem,
@@ -392,8 +393,35 @@ export const EventCredentialManagerCard: React.FC<EventCredentialManagerCardProp
       {loading && credentials.length === 0 ? (
         <div className="p-8 text-center text-xs text-zinc-400">Loading credentials...</div>
       ) : filteredCredentials.length === 0 ? (
-        <div className="p-8 text-center bg-zinc-50 border border-dashed border-zinc-200 rounded-xl text-xs text-zinc-500">
-          No credentials found matching the criteria. Click &quot;Issue Credential&quot; or &quot;Batch Worker Pass&quot; to begin.
+        <div className="py-2 bg-white rounded-2xl border border-stone-200/80 w-full flex flex-col items-center justify-center">
+          <EmptyEventsState
+            title={
+              searchQuery || statusFilter !== 'ALL' || policyFilter !== 'ALL'
+                ? 'No Credentials Match Your Filters'
+                : 'No Event Credentials Issued Yet'
+            }
+            description={
+              searchQuery || statusFilter !== 'ALL' || policyFilter !== 'ALL'
+                ? 'No credentials match your active search term or filter rules. Reset filters or search for another credential sequence.'
+                : 'No visual credentials, attendee badges, or staff passes have been issued for this event yet. Issue individual passes or generate batch worker credentials.'
+            }
+            slotText={
+              searchQuery || statusFilter !== 'ALL' || policyFilter !== 'ALL'
+                ? 'FILTER UNMATCHED'
+                : 'MATRIX STANDBY'
+            }
+            categoryText={
+              searchQuery || statusFilter !== 'ALL' || policyFilter !== 'ALL'
+                ? 'SEARCH MATRIX • 0 PASSES'
+                : 'ACCESS PIPELINE • 0 PASSES'
+            }
+            actionText={isHostOrCoordinator ? 'Issue Credential' : undefined}
+            actionIcon={<Plus className="w-3.5 h-3.5" />}
+            onAction={isHostOrCoordinator ? () => setIsIssueModalOpen(true) : undefined}
+            secondaryActionText={isHostOrCoordinator ? 'Batch Worker Passes' : undefined}
+            secondaryActionIcon={<Layers className="w-3.5 h-3.5 text-stone-700" />}
+            onSecondaryAction={isHostOrCoordinator ? () => setIsBatchModalOpen(true) : undefined}
+          />
         </div>
       ) : (
         <div className="overflow-x-auto border border-zinc-200 rounded-xl">

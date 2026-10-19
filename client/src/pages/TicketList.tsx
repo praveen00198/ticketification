@@ -20,6 +20,7 @@ import {
   Eye,
 } from 'lucide-react';
 import { TICKET_TEMPLATES, DEFAULT_TEMPLATE_ID } from '../utils/ticketTemplates';
+import { EmptyEventsState } from '../components/ui';
 
 export const TicketList: React.FC = () => {
   const navigate = useNavigate();
@@ -281,21 +282,18 @@ export const TicketList: React.FC = () => {
 
   if (!currentEvent) {
     return (
-      <div className="max-w-2xl mx-auto py-16 text-center bg-white border border-surface-border rounded-2xl p-8 shadow-sm">
-        <div className="w-12 h-12 bg-zinc-100 text-brand-600 rounded-full flex items-center justify-center mx-auto mb-3">
-          <Calendar className="w-6 h-6" />
-        </div>
-        <h2 className="text-lg font-bold text-zinc-900 mb-2">No Active Event Selected</h2>
-        <p className="text-xs text-zinc-500 max-w-md mx-auto mb-6">
-          Please select or create an event to view and generate tickets.
-        </p>
-        <button
-          onClick={() => navigate('/events')}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
-        >
-          <Calendar className="w-4 h-4" />
-          <span>Manage Events</span>
-        </button>
+      <div className="w-full flex-1 flex flex-col items-center justify-center my-auto min-h-[420px]">
+        <EmptyEventsState
+          title="No Active Event Selected for Pass Issuance"
+          description="Please choose an active event from your dashboard or launch a new event to inspect issued credentials, download badges, and monitor check-ins."
+          slotText="TICKETS STANDBY"
+          categoryText="PASS REGISTRY • STANDBY"
+          actionText="Manage Events"
+          actionIcon={<Calendar className="w-3.5 h-3.5" />}
+          onAction={() => navigate('/events')}
+          secondaryActionText="Create New Event"
+          onSecondaryAction={() => navigate('/events/create')}
+        />
       </div>
     );
   }
@@ -439,31 +437,19 @@ export const TicketList: React.FC = () => {
         {loading ? (
           <div className="text-center py-20 text-xs text-zinc-500">Loading tickets...</div>
         ) : tickets.length === 0 ? (
-          <div className="text-center py-16 p-8">
-            <div className="w-12 h-12 bg-zinc-100 text-zinc-400 rounded-full flex items-center justify-center mx-auto mb-3">
-              <Ticket className="w-6 h-6" />
-            </div>
-            <h3 className="text-base font-bold text-zinc-900 mb-1">No Tickets Generated</h3>
-            <p className="text-xs text-zinc-500 max-w-sm mx-auto mb-5">
-              No tickets have been generated for this event yet. Import your guest list and click "Generate All Tickets" to issue verified credentials.
-            </p>
-            <div className="flex items-center justify-center gap-3">
-              <button
-                onClick={() => navigate('/import')}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-zinc-50 text-zinc-800 text-xs font-bold rounded-xl border border-zinc-300 shadow-sm"
-              >
-                <FileSpreadsheet className="w-4 h-4 text-brand-600" />
-                <span>Import Guests</span>
-              </button>
-              <button
-                onClick={handleGenerateTickets}
-                disabled={generating}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl shadow-md shadow-brand-600/20"
-              >
-                <Sparkles className="w-4 h-4" />
-                <span>Generate Tickets</span>
-              </button>
-            </div>
+          <div className="min-h-[360px] w-full flex flex-col items-center justify-center">
+            <EmptyEventsState
+              title="No Admission Passes Issued Yet"
+              description="No visual attendee badges or admission tickets have been generated for this event roster yet. Import your guest CSV roster or generate tickets to issue verified cryptographic passes."
+              slotText="ROSTER UNISSUED"
+              categoryText="TICKET PASSES • 0 ISSUED"
+              actionText="Generate Tickets"
+              actionIcon={<Sparkles className="w-3.5 h-3.5" />}
+              onAction={handleGenerateTickets}
+              secondaryActionText="Import Guests"
+              secondaryActionIcon={<FileSpreadsheet className="w-3.5 h-3.5" />}
+              onSecondaryAction={() => navigate('/import')}
+            />
           </div>
         ) : (
           <div className="overflow-x-auto">

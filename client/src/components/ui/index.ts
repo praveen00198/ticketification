@@ -3,6 +3,7 @@ export * from './Input';
 export * from './Badge';
 export * from './Card';
 export * from './EmptyState';
+export * from './EmptyEventsState';
 export * from './StatCard';
 export * from './Tabs';
 export * from './Modal';

@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Search,
   Calendar,
   MapPin,
   Video,
@@ -11,20 +10,39 @@ import {
   Sparkles,
   RefreshCw,
   X,
-  Compass,
   AlertCircle,
 } from "lucide-react";
+import {
+  RiCompass3Line,
+  RiMacbookLine,
+  RiMicLine,
+  RiMusic2Line,
+  RiSparklingLine,
+  RiToolsLine,
+  RiGraduationCapLine,
+  RiLayoutGridLine,
+  RiSearchLine,
+  RiMapPin2Line,
+  RiArrowRightSLine,
+  RiArrowUpSFill,
+  RiArrowDownSFill,
+  RiCloseLine,
+} from "@remixicon/react";
 import { publicApi, PublicEventSummary } from "../api/public";
+import { EmptyEventsState } from "../components/ui";
 
-const EVENT_TYPE_OPTIONS = [
-  { label: "All Categories", value: "ALL" },
-  { label: "Hackathons", value: "HACKATHON" },
-  { label: "Conferences", value: "CONFERENCE" },
-  { label: "Concerts & Music", value: "CONCERT" },
-  { label: "Festivals", value: "FESTIVAL" },
-  { label: "Workshops", value: "WORKSHOP" },
-  { label: "College Fests", value: "COLLEGE_EVENT" },
-  { label: "Exhibitions", value: "EXHIBITION" },
+const PRIMARY_EVENT_TYPES = [
+  { label: "All Categories", value: "ALL", icon: RiCompass3Line },
+  { label: "Hackathons", value: "HACKATHON", icon: RiMacbookLine },
+  { label: "Conferences", value: "CONFERENCE", icon: RiMicLine },
+];
+
+const MORE_EVENT_TYPES = [
+  { label: "Concerts & Music", value: "CONCERT", icon: RiMusic2Line },
+  { label: "Festivals", value: "FESTIVAL", icon: RiSparklingLine },
+  { label: "Workshops", value: "WORKSHOP", icon: RiToolsLine },
+  { label: "College Fests", value: "COLLEGE_EVENT", icon: RiGraduationCapLine },
+  { label: "Exhibitions", value: "EXHIBITION", icon: RiLayoutGridLine },
 ];
 
 const VENUE_TYPE_OPTIONS = [
@@ -40,11 +58,23 @@ const PRICING_OPTIONS = [
   { label: "Paid Admission", value: "PAID" },
 ];
 
+const POPULAR_CITIES = [
+  "San Francisco",
+  "New York",
+  "Bangalore",
+  "London",
+  "Berlin",
+  "Delhi NCR",
+  "Mumbai",
+  "Singapore",
+  "Tokyo",
+  "Austin",
+];
+
 export const PublicEventsPage: React.FC = () => {
   const navigate = useNavigate();
 
   const [events, setEvents] = useState<PublicEventSummary[]>([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -72,7 +102,6 @@ export const PublicEventsPage: React.FC = () => {
       });
 
       setEvents(res.events || []);
-      setTotal(res.total || 0);
       setTotalPages(res.totalPages || 1);
     } catch (err: any) {
       console.error("Failed to load public events:", err);
@@ -96,6 +125,90 @@ export const PublicEventsPage: React.FC = () => {
     fetchEvents();
   };
 
+  // "More >" dropdown state and click-outside listener
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const moreDropdownRef = useRef<HTMLDivElement>(null);
+
+  // City dropdown state and click-outside listener
+  const [isCityOpen, setIsCityOpen] = useState(false);
+  const [cityFilterQuery, setCityFilterQuery] = useState("");
+  const cityDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        moreDropdownRef.current &&
+        !moreDropdownRef.current.contains(e.target as Node)
+      ) {
+        setIsMoreOpen(false);
+      }
+      if (
+        cityDropdownRef.current &&
+        !cityDropdownRef.current.contains(e.target as Node)
+      ) {
+        setIsCityOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Format (Venue) & Pricing scroll ticker states
+  const [venueDirection, setVenueDirection] = useState<"up" | "down" | null>(null);
+  const [venueAnimKey, setVenueAnimKey] = useState(0);
+
+  const [pricingDirection, setPricingDirection] = useState<"up" | "down" | null>(null);
+  const [pricingAnimKey, setPricingAnimKey] = useState(0);
+
+  const handlePrevVenue = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const currentIndex = VENUE_TYPE_OPTIONS.findIndex((v) => v.value === selectedVenue);
+    const prevIndex = (currentIndex - 1 + VENUE_TYPE_OPTIONS.length) % VENUE_TYPE_OPTIONS.length;
+    setVenueDirection("up");
+    setVenueAnimKey((prev) => prev + 1);
+    setSelectedVenue(VENUE_TYPE_OPTIONS[prevIndex].value);
+    setPage(1);
+  };
+
+  const handleNextVenue = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const currentIndex = VENUE_TYPE_OPTIONS.findIndex((v) => v.value === selectedVenue);
+    const nextIndex = (currentIndex + 1) % VENUE_TYPE_OPTIONS.length;
+    setVenueDirection("down");
+    setVenueAnimKey((prev) => prev + 1);
+    setSelectedVenue(VENUE_TYPE_OPTIONS[nextIndex].value);
+    setPage(1);
+  };
+
+  const handlePrevPricing = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const currentIndex = PRICING_OPTIONS.findIndex((p) => p.value === selectedPricing);
+    const prevIndex = (currentIndex - 1 + PRICING_OPTIONS.length) % PRICING_OPTIONS.length;
+    setPricingDirection("up");
+    setPricingAnimKey((prev) => prev + 1);
+    setSelectedPricing(PRICING_OPTIONS[prevIndex].value);
+    setPage(1);
+  };
+
+  const handleNextPricing = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const currentIndex = PRICING_OPTIONS.findIndex((p) => p.value === selectedPricing);
+    const nextIndex = (currentIndex + 1) % PRICING_OPTIONS.length;
+    setPricingDirection("down");
+    setPricingAnimKey((prev) => prev + 1);
+    setSelectedPricing(PRICING_OPTIONS[nextIndex].value);
+    setPage(1);
+  };
+
+  const currentVenueLabel =
+    VENUE_TYPE_OPTIONS.find((v) => v.value === selectedVenue)?.label || "All Formats";
+  const currentPricingLabel =
+    PRICING_OPTIONS.find((p) => p.value === selectedPricing)?.label || "All Pricing";
+
+  const activeMoreCategory = MORE_EVENT_TYPES.find(
+    (opt) => opt.value === selectedType
+  );
+
   const handleResetFilters = () => {
     setSearch("");
     setSelectedType("ALL");
@@ -103,6 +216,9 @@ export const PublicEventsPage: React.FC = () => {
     setSelectedPricing("ALL");
     setCityInput("");
     setPage(1);
+    setVenueDirection(null);
+    setPricingDirection(null);
+    setIsMoreOpen(false);
   };
 
   const hasActiveFilters = Boolean(
@@ -124,142 +240,410 @@ export const PublicEventsPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAFAF9] text-[#111827] font-sans">
-      {/* ── Top Header Section ── */}
-      <div className="border-b border-stone-200/80 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
-          <div className="max-w-3xl space-y-3">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-stone-100 text-stone-700 border border-stone-200/80">
-              <Compass className="w-3.5 h-3.5 text-stone-600" />
-              <span>Public Event Catalog</span>
-            </div>
-            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-[#111827] leading-tight">
+    <div className="min-h-screen bg-white text-[#111827] font-sans">
+      {/* ── Top Header Section (Header Text, Search, City Dropdown, and Categories) ── */}
+      <div className="bg-white">
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-6 pt-0 pb-3 space-y-3.5">
+          {/* Headline & Subtitle */}
+          <div className="space-y-1 mb-6">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-stone-900">
               Discover & Attend Gatherings
             </h1>
-            <p className="text-sm sm:text-base text-stone-600 leading-relaxed">
-              Explore hackathons, developer summits, workshops, and cultural
-              fests. Claim verified credentials and access dynamic QR passes
-              from a single account.
+            <p className="text-xs sm:text-sm text-stone-300">
+              Explore hackathons, developer summits, workshops, and cultural fests. Claim verified credentials and access dynamic QR passes.
             </p>
           </div>
 
-          {/* ── Search & Filter Bar ── */}
-          <div className="mt-8 space-y-4">
+          {/* ── Search Bar & Separate City Selector ── */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            {/* Event Keyword Search Bar */}
             <form
               onSubmit={handleSearchSubmit}
-              className="flex flex-col sm:flex-row gap-3"
+              className="flex-1 flex items-center bg-white rounded-full border border-stone-200/90 shadow-2xs hover:border-stone-400 focus-within:border-stone-900 focus-within:shadow-xs px-3.5 py-1.5 transition-all"
             >
-              <div className="relative flex-1">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search by event title, topic, or keyword..."
-                  className="w-full pl-10 pr-4 py-2.5 bg-[#FAFAF9] border border-stone-200 rounded-xl text-sm text-[#111827] placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-400/20 focus:border-stone-900 transition-all"
-                />
-                {search && (
-                  <button
-                    type="button"
-                    onClick={() => setSearch("")}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-1"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-
-              <div className="relative sm:w-48">
-                <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
-                <input
-                  type="text"
-                  value={cityInput}
-                  onChange={(e) => setCityInput(e.target.value)}
-                  placeholder="City / Region"
-                  className="w-full pl-10 pr-4 py-2.5 bg-[#FAFAF9] border border-stone-200 rounded-xl text-sm text-[#111827] placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-400/20 focus:border-stone-900 transition-all"
-                />
-              </div>
-
+              <RiSearchLine className="w-4 h-4 text-stone-400 shrink-0" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by event title, topic, or keyword..."
+                className="w-full bg-transparent pl-2.5 pr-2 py-1 text-xs sm:text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    setPage(1);
+                  }}
+                  className="text-stone-400 hover:text-stone-600 p-1 cursor-pointer mr-1"
+                  title="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
               <button
                 type="submit"
-                className="px-5 py-2.5 rounded-xl bg-stone-900 hover:bg-black text-white font-semibold text-sm transition-all flex items-center justify-center gap-2 shadow-xs border border-stone-800 shrink-0"
+                className="!rounded-full px-4 py-2 bg-stone-900 hover:bg-black text-white text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
               >
-                Search
-                <ArrowRight className="w-4 h-4" />
+                <span>Search</span>
+                <RiArrowRightSLine className="w-4 h-4" />
               </button>
             </form>
 
-            {/* ── Category Pills ── */}
-            <div className="space-y-3 pt-1">
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-                {EVENT_TYPE_OPTIONS.map((opt) => {
-                  const isSelected = selectedType === opt.value;
-                  return (
-                    <button
-                      key={opt.value}
-                      onClick={() => {
-                        setSelectedType(opt.value);
-                        setPage(1);
+            {/* Separate City Search & Dropdown Menu */}
+            <div className="relative shrink-0 w-full sm:w-80" ref={cityDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsCityOpen((prev) => !prev)}
+                className={`w-full inline-flex items-center justify-between gap-2 px-4 py-3 rounded-full border text-xs font-semibold transition-all cursor-pointer shadow-2xs ${
+                  cityInput
+                    ? "bg-stone-900 text-white border-stone-900"
+                    : "bg-white hover:bg-stone-50 text-stone-700 hover:text-stone-900 border-stone-200/90"
+                }`}
+              >
+                <div className="flex items-center gap-2 truncate flex-1">
+                  <RiMapPin2Line
+                    className={`w-3.5 h-3.5 shrink-0 ${
+                      cityInput ? "text-white" : "text-stone-500"
+                    }`}
+                  />
+                  <span className="truncate font-medium text-sm tracking-wide">
+                    {cityInput ? cityInput : "Select City"}
+                  </span>
+                </div>
+                {cityInput ? (
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCityInput("");
+                      setCityFilterQuery("");
+                      setPage(1);
+                    }}
+                    className="p-0.5 -mr-1 rounded-full hover:bg-white/20 transition-colors cursor-pointer"
+                    title="Clear city"
+                  >
+                    <RiCloseLine className="w-3.5 h-3.5 text-white" />
+                  </span>
+                ) : (
+                  <RiArrowDownSFill
+                    className={`w-3.5 h-3.5 transition-transform duration-150 ${
+                      isCityOpen ? "rotate-180 text-stone-900" : "text-stone-400"
+                    }`}
+                  />
+                )}
+              </button>
+
+              {/* City Dropdown Menu with Search Bar */}
+              {isCityOpen && (
+                <div className="absolute left-0 top-full mt-2 w-full bg-white rounded-2xl border border-stone-200/90 shadow-xl p-3 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  {/* Search bar inside the dropdown menu */}
+                  <div className="relative flex items-center bg-stone-50 rounded-xl border border-stone-200 px-3 py-1.5 mb-2 focus-within:border-stone-900 focus-within:bg-white transition-all">
+                    <RiSearchLine className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+                    <input
+                      type="text"
+                      value={cityFilterQuery}
+                      onChange={(e) => setCityFilterQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          if (cityFilterQuery.trim()) {
+                            setCityInput(cityFilterQuery.trim());
+                            setPage(1);
+                            setIsCityOpen(false);
+                          }
+                        }
                       }}
-                      className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all shrink-0 ${
-                        isSelected
-                          ? "bg-stone-900 text-white shadow-xs border border-stone-800"
-                          : "bg-stone-100 text-stone-600 hover:bg-stone-200/80 hover:text-stone-900"
+                      placeholder="Search city or region..."
+                      autoFocus
+                      className="w-full bg-transparent pl-2 pr-1 text-xs text-stone-900 placeholder:text-stone-400 focus:outline-none"
+                    />
+                    {cityFilterQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setCityFilterQuery("")}
+                        className="text-stone-400 hover:text-stone-600 p-0.5 cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Custom city entry option */}
+                  {cityFilterQuery.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCityInput(cityFilterQuery.trim());
+                        setPage(1);
+                        setIsCityOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-stone-900 hover:bg-stone-100 transition-colors mb-2 text-left bg-stone-50 border border-stone-200/70"
+                    >
+                      <RiMapPin2Line className="w-3.5 h-3.5 text-stone-700 shrink-0" />
+                      <span className="truncate">Filter by "{cityFilterQuery.trim()}"</span>
+                    </button>
+                  )}
+
+                  {/* Quick Cities List */}
+                  <div className="text-[11px] font-semibold text-stone-400 uppercase tracking-wider px-2 py-1">
+                    Popular Hubs
+                  </div>
+                  <div className="max-h-52 overflow-y-auto space-y-0.5 pr-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCityInput("");
+                        setCityFilterQuery("");
+                        setPage(1);
+                        setIsCityOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left ${
+                        !cityInput
+                          ? "bg-stone-100 text-stone-900 font-bold"
+                          : "text-stone-600 hover:bg-stone-50 hover:text-stone-900 font-medium"
                       }`}
                     >
-                      {opt.label}
+                      <span>All Locations / Worldwide</span>
+                      {!cityInput && (
+                        <span className="text-[10px] text-stone-500 font-semibold">Active</span>
+                      )}
                     </button>
-                  );
-                })}
+
+                    {POPULAR_CITIES.filter((c) =>
+                      c.toLowerCase().includes(cityFilterQuery.toLowerCase()),
+                    ).map((c) => {
+                      const isSelected = cityInput.toLowerCase() === c.toLowerCase();
+                      return (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => {
+                            setCityInput(c);
+                            setPage(1);
+                            setIsCityOpen(false);
+                          }}
+                          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left ${
+                            isSelected
+                              ? "bg-stone-100 text-stone-900 font-bold"
+                              : "text-stone-600 hover:bg-stone-50 hover:text-stone-900 font-medium"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <RiMapPin2Line className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+                            <span>{c}</span>
+                          </div>
+                          {isSelected && (
+                            <span className="text-[10px] text-stone-500 font-semibold">Active</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Category Chips (Left) & Format + Pricing Ticker Chips (Right) ── */}
+          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+            {/* Left side: 2-3 categories + 'more >' dropdown chip */}
+            <div className="relative flex items-center gap-2 overflow-visible flex-wrap sm:flex-nowrap">
+              {PRIMARY_EVENT_TYPES.map((opt) => {
+                const Icon = opt.icon;
+                const isSelected = selectedType === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => {
+                      if (isSelected && opt.value !== "ALL") {
+                        setSelectedType("ALL");
+                      } else {
+                        setSelectedType(opt.value);
+                      }
+                      setPage(1);
+                      setIsMoreOpen(false);
+                    }}
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all shrink-0 cursor-pointer ${
+                      isSelected
+                        ? "bg-stone-900 text-white shadow-xs border border-stone-900"
+                        : "bg-white hover:bg-stone-100 text-stone-600 hover:text-stone-900 border border-stone-200/80 shadow-2xs"
+                    }`}
+                  >
+                    <Icon
+                      className={`w-3.5 h-3.5 ${
+                        isSelected ? "text-white" : "text-stone-500"
+                      }`}
+                    />
+                    <span>{opt.label}</span>
+                    {isSelected && opt.value !== "ALL" && (
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedType("ALL");
+                          setPage(1);
+                        }}
+                        className="p-0.5 -mr-1 rounded-full hover:bg-white/20 transition-colors cursor-pointer"
+                        title="Remove category filter"
+                      >
+                        <RiCloseLine className="w-3.5 h-3.5 text-white" />
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+
+              {/* 'more >' Dropdown Chip */}
+              <div className="relative" ref={moreDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsMoreOpen((prev) => !prev)}
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all shrink-0 cursor-pointer ${
+                    activeMoreCategory
+                      ? "bg-stone-900 text-white shadow-xs border border-stone-900"
+                      : "bg-white hover:bg-stone-100 text-stone-600 hover:text-stone-900 border border-stone-200/80 shadow-2xs"
+                  }`}
+                >
+                  <span>{activeMoreCategory ? activeMoreCategory.label : "More"}</span>
+                  {activeMoreCategory ? (
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedType("ALL");
+                        setPage(1);
+                        setIsMoreOpen(false);
+                      }}
+                      className="p-0.5 -mr-1 rounded-full hover:bg-white/20 transition-colors cursor-pointer"
+                      title="Clear category filter"
+                    >
+                      <RiCloseLine className="w-3.5 h-3.5 text-white" />
+                    </span>
+                  ) : (
+                    <RiArrowRightSLine
+                      className={`w-3.5 h-3.5 transition-transform duration-150 ${
+                        isMoreOpen ? "rotate-90" : ""
+                      } text-stone-500`}
+                    />
+                  )}
+                </button>
+
+                {/* Dropdown Menu */}
+                {isMoreOpen && (
+                  <div className="absolute left-0 top-full mt-2 w-48 bg-white rounded-2xl border border-stone-200/90 shadow-xl py-1.5 z-40 animate-in fade-in zoom-in-95 duration-150">
+                    {MORE_EVENT_TYPES.map((opt) => {
+                      const Icon = opt.icon;
+                      const isSelected = selectedType === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => {
+                            if (isSelected) {
+                              setSelectedType("ALL");
+                            } else {
+                              setSelectedType(opt.value);
+                            }
+                            setPage(1);
+                            setIsMoreOpen(false);
+                          }}
+                          className={`w-full flex items-center justify-between px-3.5 py-2 text-xs text-left transition-colors cursor-pointer ${
+                            isSelected
+                              ? "bg-stone-100 text-stone-900 font-bold"
+                              : "text-stone-700 hover:bg-stone-50 hover:text-stone-900 font-medium"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <Icon className="w-3.5 h-3.5 text-stone-500 shrink-0" />
+                            <span>{opt.label}</span>
+                          </div>
+                          {isSelected && (
+                            <RiCloseLine className="w-3.5 h-3.5 text-stone-500" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right side: Separate Format & Pricing chips (no labels) with scroll animation */}
+            <div className="flex items-center gap-2 shrink-0 self-start md:self-auto">
+              {/* Separate Format Chip */}
+              <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-white border border-stone-200/90 shadow-2xs text-xs font-semibold">
+                <div className="relative overflow-hidden h-5 flex items-center min-w-[64px]">
+                  <span
+                    key={`venue-${selectedVenue}-${venueAnimKey}`}
+                    className={`font-medium text-stone-900 whitespace-nowrap block select-none ${
+                      venueDirection === "up"
+                        ? "animate-scroll-up"
+                        : venueDirection === "down"
+                        ? "animate-scroll-down"
+                        : ""
+                    }`}
+                  >
+                    {currentVenueLabel}
+                  </span>
+                </div>
+                <div className="flex flex-col items-center justify-center -space-y-2.5">
+                  <button
+                    type="button"
+                    onClick={handlePrevVenue}
+                    className="text-stone-400 hover:text-stone-900 transition-colors cursor-pointer leading-none"
+                    title="Previous Format"
+                    aria-label="Previous Format"
+                  >
+                    <RiArrowUpSFill className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleNextVenue}
+                    className="text-stone-400 hover:text-stone-900 transition-colors p-0.5 cursor-pointer leading-none"
+                    title="Next Format"
+                    aria-label="Next Format"
+                  >
+                    <RiArrowDownSFill className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
-              {/* ── Secondary Dropdowns: Format & Pricing ── */}
-              <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-stone-600">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-medium text-stone-500">Format:</span>
-                  <select
-                    value={selectedVenue}
-                    onChange={(e) => {
-                      setSelectedVenue(e.target.value);
-                      setPage(1);
-                    }}
-                    className="px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg text-xs text-stone-800 focus:outline-none focus:ring-1 focus:ring-stone-400 focus:border-stone-900"
+              {/* Separate Pricing Chip */}
+              <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-white border border-stone-200/90 shadow-2xs text-xs font-semibold">
+                <div className="relative overflow-hidden h-5 flex items-center min-w-[64px]">
+                  <span
+                    key={`pricing-${selectedPricing}-${pricingAnimKey}`}
+                    className={`font-medium text-stone-900 whitespace-nowrap block select-none ${
+                      pricingDirection === "up"
+                        ? "animate-scroll-up"
+                        : pricingDirection === "down"
+                        ? "animate-scroll-down"
+                        : ""
+                    }`}
                   >
-                    {VENUE_TYPE_OPTIONS.map((v) => (
-                      <option key={v.value} value={v.value}>
-                        {v.label}
-                      </option>
-                    ))}
-                  </select>
+                    {currentPricingLabel}
+                  </span>
                 </div>
-
-                <div className="flex items-center gap-1.5">
-                  <span className="font-medium text-stone-500">Pricing:</span>
-                  <select
-                    value={selectedPricing}
-                    onChange={(e) => {
-                      setSelectedPricing(e.target.value);
-                      setPage(1);
-                    }}
-                    className="px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg text-xs text-stone-800 focus:outline-none focus:ring-1 focus:ring-stone-400 focus:border-stone-900"
-                  >
-                    {PRICING_OPTIONS.map((p) => (
-                      <option key={p.value} value={p.value}>
-                        {p.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {hasActiveFilters && (
+                <div className="flex flex-col items-center justify-center -space-y-2.5">
                   <button
-                    onClick={handleResetFilters}
-                    className="text-xs font-medium text-rose-600 hover:text-rose-700 ml-auto flex items-center gap-1 transition-colors"
+                    type="button"
+                    onClick={handlePrevPricing}
+                    className="text-stone-400 hover:text-stone-900 transition-colors cursor-pointer leading-none"
+                    title="Previous Pricing"
+                    aria-label="Previous Pricing"
                   >
-                    <X className="w-3 h-3" />
-                    Reset all filters
+                    <RiArrowUpSFill className="w-4 h-4" />
                   </button>
-                )}
+                  <button
+                    type="button"
+                    onClick={handleNextPricing}
+                    className="text-stone-400 hover:text-stone-900 transition-colors p-0.5 cursor-pointer leading-none"
+                    title="Next Pricing"
+                    aria-label="Next Pricing"
+                  >
+                    <RiArrowDownSFill className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -267,20 +651,7 @@ export const PublicEventsPage: React.FC = () => {
       </div>
 
       {/* ── Main Content Area ── */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        {/* Results Metadata Bar */}
-        <div className="flex items-center justify-between text-xs text-stone-500">
-          <span>
-            Showing <strong className="text-stone-900">{events.length}</strong>{" "}
-            of <strong className="text-stone-900">{total}</strong> live events
-          </span>
-          {totalPages > 1 && (
-            <span>
-              Page {page} of {totalPages}
-            </span>
-          )}
-        </div>
-
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4 space-y-4">
         {/* ── Loading Skeleton ── */}
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -317,40 +688,31 @@ export const PublicEventsPage: React.FC = () => {
             </button>
           </div>
         ) : events.length === 0 ? (
-          /* ── Empty State ── */
-          <div className="py-16 text-center bg-white border border-stone-200/80 rounded-2xl p-8 space-y-4 max-w-xl mx-auto shadow-sm">
-            <div className="w-14 h-14 rounded-2xl bg-stone-100 text-stone-400 mx-auto flex items-center justify-center">
-              <Compass className="w-7 h-7" />
-            </div>
-            <div className="space-y-1">
-              <h3 className="text-lg font-bold text-stone-900">
-                {hasActiveFilters
+          <div className="min-h-[420px] w-full flex flex-col items-center justify-center">
+            <EmptyEventsState
+              title={
+                hasActiveFilters
                   ? "No Events Match Your Filters"
-                  : "No Public Events Published Yet"}
-              </h3>
-              <p className="text-xs text-stone-500 leading-relaxed max-w-md mx-auto">
-                {hasActiveFilters
-                  ? "Try broadening your search term or resetting category filters to view other live gatherings."
-                  : "Organizers publish events frequently. Check back soon or create your own event now."}
-              </p>
-            </div>
-            <div className="pt-2 flex flex-wrap items-center justify-center gap-2">
-              {hasActiveFilters ? (
-                <button
-                  onClick={handleResetFilters}
-                  className="px-4 py-2 rounded-lg bg-stone-900 text-white font-medium text-xs hover:bg-stone-800 transition-colors"
-                >
-                  Clear Filters
-                </button>
-              ) : (
-                <button
-                  onClick={() => navigate("/events/create")}
-                  className="px-4 py-2 rounded-lg bg-stone-900 text-white font-semibold text-xs hover:bg-black transition-colors shadow-xs border border-stone-800"
-                >
-                  Create an Event
-                </button>
-              )}
-            </div>
+                  : "No Public Events Published Yet"
+              }
+              description={
+                hasActiveFilters
+                  ? "Try broadening your search term or resetting category filters to discover other live gatherings."
+                  : "Organizers publish events frequently. Check back soon or create your own event now."
+              }
+              slotText={hasActiveFilters ? "NO MATCHES" : "UNCLAIMED SLOT"}
+              categoryText={
+                hasActiveFilters
+                  ? "FILTER • 0 PASSES"
+                  : "PASS • 0 ADMISSION"
+              }
+              actionText={hasActiveFilters ? "Clear All Filters" : "Create an Event"}
+              onAction={
+                hasActiveFilters
+                  ? handleResetFilters
+                  : () => navigate("/events/create")
+              }
+            />
           </div>
         ) : (
           /* ── Event Grid ── */

@@ -19,7 +19,7 @@ import {
 import { attendeeApi, AttendeeWalletItem, AttendeeTeamData } from '../api/attendee';
 import { ticketsApi, triggerBlobDownload } from '../api/tickets';
 import QRCode from 'qrcode';
-import { Button, Badge, Modal, EmptyState, Input, InView, AnimatedGroup } from '../components/ui';
+import { Button, Badge, Modal, EmptyEventsState, Input, InView, AnimatedGroup } from '../components/ui';
 
 export const AttendeeWalletPage: React.FC = () => {
   const navigate = useNavigate();
@@ -230,40 +230,35 @@ export const AttendeeWalletPage: React.FC = () => {
   });
 
   return (
-    <div className="min-h-screen bg-[#FAFAF9] px-4 py-6 sm:px-6 sm:py-8">
-      <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="flex-1 flex flex-col w-full min-h-full">
+      <div className="flex-1 flex flex-col w-full max-w-6xl mx-auto">
         {/* Top Header */}
-      <InView direction="up" distance={12}>
-        <div className="bg-white border border-stone-200/90 rounded-2xl p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-900 shrink-0 shadow-2xs">
-              <Wallet className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-xl sm:text-2xl font-extrabold text-zinc-900 tracking-tight">
+        <InView direction="up" distance={12} className="shrink-0 mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1 pb-1">
+            {/* Left: Icon, Title, Pass Count */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-stone-100 border border-stone-200/80 flex items-center justify-center text-stone-900 shrink-0 shadow-2xs">
+                <Wallet className="w-5 h-5 stroke-[2]" />
+              </div>
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 tracking-tight">
                   My Credential Wallet
                 </h1>
-                <Badge variant="neutral" size="sm">
+                <Badge variant="neutral" size="sm" className="font-semibold text-stone-600 bg-stone-100/90 border border-stone-200/80">
                   {wallet.length} {wallet.length === 1 ? 'Pass' : 'Passes'}
                 </Badge>
               </div>
-              <p className="text-xs text-stone-500 mt-1 leading-relaxed">
-                Your personal tamper-proof passes, dynamic QR entry tokens, and team workspaces.
-              </p>
             </div>
-          </div>
 
-          {/* Filter Pills & Actions */}
-          <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
-            <div className="flex items-center gap-1 p-1 rounded-xl bg-stone-100/90 border border-stone-200/80">
+            {/* Right: Filter Pills */}
+            <div className="flex items-center gap-1 rounded-full bg-stone-100/90 border border-stone-200/80 self-start sm:self-auto overflow-hidden">
               {(['ALL', 'ACTIVE', 'CHECKED_IN'] as const).map((mode) => (
                 <button
                   key={mode}
                   onClick={() => setFilter(mode)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  className={`px-3 py-2 text-xs font-medium transition-all cursor-pointer ${
                     filter === mode
-                      ? 'bg-white text-zinc-900 shadow-xs'
+                      ? 'bg-white text-zinc-900 shadow-2xs'
                       : 'text-stone-500 hover:text-zinc-900'
                   }`}
                 >
@@ -271,61 +266,58 @@ export const AttendeeWalletPage: React.FC = () => {
                 </button>
               ))}
             </div>
+          </div>
+        </InView>
 
+        {error && (
+          <div className="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-between gap-3 text-rose-700 text-xs shadow-2xs shrink-0">
+            <div className="flex items-center gap-2.5">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{error}</span>
+            </div>
             <Button
-              variant="primary"
+              variant="secondary"
               size="sm"
-              onClick={() => navigate('/explore')}
-              iconLeft={<Compass className="w-3.5 h-3.5" />}
+              onClick={fetchWallet}
+              iconLeft={<RefreshCw className="w-3 h-3 text-rose-600" />}
             >
-              Explore Events
+              Retry
             </Button>
           </div>
-        </div>
-      </InView>
+        )}
 
-      {error && (
-        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-between gap-3 text-rose-700 text-xs shadow-2xs">
-          <div className="flex items-center gap-2.5">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{error}</span>
+        {/* Loading State */}
+        {loading ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 text-stone-400 p-8 min-h-[360px]">
+            <Loader2 className="w-8 h-8 animate-spin text-stone-900" />
+            <p className="text-xs font-semibold text-stone-500">Loading your verified passes...</p>
           </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={fetchWallet}
-            iconLeft={<RefreshCw className="w-3 h-3 text-rose-600" />}
-          >
-            Retry
-          </Button>
-        </div>
-      )}
-
-      {/* Loading State */}
-      {loading ? (
-        <div className="py-20 flex flex-col items-center justify-center gap-3 text-stone-400 bg-white border border-stone-200/90 rounded-2xl p-8 shadow-xs">
-          <Loader2 className="w-8 h-8 animate-spin text-stone-900" />
-          <p className="text-xs font-semibold text-stone-500">Loading your verified passes...</p>
-        </div>
-      ) : filteredWallet.length === 0 ? (
-        /* Empty State */
-        <EmptyState
-          icon={<Wallet className="w-7 h-7" />}
-          title={
-            filter === 'ALL'
-              ? 'Your pass wallet is currently empty'
-              : `No ${filter.toLowerCase()} passes found`
-          }
-          description="When you register for an event on Ticketification, your verified pass with an anti-collision QR token is automatically stored here."
-          actionText="Explore Events to Attend"
-          onAction={() => navigate('/explore')}
-          actionIcon={<Compass className="w-4 h-4" />}
-          secondaryActionText="Host Your Own Event"
-          onSecondaryAction={() => navigate('/events/create')}
-        />
-      ) : (
-        /* Passes Grid (Responsive 1 col mobile, 2 cols tablet/desktop) */
-        <AnimatedGroup staggerDelay={70} className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
+        ) : filteredWallet.length === 0 ? (
+          /* Empty State - Centered vertically and horizontally in all available space */
+          <div className="flex-1 flex flex-col items-center justify-center w-full min-h-[420px] my-auto">
+            <EmptyEventsState
+              title={
+                filter === 'ALL'
+                  ? 'Your Pass Vault is Currently Empty'
+                  : `No ${filter.charAt(0) + filter.slice(1).toLowerCase()} Passes in Vault`
+              }
+              description={
+                filter === 'ALL'
+                  ? 'When you register for an event on Ticketification, your verified pass with dynamic cryptographic QR credentials will be stored here.'
+                  : 'No passes in your vault match the selected category filter. Try clearing the filter or exploring other upcoming live events.'
+              }
+              slotText={filter === 'ALL' ? 'VAULT EMPTY' : 'NO PASSES'}
+              categoryText={filter === 'ALL' ? 'PERSONAL VAULT • 0 PASSES' : 'FILTER • 0 MATCHES'}
+              actionText="Explore Live Events"
+              onAction={() => navigate('/explore')}
+              actionIcon={<Compass className="w-3.5 h-3.5" />}
+              secondaryActionText="Host Your Own Event"
+              onSecondaryAction={() => navigate('/events/create')}
+            />
+          </div>
+        ) : (
+          /* Passes Grid (Responsive 1 col mobile, 2 cols tablet/desktop) */
+          <AnimatedGroup staggerDelay={70} className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
           {filteredWallet.map((pass) => {
             const isHackathon = ['HACKATHON', 'COMPETITION', 'COLLEGE_EVENT'].includes(
               pass.eventType.toUpperCase()
