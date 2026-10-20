@@ -11,10 +11,10 @@ interface HostRouteProps {
 }
 
 export const HostRoute: React.FC<HostRouteProps> = ({ user }) => {
-  const { events } = useEvent();
+  const { currentEvent } = useEvent();
   const navigate = useNavigate();
 
-  const isAuthorized = isHostOrOrganizer(user, events.length > 0);
+  const isAuthorized = isHostOrOrganizer(user, currentEvent);
 
   if (!isAuthorized) {
     return (

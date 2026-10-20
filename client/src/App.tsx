@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { Layout } from './components/layout/Layout';
 import { EventProvider } from './context/EventContext';
@@ -31,7 +31,7 @@ const PublicEventDetailPage      = lazy(() => import('./pages/PublicEventDetailP
 const PricingPage                = lazy(() => import('./pages/PricingPage').then(m => ({ default: m.PricingPage })));
 const NotFoundPage               = lazy(() => import('./pages/NotFoundPage').then(m => ({ default: m.NotFoundPage })));
 
-import { ProtectedRoute } from './routes/ProtectedRoute';
+import { ProtectedRoute, AuthStatus } from './routes/ProtectedRoute';
 import { HostRoute } from './routes/HostRoute';
 import { ROUTES } from './routes/paths';
 
@@ -47,7 +47,7 @@ const PageLoader: React.FC = () => (
 
 const AppContent: React.FC = () => {
   const navigate = useNavigate();
-  const [token, setToken] = useState<string | null>(getStoredAuthToken());
+  const [, setToken] = useState<string | null>(getStoredAuthToken());
   const [user, setUser] = useState<{
     id?: string;
     name: string;
@@ -57,34 +57,59 @@ const AppContent: React.FC = () => {
     isOnboarded?: boolean;
     organizationName?: string;
   } | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [authStatus, setAuthStatus] = useState<AuthStatus>(() => {
+    return getStoredAuthToken() ? 'INITIALIZING' : 'UNAUTHENTICATED';
+  });
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  const checkAuth = useCallback(async () => {
+    const currentToken = getStoredAuthToken();
+    if (!currentToken) {
+      setToken(null);
+      setUser(null);
+      setAuthStatus('UNAUTHENTICATED');
+      setAuthError(null);
+      return;
+    }
+
+    setAuthStatus('INITIALIZING');
+    setAuthError(null);
+
+    try {
+      const res: any = await apiClient.get('/auth/me');
+      if (res && res.success && res.data) {
+        setUser(res.data);
+        setToken(currentToken);
+        setAuthStatus('AUTHENTICATED');
+        setAuthError(null);
+      } else {
+        handleLogout();
+      }
+    } catch (err: any) {
+      const status = err?.response?.status;
+      // Only clear session on explicit authentication rejection (401/403).
+      // Network errors, timeouts, or 5xx must NEVER log the user out or claim the account does not exist.
+      if (status === 401 || status === 403) {
+        console.warn('[Ticketification Auth] /auth/me rejected with 401/403. Clearing session.');
+        handleLogout();
+      } else {
+        const errorMsg =
+          err?.response?.data?.message ||
+          err?.response?.data?.error?.message ||
+          (err?.code === 'ECONNABORTED' ? 'Verification request timed out.' : null) ||
+          (err?.message && err.message.includes('Network Error') ? 'Network connection unavailable.' : null) ||
+          'Unable to reach authentication service. Stored session preserved.';
+
+        console.warn('[Ticketification Auth] /auth/me unreachable. Preserving stored session candidate.');
+        setAuthStatus('VERIFICATION_FAILED');
+        setAuthError(errorMsg);
+      }
+    }
+  }, []);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      if (token) {
-        try {
-          const res: any = await apiClient.get('/auth/me');
-          if (res.success && res.data) {
-            setUser(res.data);
-          } else {
-            handleLogout();
-          }
-        } catch (err: any) {
-          const status = err?.response?.status;
-          // Only clear session on explicit authentication rejection (401/403).
-          // Network errors, timeouts, or 5xx must NEVER log the user out or claim the account does not exist.
-          if (status === 401 || status === 403) {
-            handleLogout();
-          } else {
-            console.warn('[Ticketification Auth] /auth/me verification unreachable. Preserving stored session.');
-          }
-        }
-      }
-      setLoading(false);
-    };
-
     checkAuth();
-  }, [token]);
+  }, [checkAuth]);
 
   const handleLoginSuccess = (
     newToken: string,
@@ -94,6 +119,8 @@ const AppContent: React.FC = () => {
     setStoredAuthToken(newToken, refreshToken);
     setToken(newToken);
     setUser(userData);
+    setAuthStatus('AUTHENTICATED');
+    setAuthError(null);
   };
 
   const handleLogout = () => {
@@ -101,6 +128,8 @@ const AppContent: React.FC = () => {
     localStorage.removeItem('selected_event_id');
     setToken(null);
     setUser(null);
+    setAuthStatus('UNAUTHENTICATED');
+    setAuthError(null);
   };
 
   const handleOnboardingComplete = (data: HostProfileData) => {
@@ -115,19 +144,6 @@ const AppContent: React.FC = () => {
         : null
     );
   };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#FAFAF9] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 rounded-full border-2 border-stone-300 border-t-stone-900 animate-spin" />
-          <span className="text-xs font-semibold text-zinc-500 tracking-wider uppercase">
-            Initializing Ticketification
-          </span>
-        </div>
-      </div>
-    );
-  }
 
   const redirectTarget = new URLSearchParams(window.location.search).get('redirect') || '/events';
 
@@ -161,11 +177,29 @@ const AppContent: React.FC = () => {
         <Route path={ROUTES.VERIFY_TICKET} element={<VerifyTicket />} />
         <Route path={ROUTES.INVITE_ACCEPT} element={<AcceptInvitationPage currentUser={user} />} />
 
-        {/* ── 3. Authentication Routes (Redirect if session already exists) ─ */}
+        {/* ── 3. Single Canonical /explore Route (Public discovery with layout context) ─ */}
+        <Route
+          path={ROUTES.EXPLORE}
+          element={
+            authStatus === 'AUTHENTICATED' && user ? (
+              <EventProvider>
+                <Layout user={user} onLogout={handleLogout}>
+                  <PublicEventsPage />
+                </Layout>
+              </EventProvider>
+            ) : (
+              <PublicEventsPage />
+            )
+          }
+        />
+
+        {/* ── 4. Authentication Routes (Redirect if session already authenticated) ─ */}
         <Route
           path={ROUTES.LOGIN}
           element={
-            token && user ? (
+            authStatus === 'INITIALIZING' ? (
+              <PageLoader />
+            ) : authStatus === 'AUTHENTICATED' && user ? (
               <Navigate to={redirectTarget} replace />
             ) : (
               <Login
@@ -178,7 +212,9 @@ const AppContent: React.FC = () => {
         <Route
           path={ROUTES.REGISTER}
           element={
-            token && user ? (
+            authStatus === 'INITIALIZING' ? (
+              <PageLoader />
+            ) : authStatus === 'AUTHENTICATED' && user ? (
               <Navigate to={redirectTarget} replace />
             ) : (
               <Register
@@ -189,8 +225,17 @@ const AppContent: React.FC = () => {
           }
         />
 
-        {/* ── 4. Authenticated User Dashboard Layout (Nested with Outlet) ── */}
-        <Route element={<ProtectedRoute isAuthenticated={Boolean(token && user)} isLoading={loading} />}>
+        {/* ── 5. Authenticated User Dashboard Layout (Nested with Outlet) ── */}
+        <Route
+          element={
+            <ProtectedRoute
+              authStatus={authStatus}
+              authError={authError}
+              onRetry={checkAuth}
+              onSignOut={handleLogout}
+            />
+          }
+        >
           <Route
             element={
               <EventProvider>
@@ -204,9 +249,8 @@ const AppContent: React.FC = () => {
             <Route path={ROUTES.CREATE_EVENT} element={<CreateEventPage />} />
             <Route path={ROUTES.EVENT_DETAIL} element={<EventDetailPage />} />
 
-            {/* Attendee Pass Wallet & Event Discovery */}
+            {/* Attendee Pass Wallet (strictly nested inside dashboard layout) */}
             <Route path={ROUTES.WALLET} element={<AttendeeWalletPage />} />
-            <Route path={ROUTES.EXPLORE} element={<PublicEventsPage />} />
 
             {/* Workspace & Settings */}
             <Route
@@ -229,13 +273,10 @@ const AppContent: React.FC = () => {
           </Route>
         </Route>
 
-        {/* ── 5. Public Fallback for /explore when unauthenticated ───────── */}
-        {!token && <Route path={ROUTES.EXPLORE} element={<PublicEventsPage />} />}
-
         {/* ── 6. Root Fallback for Unknown Routes ──────────────────────── */}
-        <Route path="*" element={<NotFoundPage isInsideDashboard={Boolean(token && user)} />} />
+        <Route path="*" element={<NotFoundPage isInsideDashboard={authStatus === 'AUTHENTICATED'} />} />
       </Routes>
-      </Suspense>
+    </Suspense>
   );
 };
 

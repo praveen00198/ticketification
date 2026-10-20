@@ -37,8 +37,8 @@ interface LayoutProps {
 export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { currentEvent, events } = useEvent();
-  const isHost = isHostOrOrganizer(user, events.length > 0);
+  const { currentEvent } = useEvent();
+  const isHost = isHostOrOrganizer(user, currentEvent);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 

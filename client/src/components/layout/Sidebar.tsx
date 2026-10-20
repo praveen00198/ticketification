@@ -57,7 +57,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   // Category-wise dynamic navigation configuration filtered by user platform role and host capability
   const categories: NavCategory[] = getNavigationCategories({
     user,
-    hasEvents: events.length > 0,
     currentEvent,
   });
 

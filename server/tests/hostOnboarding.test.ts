@@ -19,11 +19,9 @@ import app from '../src/app';
 import { userRepository } from '../src/modules/auth/repositories/user.repository';
 import { mongoUserRepository } from '../src/modules/auth/repositories/mongo-user.repository';
 import { supabaseStorageService } from '../src/modules/tickets/services/supabase-storage.service';
+import { createJwtToken } from '../src/utils/local-auth';
 
 describe('Phase 3: Host Identity, Organizer Onboarding & Workspace Initialization', () => {
-  const hostUserToken = 'valid-host-user-jwt-token';
-  const otherUserToken = 'valid-other-user-jwt-token';
-
   const hostUser = {
     id: 'host-user-uuid-001',
     email: 'host.organizer@example.com',
@@ -35,6 +33,9 @@ describe('Phase 3: Host Identity, Organizer Onboarding & Workspace Initializatio
     email: 'other.attendee@example.com',
     role: 'USER' as const,
   };
+
+  const hostUserToken = createJwtToken({ id: hostUser.id, email: hostUser.email, role: hostUser.role });
+  const otherUserToken = createJwtToken({ id: otherUser.id, email: otherUser.email, role: otherUser.role });
 
   beforeEach(() => {
     jest.clearAllMocks();

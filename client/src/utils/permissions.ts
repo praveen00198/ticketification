@@ -46,12 +46,24 @@ export function isPlatformAdmin(user?: UserIdentity | null): boolean {
 }
 
 /**
- * Checks whether user has organizer/host privileges or manages any events.
+ * Checks whether user has organizer/host privileges or verified ownership of the current event.
+ * Never grants host capability solely because an event list is non-empty.
  */
-export function isHostOrOrganizer(user?: UserIdentity | null, hasEvents = false): boolean {
+export function isHostOrOrganizer(
+  user?: UserIdentity | null,
+  currentEvent?: { createdBy?: string; ownerId?: string; ownerSupabaseId?: string } | null
+): boolean {
   if (!user) return false;
   if (isPlatformAdmin(user)) return true;
-  return Boolean(user.isOnboarded) || hasEvents;
+  if (Boolean(user.isOnboarded)) return true;
+  if (
+    currentEvent &&
+    user.id &&
+    (currentEvent.createdBy === user.id || (currentEvent as any).ownerSupabaseId === user.id)
+  ) {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -71,14 +83,12 @@ export function getUserDisplayRole(user?: UserIdentity | null): string {
  */
 export function getNavigationCategories({
   user,
-  hasEvents,
   currentEvent,
 }: {
   user: UserIdentity | null;
-  hasEvents: boolean;
-  currentEvent: { id: string; name: string } | null;
+  currentEvent?: { id: string; name: string; createdBy?: string } | null;
 }): NavCategory[] {
-  const isHost = isHostOrOrganizer(user, hasEvents);
+  const isHost = isHostOrOrganizer(user, currentEvent);
   const categories: NavCategory[] = [];
 
   // 1. Core & Overview (Visible to all authenticated users)
