@@ -59,10 +59,7 @@ export async function authMiddleware(
     let mongoUser: any = null;
     if (isMongoConnected()) {
       const { mongoUserRepository } = await import('../modules/auth/repositories/mongo-user.repository');
-      mongoUser = await mongoUserRepository.findBySupabaseId(userId);
-      if (!mongoUser && email) {
-        mongoUser = await mongoUserRepository.findByEmail(email);
-      }
+      mongoUser = await mongoUserRepository.findById(userId);
     }
 
     if (mongoUser) {
@@ -71,7 +68,7 @@ export async function authMiddleware(
       }
 
       req.user = {
-        id: mongoUser.supabaseUserId,
+        id: String(mongoUser.supabaseUserId || mongoUser._id),
         email: mongoUser.email,
         role: mongoUser.platformRole || 'USER',
       };
@@ -96,10 +93,7 @@ export async function authMiddleware(
 
     // Fall back to PostgreSQL in non-production/test environments when MongoDB is not connected
     if (config.env.databaseUrl) {
-      let dbUser = await userRepository.findById(userId);
-      if (!dbUser && email) {
-        dbUser = await userRepository.findByEmail(email);
-      }
+      const dbUser = await userRepository.findById(userId);
 
       if (dbUser) {
         if ((dbUser as any)?.status === 'SUSPENDED') {

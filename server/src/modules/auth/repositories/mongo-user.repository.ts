@@ -1,25 +1,36 @@
+import mongoose from 'mongoose';
 import { UserModel, IUserDocument, IUser, PlatformRole, UserStatus } from '../../../db/mongo/models/user.model';
+
+const resolveUserFilter = (id: string) => {
+  if (mongoose.Types.ObjectId.isValid(id)) {
+    return { $or: [{ _id: id }, { supabaseUserId: id }] };
+  }
+  return { supabaseUserId: id };
+};
 
 export class MongoUserRepository {
   /**
-   * Find user document by Supabase Auth UID.
+   * Find user document by ID (supports MongoDB _id, custom-auth generatedId, or legacy Supabase Auth UID).
    */
-  async findBySupabaseId(supabaseUserId: string): Promise<IUserDocument | null> {
-    return UserModel.findOne({ supabaseUserId }).exec();
+  async findById(id: string): Promise<IUserDocument | null> {
+    if (!id) return null;
+    return UserModel.findOne(resolveUserFilter(id)).exec();
+  }
+
+  /**
+   * Alias for backwards compatibility with legacy callers.
+   * Resolves by ID without requiring Supabase Auth.
+   */
+  async findBySupabaseId(id: string): Promise<IUserDocument | null> {
+    return this.findById(id);
   }
 
   /**
    * Find user document by canonical lowercase email.
    */
   async findByEmail(email: string): Promise<IUserDocument | null> {
+    if (!email) return null;
     return UserModel.findOne({ email: email.toLowerCase().trim() }).exec();
-  }
-
-  /**
-   * Find user document by MongoDB ObjectId.
-   */
-  async findById(id: string): Promise<IUserDocument | null> {
-    return UserModel.findById(id).exec();
   }
 
   /**
@@ -36,7 +47,7 @@ export class MongoUserRepository {
   }
 
   /**
-   * Upsert user document by Supabase Auth UID.
+   * Upsert user document by unique identifier or email.
    * If creating a new user, defaults to 'USER' role unless explicitly specified.
    * If updating an existing user, preserves existing platformRole if omitted.
    */
@@ -61,7 +72,7 @@ export class MongoUserRepository {
       if (userData.avatarUrl !== undefined) existingUser.avatarUrl = userData.avatarUrl;
       if (userData.metadata) existingUser.metadata = { ...existingUser.metadata, ...userData.metadata };
       if (userData.platformRole) existingUser.platformRole = userData.platformRole;
-      existingUser.supabaseUserId = userData.supabaseUserId;
+      if (userData.supabaseUserId) existingUser.supabaseUserId = userData.supabaseUserId;
       existingUser.email = canonicalEmail;
       return existingUser.save();
     }
@@ -81,9 +92,9 @@ export class MongoUserRepository {
   /**
    * Update user platform role.
    */
-  async updateRole(supabaseUserId: string, role: PlatformRole): Promise<IUserDocument | null> {
+  async updateRole(userId: string, role: PlatformRole): Promise<IUserDocument | null> {
     return UserModel.findOneAndUpdate(
-      { supabaseUserId },
+      resolveUserFilter(userId),
       { $set: { platformRole: role } },
       { returnDocument: 'after' }
     ).exec();
@@ -92,9 +103,9 @@ export class MongoUserRepository {
   /**
    * Update user account status (ACTIVE vs SUSPENDED).
    */
-  async updateStatus(supabaseUserId: string, status: UserStatus): Promise<IUserDocument | null> {
+  async updateStatus(userId: string, status: UserStatus): Promise<IUserDocument | null> {
     return UserModel.findOneAndUpdate(
-      { supabaseUserId },
+      resolveUserFilter(userId),
       { $set: { status } },
       { returnDocument: 'after' }
     ).exec();
@@ -103,9 +114,9 @@ export class MongoUserRepository {
   /**
    * Update user password hash.
    */
-  async updatePasswordHash(supabaseUserId: string, passwordHash: string): Promise<IUserDocument | null> {
+  async updatePasswordHash(userId: string, passwordHash: string): Promise<IUserDocument | null> {
     return UserModel.findOneAndUpdate(
-      { supabaseUserId },
+      resolveUserFilter(userId),
       { $set: { passwordHash } },
       { returnDocument: 'after' }
     ).exec();
@@ -116,19 +127,19 @@ export class MongoUserRepository {
    */
   async listUsers(filter: Record<string, any> = {}, limit = 50, skip = 0): Promise<IUserDocument[]> {
     return UserModel.find(filter)
-      .sort({ createdAt: -1 }) // Enforce explicit ORDER BY per ARCHITECTURE.md
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
       .exec();
   }
 
   /**
-   * Complete initial host onboarding for user by Supabase UID.
+   * Complete initial host onboarding for user by user ID.
    * Atomically sets hostProfile and initializes workspaceStatus to 'ACTIVE'.
    * Never mutates platformRole.
    */
   async completeOnboarding(
-    supabaseUserId: string,
+    userId: string,
     profile: {
       organizationName: string;
       institutionType: 'COLLEGE_UNIVERSITY' | 'CORPORATE' | 'COMMUNITY_CLUB' | 'INDEPENDENT';
@@ -142,7 +153,7 @@ export class MongoUserRepository {
   ): Promise<IUserDocument | null> {
     const onboardedAt = profile.onboardedAt || new Date();
     return UserModel.findOneAndUpdate(
-      { supabaseUserId },
+      resolveUserFilter(userId),
       {
         $set: {
           hostProfile: {
@@ -167,7 +178,7 @@ export class MongoUserRepository {
    * Update existing host profile fields atomically without resetting onboardedAt or unrelated fields.
    */
   async updateHostProfile(
-    supabaseUserId: string,
+    userId: string,
     updates: Partial<{
       organizationName: string;
       institutionType: 'COLLEGE_UNIVERSITY' | 'CORPORATE' | 'COMMUNITY_CLUB' | 'INDEPENDENT';
@@ -203,11 +214,11 @@ export class MongoUserRepository {
     }
 
     if (Object.keys(setFields).length === 0) {
-      return this.findBySupabaseId(supabaseUserId);
+      return this.findById(userId);
     }
 
     return UserModel.findOneAndUpdate(
-      { supabaseUserId },
+      resolveUserFilter(userId),
       { $set: setFields },
       { returnDocument: 'after' }
     ).exec();

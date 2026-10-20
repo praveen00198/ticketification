@@ -362,13 +362,7 @@ export class AuthService {
 
     if (mongoConfigured) {
       try {
-        let mongoUser = await this.mongoUserRepo.findBySupabaseId(userId);
-        if (!mongoUser && userId.includes('@')) {
-          mongoUser = await this.mongoUserRepo.findByEmail(userId);
-        }
-        if (!mongoUser && mongoose.Types.ObjectId.isValid(userId)) {
-          mongoUser = await this.mongoUserRepo.findById(userId);
-        }
+        let mongoUser = await this.mongoUserRepo.findById(userId);
 
         if (mongoUser) {
           if (mongoUser.status === 'SUSPENDED') {
@@ -383,7 +377,7 @@ export class AuthService {
           }
 
           return {
-            id: mongoUser.supabaseUserId,
+            id: String(mongoUser.supabaseUserId || mongoUser._id),
             name: mongoUser.name,
             email: mongoUser.email,
             role: mongoUser.platformRole || 'USER',
@@ -400,7 +394,7 @@ export class AuthService {
 
     // In production, fallback to secondary stores is forbidden when Mongo is authoritative
     if (config.env.isProduction && mongoConfigured) {
-      throw new NotFoundError('User profile not found.');
+      throw new AuthenticationError('User profile not found.', undefined, 'ACCOUNT_NOT_FOUND');
     }
 
     // Postgres fallback in test/development environments
@@ -426,7 +420,7 @@ export class AuthService {
       }
     }
 
-    throw new NotFoundError('User profile not found.');
+    throw new AuthenticationError('User profile not found.', undefined, 'ACCOUNT_NOT_FOUND');
   }
 
   /**

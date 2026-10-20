@@ -39,36 +39,67 @@ export interface NavCategory {
 }
 
 /**
- * Checks whether user has platform administrator privileges.
+ * Checks whether user has platform administrator privileges (ADMIN or SUPER_ADMIN).
  */
 export function isPlatformAdmin(user?: UserIdentity | null): boolean {
   return user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
 }
 
 /**
- * Checks whether user has organizer/host privileges or verified ownership of the current event.
- * Never grants host capability solely because an event list is non-empty.
+ * Checks whether user has completed organizer onboarding and created an organization profile.
+ * Note: Having an organizer profile is an identity attribute; it does NOT automatically
+ * grant operational management capabilities over an event unless the user also owns that event.
  */
-export function isHostOrOrganizer(
+export function hasOrganizerProfile(user?: UserIdentity | null): boolean {
+  return Boolean(user?.isOnboarded);
+}
+
+/**
+ * Checks whether user is the verified creator/owner of the specified event.
+ */
+export function isEventOwner(
+  user?: UserIdentity | null,
+  event?: { createdBy?: string; ownerId?: string; ownerSupabaseId?: string } | null
+): boolean {
+  if (!user || !user.id || !event) return false;
+  return (
+    event.createdBy === user.id ||
+    (event as any).ownerSupabaseId === user.id ||
+    (event as any).ownerId === user.id
+  );
+}
+
+/**
+ * Checks whether user has operational management permissions over the active event.
+ * Follows least privilege:
+ * 1. Platform admins have global management capability.
+ * 2. Event-scoped operational modules (Import, Issued Passes, Turnstiles, Staff Console)
+ *    strictly require verified event ownership.
+ * 3. Mere onboarding completion or non-empty event arrays NEVER grant operational access.
+ */
+export function canManageEventOperations(
   user?: UserIdentity | null,
   currentEvent?: { createdBy?: string; ownerId?: string; ownerSupabaseId?: string } | null
 ): boolean {
   if (!user) return false;
   if (isPlatformAdmin(user)) return true;
-  if (Boolean(user.isOnboarded)) return true;
-  if (
-    currentEvent &&
-    user.id &&
-    (currentEvent.createdBy === user.id || (currentEvent as any).ownerSupabaseId === user.id)
-  ) {
-    return true;
-  }
+  if (currentEvent && isEventOwner(user, currentEvent)) return true;
   return false;
 }
 
 /**
- * Resolves appropriate human-readable display role for the user.
- * Avoids false claims such as "Setup Pending" for regular attendees.
+ * Backwards-compatible alias for operational host authorization.
+ */
+export function isHostOrOrganizer(
+  user?: UserIdentity | null,
+  currentEvent?: { createdBy?: string; ownerId?: string; ownerSupabaseId?: string } | null
+): boolean {
+  return canManageEventOperations(user, currentEvent);
+}
+
+/**
+ * Resolves human-readable display role for the user.
+ * Avoids misleading claims: regular users are 'Attendee', onboarded organizers are 'Host', admins are 'Admin'/'Super Admin'.
  */
 export function getUserDisplayRole(user?: UserIdentity | null): string {
   if (!user) return 'Guest';
@@ -79,16 +110,16 @@ export function getUserDisplayRole(user?: UserIdentity | null): string {
 }
 
 /**
- * Build centralized, role-filtered navigation structure based on user identity and context.
+ * Build centralized, role-filtered navigation structure based on verified capabilities.
  */
 export function getNavigationCategories({
   user,
   currentEvent,
 }: {
   user: UserIdentity | null;
-  currentEvent?: { id: string; name: string; createdBy?: string } | null;
+  currentEvent?: { id: string; name: string; createdBy?: string; ownerId?: string; ownerSupabaseId?: string } | null;
 }): NavCategory[] {
-  const isHost = isHostOrOrganizer(user, currentEvent);
+  const hasEventOps = canManageEventOperations(user, currentEvent);
   const categories: NavCategory[] = [];
 
   // 1. Core & Overview (Visible to all authenticated users)
@@ -101,8 +132,8 @@ export function getNavigationCategories({
     ],
   });
 
-  // 2. Event Operations (Strictly restricted to Hosts/Organizers and Platform Admins)
-  if (isHost) {
+  // 2. Event Operations (Strictly restricted to verified event owners and platform admins with an active event)
+  if (hasEventOps && currentEvent) {
     const operationalItems: NavItem[] = [
       { label: 'Import Guests', path: '/import', icon: FileSpreadsheet, requiresHost: true },
       { label: 'Issued Tickets', path: '/tickets', icon: Ticket, requiresHost: true },
@@ -114,26 +145,21 @@ export function getNavigationCategories({
         badgeColor: 'bg-stone-100 text-stone-800 border border-stone-200',
         requiresHost: true,
       },
+      {
+        label: 'Staff Console',
+        path: `/events/${currentEvent.id}/staff-console`,
+        icon: Users,
+        requiresEvent: true,
+        requiresHost: true,
+      },
+      {
+        label: 'Judging & Mentors',
+        path: `/events/${currentEvent.id}/review-workspace`,
+        icon: Award,
+        requiresEvent: true,
+        requiresHost: true,
+      },
     ];
-
-    if (currentEvent) {
-      operationalItems.push(
-        {
-          label: 'Staff Console',
-          path: `/events/${currentEvent.id}/staff-console`,
-          icon: Users,
-          requiresEvent: true,
-          requiresHost: true,
-        },
-        {
-          label: 'Judging & Mentors',
-          path: `/events/${currentEvent.id}/review-workspace`,
-          icon: Award,
-          requiresEvent: true,
-          requiresHost: true,
-        }
-      );
-    }
 
     categories.push({
       title: 'Event Operations',
@@ -148,29 +174,19 @@ export function getNavigationCategories({
   });
 
   // 4. Host & Workspace Management
-  if (isHost) {
-    const setupItems: NavItem[] = [];
-    if (!user?.isOnboarded) {
-      setupItems.push({
-        label: 'Organizer Setup',
-        path: '/onboarding',
-        icon: Sparkles,
-        badge: 'Optional',
-        badgeColor: 'bg-stone-100 text-stone-700',
-      });
-    }
-    setupItems.push({
-      label: 'Organization Profile',
-      path: '/settings/profile',
-      icon: Building2,
-    });
-
+  if (hasOrganizerProfile(user)) {
     categories.push({
       title: 'Workspace & Setup',
-      items: setupItems,
+      items: [
+        {
+          label: 'Organization Profile',
+          path: '/settings/profile',
+          icon: Building2,
+        },
+      ],
     });
   } else {
-    // Normal user: provide optional, non-intrusive way to host an event or become an organizer
+    // Normal attendee: non-intrusive option to start organizing
     categories.push({
       title: 'Host an Event',
       items: [

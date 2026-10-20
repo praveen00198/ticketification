@@ -103,8 +103,8 @@ const UserSchema = new Schema<IUserDocument>(
   {
     supabaseUserId: {
       type: String,
-      required: [true, 'supabaseUserId is required'],
-      unique: true,
+      required: false,
+      sparse: true,
       index: true,
       trim: true,
     },
