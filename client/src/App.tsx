@@ -4,6 +4,7 @@ import { Layout } from './components/layout/Layout';
 import { EventProvider } from './context/EventContext';
 import { apiClient, getStoredAuthToken, setStoredAuthToken, clearStoredAuthToken } from './api/client';
 import { HostProfileData } from './api/host';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 // ─── Eagerly loaded (critical path — needed immediately on first paint) ───────
 import { PublicLandingPage } from './pages/PublicLandingPage';
@@ -28,6 +29,11 @@ const AttendeeWalletPage         = lazy(() => import('./pages/AttendeeWalletPage
 const PublicEventsPage           = lazy(() => import('./pages/PublicEventsPage').then(m => ({ default: m.PublicEventsPage })));
 const PublicEventDetailPage      = lazy(() => import('./pages/PublicEventDetailPage').then(m => ({ default: m.PublicEventDetailPage })));
 const PricingPage                = lazy(() => import('./pages/PricingPage').then(m => ({ default: m.PricingPage })));
+const NotFoundPage               = lazy(() => import('./pages/NotFoundPage').then(m => ({ default: m.NotFoundPage })));
+
+import { ProtectedRoute } from './routes/ProtectedRoute';
+import { HostRoute } from './routes/HostRoute';
+import { ROUTES } from './routes/paths';
 
 // ─── Minimal Suspense Fallback ────────────────────────────────────────────────
 const PageLoader: React.FC = () => (
@@ -63,8 +69,15 @@ const AppContent: React.FC = () => {
           } else {
             handleLogout();
           }
-        } catch (err) {
-          handleLogout();
+        } catch (err: any) {
+          const status = err?.response?.status;
+          // Only clear session on explicit authentication rejection (401/403).
+          // Network errors, timeouts, or 5xx must NEVER log the user out or claim the account does not exist.
+          if (status === 401 || status === 403) {
+            handleLogout();
+          } else {
+            console.warn('[Ticketification Auth] /auth/me verification unreachable. Preserving stored session.');
+          }
         }
       }
       setLoading(false);
@@ -96,7 +109,8 @@ const AppContent: React.FC = () => {
         ? {
             ...prev,
             isOnboarded: true,
-            organizationName: data.hostProfile?.organizationName || prev.name,
+            // Personal name is NEVER overwritten by organization name
+            organizationName: data.hostProfile?.organizationName || prev.organizationName,
           }
         : null
     );
@@ -120,154 +134,118 @@ const AppContent: React.FC = () => {
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>
-        {/* ── Flagship Public Landing Page ─────────────────────────────── */}
+        {/* ── 1. Public Landing & Marketing Pages ─────────────────────── */}
         <Route
-          path="/"
+          path={ROUTES.HOME}
           element={
             <PublicLandingPage
               currentUser={user}
-              onNavigateToLogin={() => navigate('/login')}
-              onNavigateToRegister={() => navigate('/register')}
+              onNavigateToLogin={() => navigate(ROUTES.LOGIN)}
+              onNavigateToRegister={() => navigate(ROUTES.REGISTER)}
+            />
+          }
+        />
+        <Route
+          path={ROUTES.PRICING}
+          element={
+            <PricingPage
+              currentUser={user}
+              onNavigateToLogin={() => navigate(ROUTES.LOGIN)}
+              onNavigateToRegister={() => navigate(ROUTES.REGISTER)}
             />
           }
         />
 
-          {/* ── Public Event Discovery & Catalog ─────────────────────────── */}
-          <Route
-            path="/explore"
-            element={
-              user ? (
-                <EventProvider>
-                  <Layout user={user} onLogout={handleLogout}>
-                    <PublicEventsPage />
-                  </Layout>
-                </EventProvider>
-              ) : (
-                <PublicEventsPage />
-              )
-            }
-          />
+        {/* ── 2. Public Event Microsites & Verification ────────────────── */}
+        <Route path={ROUTES.PUBLIC_EVENT_DETAIL} element={<PublicEventDetailPage />} />
+        <Route path={ROUTES.VERIFY_TICKET} element={<VerifyTicket />} />
+        <Route path={ROUTES.INVITE_ACCEPT} element={<AcceptInvitationPage currentUser={user} />} />
 
-          {/* ── Standalone Public Event Microsite ────────────────────────── */}
-          <Route
-            path="/events/:eventId/public"
-            element={
-              user ? (
-                <EventProvider>
-                  <Layout user={user} onLogout={handleLogout}>
-                    <PublicEventDetailPage />
-                  </Layout>
-                </EventProvider>
-              ) : (
-                <PublicEventDetailPage />
-              )
-            }
-          />
-
-          {/* ── Public Event Pricing & Attendance Calculator ──────────── */}
-          <Route
-            path="/pricing"
-            element={
-              <PricingPage
-                currentUser={user}
-                onNavigateToLogin={() => navigate('/login')}
-                onNavigateToRegister={() => navigate('/register')}
+        {/* ── 3. Authentication Routes (Redirect if session already exists) ─ */}
+        <Route
+          path={ROUTES.LOGIN}
+          element={
+            token && user ? (
+              <Navigate to={redirectTarget} replace />
+            ) : (
+              <Login
+                onLoginSuccess={handleLoginSuccess}
+                onNavigateToRegister={() => navigate(ROUTES.REGISTER)}
               />
-            }
-          />
+            )
+          }
+        />
+        <Route
+          path={ROUTES.REGISTER}
+          element={
+            token && user ? (
+              <Navigate to={redirectTarget} replace />
+            ) : (
+              <Register
+                onRegisterSuccess={handleLoginSuccess}
+                onNavigateToLogin={() => navigate(ROUTES.LOGIN)}
+              />
+            )
+          }
+        />
 
-          {/* ── Public Verification (open to any QR scan) ────────────────── */}
-          <Route path="/verify/:token" element={<VerifyTicket />} />
-
-          {/* ── Staff Invitation Acceptance ───────────────────────────────── */}
-          <Route path="/invite/accept" element={<AcceptInvitationPage currentUser={user} />} />
-
-          {/* ── Auth Routes ───────────────────────────────────────────────── */}
+        {/* ── 4. Authenticated User Dashboard Layout (Nested with Outlet) ── */}
+        <Route element={<ProtectedRoute isAuthenticated={Boolean(token && user)} isLoading={loading} />}>
           <Route
-            path="/login"
             element={
-              token && user ? (
-                <Navigate to={redirectTarget} replace />
-              ) : (
-                <Login
-                  onLoginSuccess={handleLoginSuccess}
-                  onNavigateToRegister={() => navigate('/register')}
-                />
-              )
+              <EventProvider>
+                <Layout user={user} onLogout={handleLogout} />
+              </EventProvider>
             }
-          />
-          <Route
-            path="/register"
-            element={
-              token && user ? (
-                <Navigate to={redirectTarget} replace />
-              ) : (
-                <Register
-                  onRegisterSuccess={handleLoginSuccess}
-                  onNavigateToLogin={() => navigate('/login')}
-                />
-              )
-            }
-          />
+          >
+            {/* Core & Overview */}
+            <Route path={ROUTES.DASHBOARD} element={<Dashboard />} />
+            <Route path={ROUTES.EVENTS} element={<EventsPage />} />
+            <Route path={ROUTES.CREATE_EVENT} element={<CreateEventPage />} />
+            <Route path={ROUTES.EVENT_DETAIL} element={<EventDetailPage />} />
 
-          {/* ── Cross-Event Attendee Wallet ───────────────────────────────── */}
-          <Route
-            path="/wallet"
-            element={
-              user ? (
-                <EventProvider>
-                  <Layout user={user} onLogout={handleLogout}>
-                    <AttendeeWalletPage />
-                  </Layout>
-                </EventProvider>
-              ) : (
-                <AttendeeWalletPage />
-              )
-            }
-          />
+            {/* Attendee Pass Wallet & Event Discovery */}
+            <Route path={ROUTES.WALLET} element={<AttendeeWalletPage />} />
+            <Route path={ROUTES.EXPLORE} element={<PublicEventsPage />} />
 
-          {/* ── Protected Organizer & Staff Console Routes ────────────────── */}
-          {token && user ? (
+            {/* Workspace & Settings */}
             <Route
-              path="/*"
-              element={
-                <EventProvider>
-                  <Layout user={user} onLogout={handleLogout}>
-                    <Routes>
-                      <Route path="/dashboard" element={<Dashboard />} />
-                      <Route path="/events" element={<EventsPage />} />
-                      <Route path="/events/create" element={<CreateEventPage />} />
-                      <Route path="/events/:eventId" element={<EventDetailPage />} />
-                      <Route path="/events/:eventId/staff-console" element={<VolunteerConsolePage />} />
-                      <Route path="/events/:eventId/review-workspace" element={<MentorEvaluatorWorkspacePage />} />
-                      <Route
-                        path="/onboarding"
-                        element={<HostOnboardingPage onOnboardingComplete={handleOnboardingComplete} />}
-                      />
-                      <Route path="/settings/profile" element={<HostProfilePage />} />
-                      <Route path="/import" element={<GuestImport />} />
-                      <Route path="/tickets" element={<TicketList />} />
-                      <Route path="/scan" element={<ScannerPage />} />
-                      <Route path="*" element={<Navigate to="/events" replace />} />
-                    </Routes>
-                  </Layout>
-                </EventProvider>
-              }
+              path={ROUTES.ONBOARDING}
+              element={<HostOnboardingPage onOnboardingComplete={handleOnboardingComplete} />}
             />
-          ) : (
-            /* Unauthenticated fallback → Home */
-            <Route path="*" element={<Navigate to="/" replace />} />
-          )}
-        </Routes>
+            <Route path={ROUTES.PROFILE_SETTINGS} element={<HostProfilePage />} />
+
+            {/* Organizer Operations (Guarded by HostRoute) */}
+            <Route element={<HostRoute user={user} />}>
+              <Route path={ROUTES.IMPORT} element={<GuestImport />} />
+              <Route path={ROUTES.TICKETS} element={<TicketList />} />
+              <Route path={ROUTES.SCAN} element={<ScannerPage />} />
+              <Route path={ROUTES.STAFF_CONSOLE} element={<VolunteerConsolePage />} />
+              <Route path={ROUTES.REVIEW_WORKSPACE} element={<MentorEvaluatorWorkspacePage />} />
+            </Route>
+
+            {/* In-Dashboard 404 fallback */}
+            <Route path="/app/*" element={<NotFoundPage isInsideDashboard />} />
+          </Route>
+        </Route>
+
+        {/* ── 5. Public Fallback for /explore when unauthenticated ───────── */}
+        {!token && <Route path={ROUTES.EXPLORE} element={<PublicEventsPage />} />}
+
+        {/* ── 6. Root Fallback for Unknown Routes ──────────────────────── */}
+        <Route path="*" element={<NotFoundPage isInsideDashboard={Boolean(token && user)} />} />
+      </Routes>
       </Suspense>
   );
 };
 
 export const App: React.FC = () => {
   return (
-    <Router>
-      <AppContent />
-    </Router>
+    <ErrorBoundary>
+      <Router>
+        <AppContent />
+      </Router>
+    </ErrorBoundary>
   );
 };
 

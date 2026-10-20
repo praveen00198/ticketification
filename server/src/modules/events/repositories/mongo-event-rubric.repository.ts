@@ -80,7 +80,7 @@ export class MongoEventRubricRepository {
         eventId: new mongoose.Types.ObjectId(eventId),
       },
       { $set: data },
-      { new: true }
+      { returnDocument: 'after' }
     ).exec();
   }
 

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   Ticket,
@@ -14,6 +14,8 @@ import {
   Eye,
   EyeOff,
   UserPlus,
+  RefreshCw,
+  WifiOff,
 } from 'lucide-react';
 import { apiClient } from '../api/client';
 
@@ -31,25 +33,16 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToRegist
   const [error, setError] = useState<string | null>(null);
   const [accountNotFound, setAccountNotFound] = useState(false);
 
+  const [isNetworkError, setIsNetworkError] = useState(false);
+
   const passwordInputRef = useRef<HTMLInputElement>(null);
-  const redirectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const searchParams = new URLSearchParams(window.location.search);
   const redirectTarget = searchParams.get('redirect') || '/events';
 
-  useEffect(() => {
-    return () => {
-      if (redirectTimeoutRef.current) {
-        clearTimeout(redirectTimeoutRef.current);
-      }
-    };
-  }, []);
-
   const handleEmailChange = (val: string) => {
-    if (redirectTimeoutRef.current) {
-      clearTimeout(redirectTimeoutRef.current);
-    }
     setAccountNotFound(false);
+    setIsNetworkError(false);
     setEmail(val);
   };
 
@@ -63,9 +56,6 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToRegist
   };
 
   const handleNavigateToSignup = () => {
-    if (redirectTimeoutRef.current) {
-      clearTimeout(redirectTimeoutRef.current);
-    }
     if (onNavigateToRegister) {
       onNavigateToRegister();
     } else {
@@ -75,12 +65,10 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToRegist
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (redirectTimeoutRef.current) {
-      clearTimeout(redirectTimeoutRef.current);
-    }
     setLoading(true);
     setError(null);
     setAccountNotFound(false);
+    setIsNetworkError(false);
 
     try {
       const res: any = await apiClient.post('/auth/login', { email: email.trim(), password });
@@ -89,29 +77,52 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToRegist
         navigate(redirectTarget);
       }
     } catch (err: any) {
+      const hasResponse = Boolean(err?.response);
+      const status = err?.response?.status;
       const responseData = err?.response?.data;
-      const errorCode = responseData?.error?.code;
-      const errorMessage =
+      const errorCode = responseData?.error?.code || responseData?.code;
+
+      if (!hasResponse || err?.code === 'ERR_NETWORK') {
+        // Network / connectivity / server offline: NEVER classify as missing account!
+        setIsNetworkError(true);
+        setAccountNotFound(false);
+        setError('Unable to reach the server. Please check your internet connection and try again.');
+        return;
+      }
+
+      if (status >= 500) {
+        // Server-side unexpected failure: do NOT classify as missing account!
+        setIsNetworkError(true);
+        setAccountNotFound(false);
+        setError('The authentication server is temporarily unavailable. Please try again in a few moments.');
+        return;
+      }
+
+      if (status === 401 && errorCode === 'ACCOUNT_NOT_FOUND') {
+        // Explicit authoritative account-not-found from completed backend request
+        setAccountNotFound(true);
+        setIsNetworkError(false);
+        setError(null);
+        return;
+      }
+
+      if (status === 401 && errorCode === 'INVALID_CREDENTIALS') {
+        // Incorrect password - account exists but credentials invalid
+        setAccountNotFound(false);
+        setIsNetworkError(false);
+        setError(responseData?.error?.message || 'Incorrect password. Please verify your credentials and try again.');
+        return;
+      }
+
+      // Any other client or validation error
+      setAccountNotFound(false);
+      setIsNetworkError(false);
+      setError(
         responseData?.error?.message ||
         responseData?.message ||
         err?.message ||
-        'Login failed. Please verify your email and password.';
-
-      if (
-        errorCode === 'ACCOUNT_NOT_FOUND' ||
-        errorMessage.toLowerCase().includes('no ticketification account') ||
-        responseData?.error?.details?.notFound === true
-      ) {
-        setAccountNotFound(true);
-        setError('No Ticketification account exists with this email address.');
-        // Automatically redirect to registration with the email prefilled after 2.5 seconds
-        redirectTimeoutRef.current = setTimeout(() => {
-          handleNavigateToSignup();
-        }, 2500);
-      } else {
-        setAccountNotFound(false);
-        setError(errorMessage);
-      }
+        'Authentication failed. Please verify your credentials.'
+      );
     } finally {
       setLoading(false);
     }
@@ -220,7 +231,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToRegist
                 </p>
               </div>
 
-              {/* Account Not Found vs Error Banner */}
+              {/* Account Not Found Banner (Requires explicit user action, no auto-redirect) */}
               {accountNotFound ? (
                 <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-in fade-in">
                   <div className="flex items-start gap-2.5">
@@ -228,7 +239,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToRegist
                     <div>
                       <span className="font-bold text-amber-950">Account Not Found</span>
                       <p className="mt-0.5 text-amber-800">
-                        No Ticketification account exists for <span className="font-semibold">{email}</span>. Redirecting you to sign up...
+                        No Ticketification account exists for <span className="font-semibold">{email}</span>. You can sign up below to create a new account.
                       </p>
                     </div>
                   </div>
@@ -241,7 +252,27 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onNavigateToRegist
                     Create Account
                   </button>
                 </div>
+              ) : isNetworkError ? (
+                /* Connectivity / Server Error Banner (Includes retry action) */
+                <div className="p-4 rounded-xl bg-stone-100 border border-stone-300 text-stone-900 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-in fade-in">
+                  <div className="flex items-start gap-2.5">
+                    <WifiOff className="w-4 h-4 text-stone-700 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold text-stone-900">Connection Error</span>
+                      <p className="mt-0.5 text-stone-600">{error}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => handleSubmit(e as any)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-stone-900 hover:bg-black text-white text-xs font-bold rounded-lg transition-colors shrink-0 shadow-xs cursor-pointer self-start sm:self-auto"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Retry
+                  </button>
+                </div>
               ) : (
+                /* Standard Authentication Error Banner */
                 error && (
                   <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2.5">
                     <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />

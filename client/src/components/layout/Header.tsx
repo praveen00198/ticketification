@@ -189,7 +189,7 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
               <div className="hidden sm:flex items-center gap-2 pl-3 border-l border-zinc-800">
                 <div className="hidden lg:block text-right">
                   <div className="text-xs font-semibold text-zinc-200">
-                    {user.organizationName || user.name}
+                    {user.name}
                   </div>
                   <div className="text-[10px] text-zinc-400">
                     {user.role === 'SUPER_ADMIN'
@@ -197,8 +197,8 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
                       : user.role === 'ADMIN'
                       ? 'Platform Admin'
                       : user.isOnboarded
-                      ? 'Organizer Workspace'
-                      : 'Organizer'}
+                      ? `${user.organizationName || 'Organizer'}`
+                      : 'Attendee'}
                   </div>
                 </div>
 

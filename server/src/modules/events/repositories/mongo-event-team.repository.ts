@@ -159,7 +159,7 @@ export class MongoEventTeamRepository {
         eventId: new mongoose.Types.ObjectId(eventId),
       },
       { $set: updatePayload },
-      { new: true }
+      { returnDocument: 'after' }
     ).exec();
   }
 
@@ -187,7 +187,7 @@ export class MongoEventTeamRepository {
           },
         },
       },
-      { new: true }
+      { returnDocument: 'after' }
     ).exec();
   }
 
@@ -210,7 +210,7 @@ export class MongoEventTeamRepository {
           members: { email: memberEmail.toLowerCase().trim() },
         },
       },
-      { new: true }
+      { returnDocument: 'after' }
     ).exec();
   }
 

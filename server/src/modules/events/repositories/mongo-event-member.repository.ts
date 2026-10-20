@@ -97,7 +97,7 @@ export class MongoEventMemberRepository {
     if (!mongoose.Types.ObjectId.isValid(memberId)) return null;
 
     return await this.model
-      .findByIdAndUpdate(memberId, { $set: updates }, { new: true, runValidators: true })
+      .findByIdAndUpdate(memberId, { $set: updates }, { returnDocument: 'after', runValidators: true })
       .exec();
   }
 

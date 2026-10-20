@@ -10,7 +10,7 @@ interface EventContextType {
   error: string | null;
   setCurrentEvent: (event: EventItem | null) => void;
   selectEventById: (eventId: string) => void;
-  refreshEvents: () => Promise<void>;
+  refreshEvents: (preferredId?: string) => Promise<void>;
 }
 
 const EventContext = createContext<EventContextType | undefined>(undefined);
@@ -37,32 +37,39 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
-  const refreshEvents = useCallback(async () => {
+  const refreshEvents = useCallback(async (preferredId?: string) => {
     try {
       setLoading(true);
       setError(null);
       const data = await eventsApi.getEvents();
-      const eventsList = Array.isArray(data) ? data : ((data as any)?.events || []);
+      // Normalize API response data exactly once into a validated EventItem[]
+      const eventsList: EventItem[] = Array.isArray(data)
+        ? data
+        : Array.isArray((data as any)?.events)
+        ? (data as any).events
+        : [];
       setEvents(eventsList);
 
-      const savedId = localStorage.getItem('selected_event_id');
-      if (savedId) {
-        const matched = data.find((e) => e.id === savedId);
+      const targetId = preferredId || localStorage.getItem('selected_event_id');
+      if (targetId) {
+        const matched = eventsList.find((e) => e.id === targetId);
         if (matched) {
           setCurrentEventState(matched);
+          localStorage.setItem('selected_event_id', matched.id);
           return;
         }
       }
 
       // Default to first event if available
-      if (data.length > 0) {
-        setCurrentEventState(data[0]);
-        localStorage.setItem('selected_event_id', data[0].id);
+      if (eventsList.length > 0) {
+        setCurrentEventState(eventsList[0]);
+        localStorage.setItem('selected_event_id', eventsList[0].id);
       } else {
         setCurrentEventState(null);
+        localStorage.removeItem('selected_event_id');
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to load events');
+      setError(err?.message || 'Failed to load events');
     } finally {
       setLoading(false);
     }

@@ -85,7 +85,7 @@ export class MongoEventVerificationRepository {
           otpVerified: false,
         },
       },
-      { new: true }
+      { returnDocument: 'after' }
     );
   }
 
@@ -107,7 +107,7 @@ export class MongoEventVerificationRepository {
           otpExpiresAt: 1,
         },
       },
-      { new: true }
+      { returnDocument: 'after' }
     );
   }
 
@@ -124,7 +124,7 @@ export class MongoEventVerificationRepository {
       {
         $addToSet: { documentUrls: documentUrl },
       },
-      { new: true }
+      { returnDocument: 'after' }
     );
   }
 
@@ -141,7 +141,7 @@ export class MongoEventVerificationRepository {
       {
         $pull: { documentUrls: documentUrl },
       },
-      { new: true }
+      { returnDocument: 'after' }
     );
   }
 
@@ -166,7 +166,7 @@ export class MongoEventVerificationRepository {
           submittedAt: new Date(),
         },
       },
-      { new: true }
+      { returnDocument: 'after' }
     );
   }
 
@@ -190,7 +190,7 @@ export class MongoEventVerificationRepository {
           reviewNotes: reviewNotes || undefined,
         },
       },
-      { new: true }
+      { returnDocument: 'after' }
     );
   }
 

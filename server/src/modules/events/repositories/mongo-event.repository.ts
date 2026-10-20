@@ -126,7 +126,7 @@ export class MongoEventRepository {
       .findOneAndUpdate(
         { _id: id, ownerSupabaseId, status: 'DRAFT' },
         { $set: updates },
-        { new: true, runValidators: true }
+        { returnDocument: 'after', runValidators: true }
       )
       .exec();
   }
@@ -163,7 +163,7 @@ export class MongoEventRepository {
           $set: { status: newStatus, ...extraUpdates },
           $push: { statusHistory: historyEntry },
         },
-        { new: true, runValidators: true }
+        { returnDocument: 'after', runValidators: true }
       )
       .exec();
   }
@@ -434,7 +434,7 @@ export class MongoEventRepository {
           'registration.reconcileVersion': 1,
         },
       },
-      { new: true }
+      { returnDocument: 'after' }
     ).exec();
 
     return !!updated;
@@ -478,7 +478,7 @@ export class MongoEventRepository {
       };
     }
 
-    const updated = await this.model.findOneAndUpdate(query, update, { new: true }).exec();
+    const updated = await this.model.findOneAndUpdate(query, update, { returnDocument: 'after' }).exec();
     return !!updated;
   }
 

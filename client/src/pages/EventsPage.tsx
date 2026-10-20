@@ -22,7 +22,7 @@ import { RiMacbookLine, RiMicLine, RiMusic2Line, RiToolsLine } from '@remixicon/
 import { Button, Badge, Modal, Input, InView, AnimatedGroup } from '../components/ui';
 
 export const EventsPage: React.FC = () => {
-  const { events, currentEvent, setCurrentEvent, refreshEvents, loading } = useEvent();
+  const { events, currentEvent, setCurrentEvent, refreshEvents, loading, error: eventLoadError } = useEvent();
   const navigate = useNavigate();
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -54,7 +54,7 @@ export const EventsPage: React.FC = () => {
       setCreating(true);
       setError(null);
       const newEvent = await eventsApi.createEvent(formData);
-      await refreshEvents();
+      await refreshEvents(newEvent.id);
       setCurrentEvent(newEvent);
       setIsCreateOpen(false);
       setFormData({
@@ -135,6 +135,24 @@ export const EventsPage: React.FC = () => {
         <div className="text-center py-16 text-stone-400 text-xs font-medium p-8">
           <div className="w-7 h-7 rounded-full border-2 border-stone-300 border-t-stone-900 animate-spin mx-auto mb-2" />
           Loading your events...
+        </div>
+      ) : eventLoadError ? (
+        <div className="p-8 rounded-2xl bg-white border border-stone-200/90 text-center space-y-4 max-w-lg mx-auto my-8 shadow-xs">
+          <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-200">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-stone-900">Failed to Load Events</h3>
+            <p className="text-xs text-stone-500 mt-1">{eventLoadError}</p>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => refreshEvents()}
+            className="!rounded-full px-5 py-2"
+          >
+            Retry Loading Events
+          </Button>
         </div>
       ) : events.length === 0 ? (
         <div className="py-2 sm:py-4 space-y-6">

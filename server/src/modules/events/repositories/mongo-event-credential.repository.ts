@@ -25,7 +25,7 @@ export class MongoEventCredentialRepository {
     const counter = await EventSequenceCounterModel.findOneAndUpdate(
       { eventId: eventObjId },
       { $inc: { lastSequenceNumber: 1 } },
-      { new: true, upsert: true }
+      { returnDocument: 'after', upsert: true }
     );
 
     return counter.lastSequenceNumber;
@@ -42,7 +42,7 @@ export class MongoEventCredentialRepository {
     const counter = await EventSequenceCounterModel.findOneAndUpdate(
       { eventId: eventObjId },
       { $inc: { lastSequenceNumber: count } },
-      { new: true, upsert: true }
+      { returnDocument: 'after', upsert: true }
     );
 
     // If counter now has e.g. 50 after adding 10, the block is 41..50
@@ -412,7 +412,7 @@ export class MongoEventCredentialRepository {
         eventId: new mongoose.Types.ObjectId(eventId),
       },
       { $set: updateDoc },
-      { new: true }
+      { returnDocument: 'after' }
     );
   }
 
@@ -443,7 +443,7 @@ export class MongoEventCredentialRepository {
         eventId: new mongoose.Types.ObjectId(eventId),
       },
       { $set: updates },
-      { new: true }
+      { returnDocument: 'after' }
     );
   }
 
@@ -476,7 +476,7 @@ export class MongoEventCredentialRepository {
         },
         $inc: { checkInCount: 1 },
       },
-      { new: true }
+      { returnDocument: 'after' }
     );
   }
 
@@ -523,7 +523,7 @@ export class MongoEventCredentialRepository {
           firstCheckedInAt: now,
         },
       },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (doc) return doc;
@@ -537,7 +537,7 @@ export class MongoEventCredentialRepository {
         usagePolicy: { $in: ['REUSABLE', 'REUSABLE_WORKER'] },
       },
       updateDoc,
-      { new: true }
+      { returnDocument: 'after' }
     );
   }
 

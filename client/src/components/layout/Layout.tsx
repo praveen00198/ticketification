@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useLocation, useNavigate, Link } from 'react-router-dom';
+import { useLocation, useNavigate, Link, Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import {
   ChevronRight,
@@ -19,6 +19,7 @@ import {
   Award,
 } from 'lucide-react';
 import { useEvent } from '../../context/EventContext';
+import { isHostOrOrganizer } from '../../utils/permissions';
 
 interface LayoutProps {
   user: {
@@ -30,13 +31,14 @@ interface LayoutProps {
     organizationName?: string;
   } | null;
   onLogout: () => void;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { currentEvent } = useEvent();
+  const { currentEvent, events } = useEvent();
+  const isHost = isHostOrOrganizer(user, events.length > 0);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
@@ -217,8 +219,8 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
 
           {/* Right Header Actions (Minimal & Clean) */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            {/* Onboarding Alert Pill */}
-            {user && !user.isOnboarded && (
+            {/* Onboarding Alert Pill (Restricted to hosts who haven't completed profile) */}
+            {isHost && !user?.isOnboarded && (
               <button
                 onClick={() => navigate('/onboarding')}
                 className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-amber-800 bg-amber-500/10 border border-amber-600/20 rounded-full hover:bg-amber-500/15 transition-colors cursor-pointer"
@@ -228,7 +230,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
               </button>
             )}
 
-            {/* Quick Action: New Event */}
+            {/* Quick Action: New Event (Available to all users to start hosting anytime) */}
             <button
               onClick={() => navigate('/events/create')}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-stone-900 hover:bg-black rounded-full shadow-2xs transition-all active:scale-95 cursor-pointer"
@@ -237,15 +239,17 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
               <span>New Event</span>
             </button>
 
-            {/* Quick Action: Scan / Turnstiles */}
-            <button
-              onClick={() => navigate('/scan')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-stone-700 hover:text-stone-900 hover:bg-stone-200/60 rounded-xl transition-colors cursor-pointer"
-            >
-              <QrCode className="w-3.5 h-3.5 text-stone-600" />
-              <span className="hidden sm:inline">Turnstiles</span>
-              <span className="sm:hidden text-[11px]">Scan</span>
-            </button>
+            {/* Quick Action: Scan / Turnstiles (Strictly for hosts/admins with turnstile permissions) */}
+            {isHost && (
+              <button
+                onClick={() => navigate('/scan')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-stone-700 hover:text-stone-900 hover:bg-stone-200/60 rounded-xl transition-colors cursor-pointer"
+              >
+                <QrCode className="w-3.5 h-3.5 text-stone-600" />
+                <span className="hidden sm:inline">Turnstiles</span>
+                <span className="sm:hidden text-[11px]">Scan</span>
+              </button>
+            )}
           </div>
         </header>
 
@@ -256,7 +260,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
             : 'p-5 sm:p-7 lg:p-9'
         }`}>
           <div className="w-full flex-1 flex flex-col">
-            {children}
+            {children || <Outlet />}
           </div>
         </main>
       </div>

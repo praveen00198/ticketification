@@ -371,7 +371,7 @@ export class MongoEventCredentialTemplateRepository {
     data: Partial<IEventCredentialTemplateDocument>
   ): Promise<IEventCredentialTemplateDocument | null> {
     if (!mongoose.Types.ObjectId.isValid(id)) return null;
-    return EventCredentialTemplateModel.findByIdAndUpdate(id, data, { new: true }).exec();
+    return EventCredentialTemplateModel.findByIdAndUpdate(id, data, { returnDocument: 'after' }).exec();
   }
 
   async setDefault(
@@ -391,7 +391,7 @@ export class MongoEventCredentialTemplateRepository {
     return EventCredentialTemplateModel.findOneAndUpdate(
       { _id: objTemplateId, eventId: objEventId },
       { $set: { isDefault: true } },
-      { new: true }
+      { returnDocument: 'after' }
     ).exec();
   }
 

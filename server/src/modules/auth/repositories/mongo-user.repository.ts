@@ -85,7 +85,7 @@ export class MongoUserRepository {
     return UserModel.findOneAndUpdate(
       { supabaseUserId },
       { $set: { platformRole: role } },
-      { new: true }
+      { returnDocument: 'after' }
     ).exec();
   }
 
@@ -96,7 +96,7 @@ export class MongoUserRepository {
     return UserModel.findOneAndUpdate(
       { supabaseUserId },
       { $set: { status } },
-      { new: true }
+      { returnDocument: 'after' }
     ).exec();
   }
 
@@ -107,7 +107,7 @@ export class MongoUserRepository {
     return UserModel.findOneAndUpdate(
       { supabaseUserId },
       { $set: { passwordHash } },
-      { new: true }
+      { returnDocument: 'after' }
     ).exec();
   }
 
@@ -159,7 +159,7 @@ export class MongoUserRepository {
           hostVerificationStatus: 'UNVERIFIED',
         },
       },
-      { new: true }
+      { returnDocument: 'after' }
     ).exec();
   }
 
@@ -209,7 +209,7 @@ export class MongoUserRepository {
     return UserModel.findOneAndUpdate(
       { supabaseUserId },
       { $set: setFields },
-      { new: true }
+      { returnDocument: 'after' }
     ).exec();
   }
 

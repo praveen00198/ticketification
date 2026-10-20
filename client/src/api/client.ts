@@ -203,7 +203,8 @@ apiClient.interceptors.response.use(
       message = 'The service is temporarily unreachable. Please try again in a few moments.';
     }
 
-    return Promise.reject(new Error(message));
+    error.message = message;
+    return Promise.reject(error);
   }
 );
 

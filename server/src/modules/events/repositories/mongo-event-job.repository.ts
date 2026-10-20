@@ -58,7 +58,7 @@ export class MongoEventJobRepository {
           startedAt: new Date(),
         },
       },
-      { new: true }
+      { returnDocument: 'after' }
     ).exec();
   }
 
@@ -138,7 +138,7 @@ export class MongoEventJobRepository {
       }
     }
 
-    return EventJobModel.findOneAndUpdate(query, update, { new: true }).exec();
+    return EventJobModel.findOneAndUpdate(query, update, { returnDocument: 'after' }).exec();
   }
 
   /**
@@ -189,7 +189,7 @@ export class MongoEventJobRepository {
           lockExpiresAt: null,
         },
       },
-      { new: true }
+      { returnDocument: 'after' }
     ).exec();
   }
 
@@ -257,7 +257,7 @@ export class MongoEventJobRepository {
       }
     }
 
-    return EventJobModel.findOneAndUpdate(query, update, { new: true }).exec();
+    return EventJobModel.findOneAndUpdate(query, update, { returnDocument: 'after' }).exec();
   }
 
   /**
@@ -280,7 +280,7 @@ export class MongoEventJobRepository {
     return EventJobModel.findByIdAndUpdate(
       jobId,
       { $set: { payload } },
-      { new: true }
+      { returnDocument: 'after' }
     ).exec();
   }
 
@@ -319,7 +319,7 @@ export class MongoEventJobRepository {
           lockExpiresAt: expiresAt,
         },
       },
-      { new: true }
+      { returnDocument: 'after' }
     ).exec();
 
     return !!updated;
@@ -393,7 +393,7 @@ export class MongoEventJobRepository {
         },
         $inc: { attempts: 1 },
       },
-      { new: true }
+      { returnDocument: 'after' }
     ).exec();
   }
 
@@ -448,7 +448,7 @@ export class MongoEventJobRepository {
         },
         $inc: { attempts: 1 },
       },
-      { sort: { createdAt: 1 }, new: true }
+      { sort: { createdAt: 1 }, returnDocument: 'after' }
     ).exec();
   }
 
@@ -497,7 +497,7 @@ export class MongoEventJobRepository {
           nextRunAt: nextRun,
         },
       },
-      { new: true }
+      { returnDocument: 'after' }
     ).exec();
   }
 
@@ -538,7 +538,7 @@ export class MongoEventJobRepository {
               lockExpiresAt: null,
             },
           },
-          { new: true }
+          { returnDocument: 'after' }
         ).exec();
         if (failedJob) failed++;
       } else {
@@ -557,7 +557,7 @@ export class MongoEventJobRepository {
               nextRunAt: new Date(),
             },
           },
-          { new: true }
+          { returnDocument: 'after' }
         ).exec();
         if (recoveredJob) recovered++;
       }
@@ -582,7 +582,7 @@ export class MongoEventJobRepository {
           completedAt: new Date(),
         },
       },
-      { new: true }
+      { returnDocument: 'after' }
     ).exec();
   }
 

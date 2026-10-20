@@ -124,7 +124,7 @@ describe('Phase 2: MongoDB Application Identity & Coexistence Architecture', () 
       expect(updateSpy).toHaveBeenCalledWith(
         { supabaseUserId: 'sub-1' },
         { $set: { platformRole: 'ADMIN' } },
-        { new: true }
+        { returnDocument: 'after' }
       );
       expect(result?.platformRole).toBe('ADMIN');
 

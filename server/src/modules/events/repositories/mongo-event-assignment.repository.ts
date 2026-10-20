@@ -127,7 +127,7 @@ export class MongoEventAssignmentRepository {
     updates: Partial<IEventAssignmentDocument>
   ): Promise<IEventAssignmentDocument | null> {
     if (!mongoose.Types.ObjectId.isValid(assignmentId)) return null;
-    return await EventAssignmentModel.findByIdAndUpdate(assignmentId, { $set: updates }, { new: true })
+    return await EventAssignmentModel.findByIdAndUpdate(assignmentId, { $set: updates }, { returnDocument: 'after' })
       .populate('memberId', 'userEmail role permissions status')
       .exec();
   }
@@ -140,7 +140,7 @@ export class MongoEventAssignmentRepository {
     return await EventAssignmentModel.findByIdAndUpdate(
       assignmentId,
       { $push: { mentorshipLogs: log } },
-      { new: true }
+      { returnDocument: 'after' }
     )
       .populate('memberId', 'userEmail role permissions status')
       .exec();

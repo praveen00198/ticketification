@@ -116,7 +116,7 @@ export class MongoEventTaskRepository {
   ): Promise<IEventTaskDocument | null> {
     if (!mongoose.Types.ObjectId.isValid(taskId)) return null;
 
-    return await EventTaskModel.findByIdAndUpdate(taskId, { $set: updates }, { new: true })
+    return await EventTaskModel.findByIdAndUpdate(taskId, { $set: updates }, { returnDocument: 'after' })
       .populate('assignedMemberIds', 'userEmail role status permissions')
       .exec();
   }

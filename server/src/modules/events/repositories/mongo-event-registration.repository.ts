@@ -115,7 +115,7 @@ export class MongoEventRegistrationRepository {
     return await EventRegistrationModel.findOneAndUpdate(
       query,
       { $set: update },
-      { new: true }
+      { returnDocument: 'after' }
     ).exec();
   }
 
@@ -131,7 +131,7 @@ export class MongoEventRegistrationRepository {
         eventId: new mongoose.Types.ObjectId(eventId),
       },
       { $set: { teamId: tId } },
-      { new: true }
+      { returnDocument: 'after' }
     ).exec();
   }
 

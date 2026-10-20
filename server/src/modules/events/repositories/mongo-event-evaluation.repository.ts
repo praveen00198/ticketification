@@ -62,7 +62,7 @@ export class MongoEventEvaluationRepository {
     };
 
     return (await EventEvaluationModel.findOneAndUpdate(filter, update, {
-      new: true,
+      returnDocument: 'after',
       upsert: true,
       setDefaultsOnInsert: true,
     }).exec()) as IEventEvaluationDocument;

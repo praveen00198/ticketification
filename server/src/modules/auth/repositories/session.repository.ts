@@ -64,7 +64,7 @@ export class SessionRepository {
     return SessionModel.findOneAndUpdate(
       { tokenHash, revokedAt: null },
       { $set: { revokedAt: new Date(), replacedBy: replacedBy || null } },
-      { new: true }
+      { returnDocument: 'after' }
     ).exec();
   }
 

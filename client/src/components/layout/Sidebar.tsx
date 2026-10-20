@@ -3,15 +3,6 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   Ticket,
   Calendar,
-  Compass,
-  LayoutDashboard,
-  FileSpreadsheet,
-  QrCode,
-  Wallet,
-  Building2,
-  Sparkles,
-  Users,
-  Award,
   ChevronDown,
   Plus,
   KeyRound,
@@ -23,6 +14,11 @@ import {
 } from "lucide-react";
 import { useEvent } from "../../context/EventContext";
 import { ChangePasswordModal } from "../auth/ChangePasswordModal";
+import {
+  getNavigationCategories,
+  getUserDisplayRole,
+  NavCategory,
+} from "../../utils/permissions";
 
 interface SidebarProps {
   user: {
@@ -38,20 +34,6 @@ interface SidebarProps {
   onCloseMobile?: () => void;
   isCollapsed?: boolean;
   setIsCollapsed?: (collapsed: boolean) => void;
-}
-
-interface NavItem {
-  label: string;
-  path: string;
-  icon: React.ComponentType<{ className?: string }>;
-  badge?: string;
-  badgeColor?: string;
-  requiresEvent?: boolean;
-}
-
-interface NavCategory {
-  title: string;
-  items: NavItem[];
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -72,68 +54,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [eventMenuOpen, setEventMenuOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
-  // Category-wise navigation configuration
-  const categories: NavCategory[] = [
-    {
-      title: "Core & Overview",
-      items: [
-        { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
-        { label: "Events Catalog", path: "/events", icon: Calendar },
-        { label: "Explore Events", path: "/explore", icon: Compass },
-      ],
-    },
-    {
-      title: "Event Operations",
-      items: [
-        { label: "Import Guests", path: "/import", icon: FileSpreadsheet },
-        { label: "Issued Tickets", path: "/tickets", icon: Ticket },
-        {
-          label: "Scan & Turnstiles",
-          path: "/scan",
-          icon: QrCode,
-          badge: "Live",
-          badgeColor: "bg-stone-100 text-stone-800 border border-stone-200",
-        },
-        ...(currentEvent
-          ? [
-              {
-                label: "Staff Console",
-                path: `/events/${currentEvent.id}/staff-console`,
-                icon: Users,
-                requiresEvent: true,
-              },
-              {
-                label: "Judging & Mentors",
-                path: `/events/${currentEvent.id}/review-workspace`,
-                icon: Award,
-                requiresEvent: true,
-              },
-            ]
-          : []),
-      ],
-    },
-    {
-      title: "Attendee & Wallet",
-      items: [{ label: "My Pass Wallet", path: "/wallet", icon: Wallet }],
-    },
-    {
-      title: "Workspace & Setup",
-      items: [
-        {
-          label: "Organizer Setup",
-          path: "/onboarding",
-          icon: Sparkles,
-          badge: !user?.isOnboarded ? "Required" : undefined,
-          badgeColor: "bg-amber-100 text-amber-800",
-        },
-        {
-          label: "Organization Profile",
-          path: "/settings/profile",
-          icon: Building2,
-        },
-      ],
-    },
-  ];
+  // Category-wise dynamic navigation configuration filtered by user platform role and host capability
+  const categories: NavCategory[] = getNavigationCategories({
+    user,
+    hasEvents: events.length > 0,
+    currentEvent,
+  });
 
   const handleLinkClick = () => {
     if (isMobile && onCloseMobile) {
@@ -376,18 +302,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
                 <div className="min-w-0">
                   <div className="text-xs font-semibold text-stone-900 truncate group-hover:text-stone-950">
-                    {user.organizationName || user.name}
+                    {user.name}
                   </div>
                   <div className="text-[10px] text-stone-500 truncate flex items-center gap-1">
                     <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    <span>
-                      {user.role === "SUPER_ADMIN"
-                        ? "Super Admin"
-                        : user.role === "ADMIN"
-                          ? "Admin"
-                          : user.isOnboarded
-                            ? "Host"
-                            : "Setup Pending"}
+                    <span className="truncate">
+                      {getUserDisplayRole(user)}
+                      {user.organizationName ? ` • ${user.organizationName}` : ''}
                     </span>
                   </div>
                 </div>

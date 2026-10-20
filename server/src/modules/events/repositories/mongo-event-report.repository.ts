@@ -58,7 +58,7 @@ export class MongoEventReportRepository {
             ...(actionTaken ? { actionTaken } : {}),
           },
         },
-        { new: true, runValidators: true }
+        { returnDocument: 'after', runValidators: true }
       )
       .exec();
   }
