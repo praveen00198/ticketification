@@ -17,6 +17,7 @@ import {
   Ticket as TicketIcon,
 } from 'lucide-react';
 import { Button, Badge, Modal, Input, InView, AnimatedGroup, EmptyEventsState } from '../components/ui';
+import { formatLocalizedDate } from '../utils/date';
 
 const formatVenueLabel = (venue: any): string => {
   if (!venue) return '';
@@ -238,7 +239,7 @@ export const EventsPage: React.FC = () => {
                   <div className="space-y-2 text-xs text-stone-600 mb-5">
                     <div className="flex items-center gap-2">
                       <Calendar className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-                      <span className="font-medium text-zinc-800">{event.date}</span>
+                      <span className="font-medium text-zinc-800">{formatLocalizedDate(event.date)}</span>
                       {event.time && (
                         <span className="flex items-center gap-1 text-stone-400">
                           <Clock className="w-3 h-3 ml-1" />

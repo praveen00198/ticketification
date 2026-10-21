@@ -16,6 +16,8 @@ import {
 import { attendeeApi } from '../api/attendee';
 import { extractErrorMessage } from '../api/client';
 import { ROUTES } from '../routes/paths';
+import { formatLocalizedDate, formatLocalizedDateTime } from '../utils/date';
+import { formatVenueLabel } from '../utils/venue';
 
 export const EventHistoryPage: React.FC = () => {
   const [history, setHistory] = useState<any[]>([]);
@@ -214,15 +216,8 @@ export const EventHistoryPage: React.FC = () => {
               <tbody className="divide-y divide-stone-100 text-xs text-stone-700">
                 {filteredHistory.map((item) => {
                   const event = item.event || {};
-                  const eventDate = event.schedule?.startAt
-                    ? new Date(event.schedule.startAt).toLocaleDateString(undefined, { dateStyle: 'medium' })
-                    : 'TBD';
-                  const checkInTime = item.firstCheckedInAt
-                    ? new Date(item.firstCheckedInAt).toLocaleDateString(undefined, {
-                        dateStyle: 'short',
-                        timeStyle: 'short',
-                      })
-                    : '—';
+                  const eventDate = formatLocalizedDate(event.schedule?.startAt);
+                  const checkInTime = item.firstCheckedInAt ? formatLocalizedDateTime(item.firstCheckedInAt) : '—';
 
                   return (
                     <tr key={item.registrationId} className="hover:bg-stone-50/50 transition-colors">
@@ -231,7 +226,7 @@ export const EventHistoryPage: React.FC = () => {
                         <div className="flex items-center gap-2 text-[11px] text-stone-500 mt-0.5">
                           <span className="capitalize">{event.eventType?.toLowerCase() || 'Event'}</span>
                           <span>•</span>
-                          <span className="truncate max-w-[200px]">{event.venue?.name || event.venue?.type || 'Venue'}</span>
+                          <span className="truncate max-w-[200px]">{formatVenueLabel(event.venue)}</span>
                         </div>
                       </td>
 

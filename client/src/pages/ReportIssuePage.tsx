@@ -13,6 +13,7 @@ import {
 import { supportApi, SupportReportItem } from '../api/support';
 import { extractErrorMessage } from '../api/client';
 import { useEvent } from '../context/EventContext';
+import { formatLocalizedDateTime } from '../utils/date';
 
 export const ReportIssuePage: React.FC = () => {
   const { events } = useEvent();
@@ -300,7 +301,7 @@ export const ReportIssuePage: React.FC = () => {
                       )}
 
                       <div className="text-[10px] text-stone-400 pt-0.5">
-                        Submitted {new Date(report.createdAt).toLocaleDateString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                        Submitted {formatLocalizedDateTime(report.createdAt)}
                       </div>
                     </div>
                   );

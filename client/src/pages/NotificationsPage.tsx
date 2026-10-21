@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Bell,
   Calendar,
@@ -8,9 +8,11 @@ import {
   Check,
   Loader2,
   RefreshCw,
+  AlertCircle,
 } from 'lucide-react';
 import { attendeeApi } from '../api/attendee';
-import { apiClient } from '../api/client';
+import { apiClient, extractErrorMessage } from '../api/client';
+import { formatLocalizedDateTime } from '../utils/date';
 
 interface NotificationItem {
   id: string;
@@ -21,41 +23,74 @@ interface NotificationItem {
   read: boolean;
 }
 
-const READ_IDS_KEY = 'ticketification_read_notification_ids';
-
 export const NotificationsPage: React.FC = () => {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'ALL' | 'UNREAD' | 'READ'>('ALL');
-  const [readIds, setReadIds] = useState<Set<string>>(() => {
-    try {
-      const saved = localStorage.getItem(READ_IDS_KEY);
-      return saved ? new Set(JSON.parse(saved)) : new Set();
-    } catch {
-      return new Set();
-    }
-  });
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [readIds, setReadIds] = useState<Set<string>>(new Set());
 
-  const loadRealActivityNotifications = async () => {
-    setLoading(true);
+  const getStorageKey = (uid: string) => `ticketification_read_notifications_${uid}`;
+
+  const loadUserAndReadState = useCallback(async () => {
     try {
-      const [regRes, passesRes] = await Promise.allSettled([
+      const meRes: any = await apiClient.get('/auth/me');
+      const user = meRes?.data || meRes?.user;
+      if (user && user.id) {
+        setCurrentUserId(user.id);
+        const saved = localStorage.getItem(getStorageKey(user.id));
+        if (saved) {
+          try {
+            setReadIds(new Set(JSON.parse(saved)));
+          } catch {
+            setReadIds(new Set());
+          }
+        }
+        return user.id;
+      }
+    } catch {
+      // In case of auth load error, continue with anonymous isolation
+    }
+    return null;
+  }, []);
+
+  const loadRealActivityNotifications = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Resolve user ID first to ensure proper per-user read/unread scoping
+      const uid = await loadUserAndReadState();
+      const currentReadSet = uid
+        ? (() => {
+            try {
+              const saved = localStorage.getItem(getStorageKey(uid));
+              return saved ? new Set<string>(JSON.parse(saved)) : new Set<string>();
+            } catch {
+              return new Set<string>();
+            }
+          })()
+        : new Set<string>();
+
+      const [regRes, passesRes] = await Promise.all([
         attendeeApi.getMyRegistrations(),
         apiClient.get('/tickets/my-passes'),
       ]);
 
       const items: NotificationItem[] = [];
 
-      // Derive notifications from confirmed and pending registrations
-      if (regRes.status === 'fulfilled' && regRes.value.success && Array.isArray(regRes.value.data)) {
-        for (const reg of regRes.value.data) {
+      // 1. Derive real notifications from confirmed/pending registrations
+      if (regRes.success && Array.isArray(regRes.data)) {
+        for (const reg of regRes.data) {
           const eventName = reg.event?.name || reg.eventId?.name || 'Registered Event';
           const regId = reg.id || reg._id;
           const status = reg.status || 'CONFIRMED';
           const dateStr = reg.createdAt || new Date().toISOString();
+          const notifId = `reg-${regId}`;
 
           items.push({
-            id: `reg-${regId}`,
+            id: notifId,
             title:
               status === 'CONFIRMED'
                 ? `Registration Confirmed: ${eventName}`
@@ -70,46 +105,51 @@ export const NotificationsPage: React.FC = () => {
                 : `Your registration request is pending host review.`,
             category: 'REGISTRATION',
             timestamp: dateStr,
-            read: readIds.has(`reg-${regId}`),
+            read: currentReadSet.has(notifId),
           });
         }
       }
 
-      // Derive notifications from verified attendance / check-in events
-      if (passesRes.status === 'fulfilled' && passesRes.value?.data?.passes && Array.isArray(passesRes.value.data.passes)) {
-        for (const pass of passesRes.value.data.passes) {
+      // 2. Derive real notifications from verified turnstile check-in passes
+      const passesData = passesRes?.data?.passes || passesRes?.data;
+      if (Array.isArray(passesData)) {
+        for (const pass of passesData) {
           if (pass.status === 'USED' || pass.checkedIn) {
             const passId = pass.id || pass._id;
             const eventName = pass.eventName || 'Event';
+            const notifId = `checkin-${passId}`;
+
             items.push({
-              id: `checkin-${passId}`,
+              id: notifId,
               title: `Turnstile Check-In Verified: ${eventName}`,
               message: `Your gate credential was scanned and successfully verified at the venue turnstile.`,
               category: 'EVENT',
               timestamp: pass.checkedInAt || pass.updatedAt || new Date().toISOString(),
-              read: readIds.has(`checkin-${passId}`),
+              read: currentReadSet.has(notifId),
             });
           }
         }
       }
 
-      // Sort newest first
+      // Sort newest notifications first
       items.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       setNotifications(items);
-    } catch {
-      setNotifications([]);
+    } catch (err: any) {
+      setError(extractErrorMessage(err, 'Failed to retrieve notification updates. Please retry.'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [loadUserAndReadState]);
 
   useEffect(() => {
     loadRealActivityNotifications();
-  }, []);
+  }, [loadRealActivityNotifications]);
 
   const persistReadIds = (newSet: Set<string>) => {
     setReadIds(newSet);
-    localStorage.setItem(READ_IDS_KEY, JSON.stringify(Array.from(newSet)));
+    if (currentUserId) {
+      localStorage.setItem(getStorageKey(currentUserId), JSON.stringify(Array.from(newSet)));
+    }
   };
 
   const toggleReadStatus = (id: string) => {
@@ -195,7 +235,7 @@ export const NotificationsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Filter Tabs */}
+      {/* Filter Tabs & Count */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-1.5 bg-stone-100 p-1 rounded-lg border border-stone-200">
           {(['ALL', 'UNREAD', 'READ'] as const).map((tab) => (
@@ -222,13 +262,29 @@ export const NotificationsPage: React.FC = () => {
         </span>
       </div>
 
+      {/* Error state with explicit retry */}
+      {error && (
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <button
+            onClick={loadRealActivityNotifications}
+            className="px-3 py-1.5 text-xs font-semibold bg-white border border-rose-300 rounded-lg text-rose-700 hover:bg-rose-100 transition-colors shrink-0 shadow-2xs"
+          >
+            Retry Loading
+          </button>
+        </div>
+      )}
+
       {/* Loading state */}
       {loading ? (
         <div className="py-20 flex flex-col items-center justify-center text-stone-400 gap-3">
           <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
           <p className="text-xs font-medium text-stone-500">Checking for event updates...</p>
         </div>
-      ) : filteredNotifications.length === 0 ? (
+      ) : !error && filteredNotifications.length === 0 ? (
         <div className="py-16 text-center border border-dashed border-stone-200 rounded-2xl bg-stone-50/50 p-8 space-y-4">
           <div className="w-12 h-12 rounded-full bg-stone-100 flex items-center justify-center mx-auto text-stone-400">
             <Bell className="w-6 h-6" />
@@ -246,7 +302,7 @@ export const NotificationsPage: React.FC = () => {
             </p>
           </div>
         </div>
-      ) : (
+      ) : !error && (
         <div className="bg-white border border-stone-200 rounded-xl divide-y divide-stone-100 overflow-hidden shadow-2xs">
           {filteredNotifications.map((notif) => (
             <div
@@ -283,10 +339,7 @@ export const NotificationsPage: React.FC = () => {
                     {notif.message}
                   </p>
                   <span className="text-[11px] text-stone-400 block pt-0.5">
-                    {new Date(notif.timestamp).toLocaleString(undefined, {
-                      dateStyle: 'medium',
-                      timeStyle: 'short',
-                    })}
+                    {formatLocalizedDateTime(notif.timestamp)}
                   </span>
                 </div>
               </div>

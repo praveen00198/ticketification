@@ -17,6 +17,8 @@ import {
 import { attendeeApi } from '../api/attendee';
 import { extractErrorMessage } from '../api/client';
 import { ROUTES } from '../routes/paths';
+import { formatLocalizedDateTime } from '../utils/date';
+import { formatVenueLabel } from '../utils/venue';
 
 export const MyRegistrationsPage: React.FC = () => {
   const [registrations, setRegistrations] = useState<any[]>([]);
@@ -200,8 +202,8 @@ export const MyRegistrationsPage: React.FC = () => {
           {filteredRegistrations.map((reg) => {
             const event = reg.event || reg.eventId || {};
             const eventId = event._id || reg.eventId;
-            const startAt = event.schedule?.startAt ? new Date(event.schedule.startAt).toLocaleDateString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'TBD';
-            const venue = event.venue?.name || event.venue?.type || 'Online / Venue TBD';
+            const startAt = formatLocalizedDateTime(event.schedule?.startAt);
+            const venue = formatVenueLabel(event.venue);
             const isCancelled = reg.status === 'CANCELLED';
 
             return (

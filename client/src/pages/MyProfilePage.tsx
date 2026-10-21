@@ -26,13 +26,14 @@ export const MyProfilePage: React.FC = () => {
       setLoading(true);
       try {
         const res: any = await apiClient.get('/auth/me');
-        if (res.user) {
-          setName(res.user.name || '');
-          setEmail(res.user.email || '');
-          setPhone(res.user.phone || '');
-          setBio(res.user.bio || '');
-          setAvatarUrl(res.user.avatarUrl || '');
-          setRole(res.user.role || 'USER');
+        const userObj = res?.data || res?.user;
+        if (userObj) {
+          setName(userObj.name || '');
+          setEmail(userObj.email || '');
+          setPhone(userObj.phone || '');
+          setBio(userObj.bio || '');
+          setAvatarUrl(userObj.avatarUrl || '');
+          setRole(userObj.role || 'USER');
         }
       } catch (err: any) {
         setNotification({

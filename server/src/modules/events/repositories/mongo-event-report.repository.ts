@@ -64,6 +64,23 @@ export class MongoEventReportRepository {
   }
 
   /**
+   * Find reports strictly submitted by a specific authenticated user.
+   * Excludes unauthenticated / anonymous submissions to prevent cross-account leakage.
+   */
+  async findByReporterUserId(reporterUserId: string): Promise<IEventReportDocument[]> {
+    if (!reporterUserId) return [];
+    const orConditions: any[] = [{ reporterUserId }];
+    if (mongoose.Types.ObjectId.isValid(reporterUserId)) {
+      orConditions.push({ reporterUserId: new mongoose.Types.ObjectId(reporterUserId) });
+    }
+    return await this.model
+      .find({ $or: orConditions })
+      .populate('eventId', 'name slug date venue')
+      .sort({ createdAt: -1 })
+      .exec();
+  }
+
+  /**
    * Find reports submitted by a specific user or email.
    */
   async findByReporter(reporterUserId?: string, reporterEmail?: string): Promise<IEventReportDocument[]> {

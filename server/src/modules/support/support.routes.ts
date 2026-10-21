@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { mongoEventReportRepository } from '../events/repositories/mongo-event-report.repository';
 import { authMiddleware, AuthenticatedRequest } from '../../middlewares/auth.middleware';
-import { ValidationError } from '../../middlewares/error.middleware';
+import { ValidationError, AuthenticationError } from '../../middlewares/error.middleware';
 import { REPORT_CATEGORIES } from '../../db/mongo/models/event-report.model';
 
 const router = Router();
@@ -78,24 +78,27 @@ router.post('/report', async (req: Request, res: Response, next: NextFunction) =
   try {
     const { eventId, category, reason, reporterEmail, reporterName } = req.body;
     let user = (req as any).user;
-    if (!user && req.headers.authorization?.startsWith('Bearer ')) {
-      try {
-        const token = req.headers.authorization.split(' ')[1]?.trim();
-        if (token) {
-          const { verifyJwtToken } = await import('../../utils/local-auth');
-          const payload = verifyJwtToken(token);
-          if (payload?.id) {
-            user = { id: String(payload.id), email: payload.email, name: (payload as any).name };
-          }
-        }
-      } catch {
-        // Fallback to anonymous reporter
+    const authHeader = req.headers.authorization;
+
+    if (!user && authHeader) {
+      if (!authHeader.startsWith('Bearer ')) {
+        throw new AuthenticationError('Invalid authentication header format.');
       }
+      const token = authHeader.split(' ')[1]?.trim();
+      if (!token) {
+        throw new AuthenticationError('Authentication required. Bearer token is empty.');
+      }
+      const { verifyJwtToken } = await import('../../utils/local-auth');
+      const payload = verifyJwtToken(token);
+      if (!payload || !payload.id) {
+        throw new AuthenticationError('Invalid or expired authentication token.');
+      }
+      user = { id: String(payload.id), email: payload.email, name: (payload as any).name };
     }
 
     const email = (user?.email || reporterEmail || '').trim().toLowerCase();
     const name = (user?.name || reporterName || '').trim() || null;
-    const userId = user?.id || user?.sub || null;
+    const userId = user?.id ? String(user.id) : null;
 
     if (!email || !email.includes('@')) {
       throw new ValidationError('A valid contact email address is required.');
@@ -136,9 +139,11 @@ router.post('/report', async (req: Request, res: Response, next: NextFunction) =
 router.get('/my-reports', authMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const userId = req.user?.id;
-    const email = req.user?.email;
+    if (!userId) {
+      throw new AuthenticationError('Unauthorized. Please authenticate first.');
+    }
 
-    const reports = await mongoEventReportRepository.findByReporter(userId, email);
+    const reports = await mongoEventReportRepository.findByReporterUserId(userId);
 
     res.json({
       success: true,

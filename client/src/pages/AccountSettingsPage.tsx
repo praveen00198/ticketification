@@ -7,15 +7,19 @@ import {
   Save,
   UserCheck,
   Loader2,
+  Info,
 } from 'lucide-react';
 import { apiClient, extractErrorMessage } from '../api/client';
+import {
+  DateFormatOption,
+  getStoredUserPreferences,
+  setStoredUserPreferences,
+} from '../utils/date';
 
 export const AccountSettingsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
-  const [timezone, setTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
-  const [dateFormat, setDateFormat] = useState('YYYY-MM-DD');
-  const [notifyOnTicketIssued, setNotifyOnTicketIssued] = useState(true);
-  const [notifyOnScheduleChange, setNotifyOnScheduleChange] = useState(true);
+  const [timezone, setTimezone] = useState(() => getStoredUserPreferences().timezone || 'UTC');
+  const [dateFormat, setDateFormat] = useState<DateFormatOption>(() => getStoredUserPreferences().dateFormat || 'YYYY-MM-DD');
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,19 +28,23 @@ export const AccountSettingsPage: React.FC = () => {
   useEffect(() => {
     const fetchUser = async () => {
       setLoading(true);
+      setError(null);
       try {
         const res: any = await apiClient.get('/auth/me');
-        if (res.user) {
-          setUserData(res.user);
-          if (res.user.preferences) {
-            if (res.user.preferences.timezone) setTimezone(res.user.preferences.timezone);
-            if (res.user.preferences.dateFormat) setDateFormat(res.user.preferences.dateFormat);
-            if (res.user.preferences.notifyOnTicketIssued !== undefined) {
-              setNotifyOnTicketIssued(Boolean(res.user.preferences.notifyOnTicketIssued));
+        const userObj = res?.data || res?.user;
+        if (userObj) {
+          setUserData(userObj);
+          if (userObj.preferences) {
+            if (userObj.preferences.timezone) {
+              setTimezone(userObj.preferences.timezone);
             }
-            if (res.user.preferences.notifyOnScheduleChange !== undefined) {
-              setNotifyOnScheduleChange(Boolean(res.user.preferences.notifyOnScheduleChange));
+            if (userObj.preferences.dateFormat) {
+              setDateFormat(userObj.preferences.dateFormat);
             }
+            setStoredUserPreferences({
+              timezone: userObj.preferences.timezone || timezone,
+              dateFormat: userObj.preferences.dateFormat || dateFormat,
+            });
           }
         }
       } catch (err: any) {
@@ -59,14 +67,15 @@ export const AccountSettingsPage: React.FC = () => {
         preferences: {
           timezone,
           dateFormat,
-          notifyOnTicketIssued,
-          notifyOnScheduleChange,
         },
       });
 
       if (res.success) {
+        setStoredUserPreferences({ timezone, dateFormat });
         setSavedSuccess(true);
         setTimeout(() => setSavedSuccess(false), 4000);
+      } else {
+        setError(res.error || 'Failed to update preferences.');
       }
     } catch (err: any) {
       setError(extractErrorMessage(err, 'Failed to save account preferences.'));
@@ -90,14 +99,14 @@ export const AccountSettingsPage: React.FC = () => {
       <div className="border-b border-stone-200 pb-5">
         <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Account Settings</h1>
         <p className="text-sm text-stone-500 mt-1">
-          Configure interface regional preferences, schedule display options, and alert preferences.
+          Configure regional clock formatting, timezone display, and platform localization.
         </p>
       </div>
 
       {savedSuccess && (
         <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>Preferences saved successfully to your account profile.</span>
+          <span>Regional preferences saved successfully and applied across your dashboard.</span>
         </div>
       )}
 
@@ -128,14 +137,19 @@ export const AccountSettingsPage: React.FC = () => {
               >
                 <option value="UTC">UTC (Universal Coordinated Time)</option>
                 <option value="America/New_York">Eastern Time (US / Canada)</option>
+                <option value="America/Chicago">Central Time (US / Canada)</option>
+                <option value="America/Denver">Mountain Time (US / Canada)</option>
                 <option value="America/Los_Angeles">Pacific Time (US / Canada)</option>
                 <option value="Europe/London">London (GMT / BST)</option>
+                <option value="Europe/Berlin">Central Europe (CET / CEST)</option>
+                <option value="Asia/Dubai">Gulf Standard Time (GST)</option>
                 <option value="Asia/Kolkata">India Standard Time (IST)</option>
                 <option value="Asia/Singapore">Singapore (SGT)</option>
                 <option value="Asia/Tokyo">Japan (JST)</option>
+                <option value="Australia/Sydney">Sydney (AEST / AEDT)</option>
               </select>
               <p className="text-[10px] text-stone-400 mt-1">
-                Converts event schedules and session start times to your local clock.
+                Converts event schedules, timestamps, and check-in logs to your preferred timezone.
               </p>
             </div>
 
@@ -145,58 +159,44 @@ export const AccountSettingsPage: React.FC = () => {
               </label>
               <select
                 value={dateFormat}
-                onChange={(e) => setDateFormat(e.target.value)}
+                onChange={(e) => setDateFormat(e.target.value as DateFormatOption)}
                 className="w-full px-3 py-2 rounded-lg border border-stone-300 bg-white text-stone-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               >
-                <option value="YYYY-MM-DD">YYYY-MM-DD (2026-10-21)</option>
-                <option value="DD/MM/YYYY">DD/MM/YYYY (21/10/2026)</option>
-                <option value="MM/DD/YYYY">MM/DD/YYYY (10/21/2026)</option>
+                <option value="YYYY-MM-DD">YYYY-MM-DD (ISO Standard)</option>
+                <option value="DD/MM/YYYY">DD/MM/YYYY (Day / Month / Year)</option>
+                <option value="MM/DD/YYYY">MM/DD/YYYY (Month / Day / Year)</option>
               </select>
+              <p className="text-[10px] text-stone-400 mt-1">
+                Controls date formatting throughout registrations, ticket lists, and turnstile reports.
+              </p>
             </div>
           </div>
         </div>
 
-        {/* Notifications */}
-        <div className="space-y-4 pt-2">
+        {/* Notifications & Communications Notice */}
+        <div className="space-y-3 pt-2">
           <div className="flex items-center gap-2 pb-2 border-b border-stone-100">
             <Bell className="w-4 h-4 text-stone-600" />
-            <h3 className="text-sm font-bold text-zinc-900">Communication Channels</h3>
+            <h3 className="text-sm font-bold text-zinc-900">Notifications & Delivery Channels</h3>
           </div>
 
-          <div className="space-y-3">
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={notifyOnTicketIssued}
-                onChange={(e) => setNotifyOnTicketIssued(e.target.checked)}
-                className="mt-0.5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
-              />
+          <div className="p-4 rounded-xl bg-stone-50/70 border border-stone-200/80 space-y-2 text-[11px] text-stone-600 leading-relaxed">
+            <div className="flex items-start gap-2.5">
+              <Info className="w-4 h-4 text-stone-500 shrink-0 mt-0.5" />
               <div>
-                <span className="font-semibold text-zinc-900">Ticket Issuance Notices</span>
-                <p className="text-[11px] text-stone-500">
-                  Receive email confirmation whenever a digital credential or gate badge is issued to your wallet.
+                <p className="font-semibold text-zinc-900">Dashboard In-App Notifications Active</p>
+                <p className="mt-0.5 text-stone-500">
+                  Confirmed event registrations, credential passes, and turnstile check-in records are automatically reflected in your in-app Notification Center.
+                </p>
+                <p className="mt-1 text-[10px] text-stone-400">
+                  External transactional email and SMS dispatch channels are currently in standby mode pending dedicated gateway configuration.
                 </p>
               </div>
-            </label>
-
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={notifyOnScheduleChange}
-                onChange={(e) => setNotifyOnScheduleChange(e.target.checked)}
-                className="mt-0.5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
-              />
-              <div>
-                <span className="font-semibold text-zinc-900">Schedule & Venue Relocation Alerts</span>
-                <p className="text-[11px] text-stone-500">
-                  Receive critical real-time alerts if an event organizer updates room, hall, or start time details.
-                </p>
-              </div>
-            </label>
+            </div>
           </div>
         </div>
 
-        {/* Account Metadata */}
+        {/* Account Identity Metadata */}
         {userData && (
           <div className="space-y-3 pt-2">
             <div className="flex items-center gap-2 pb-2 border-b border-stone-100">
@@ -229,7 +229,7 @@ export const AccountSettingsPage: React.FC = () => {
             {saving ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                Saving...
+                Saving Preferences...
               </>
             ) : (
               <>
