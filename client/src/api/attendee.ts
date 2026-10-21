@@ -116,6 +116,14 @@ export const attendeeApi = {
     return apiClient.post(`/events/${eventId}/my-team/join`, data);
   },
 
+  getMyRegistrations: async (): Promise<{ success: boolean; count: number; data: any[] }> => {
+    return apiClient.get('/attendee/registrations');
+  },
+
+  getMyAttendanceHistory: async (): Promise<{ success: boolean; count: number; data: any[] }> => {
+    return apiClient.get('/attendee/history');
+  },
+
   submitProject: async (
     eventId: string,
     data: { projectTitle?: string; projectDescription?: string; repoUrl?: string; demoUrl?: string }

@@ -1,16 +1,24 @@
 import { LucideIcon } from 'lucide-react';
 import {
-  LayoutDashboard,
-  Calendar,
   Compass,
+  CheckCircle2,
+  Wallet,
+  History,
+  Sparkles,
+  Calendar,
+  BarChart3,
+  Receipt,
+  RefreshCcw,
+  Bell,
+  HelpCircle,
+  AlertTriangle,
+  User,
+  Settings,
+  ShieldCheck,
+  Lock,
   FileSpreadsheet,
   Ticket,
   QrCode,
-  Users,
-  Award,
-  Wallet,
-  Sparkles,
-  Building2,
 } from 'lucide-react';
 
 export interface UserIdentity {
@@ -111,6 +119,7 @@ export function getUserDisplayRole(user?: UserIdentity | null): string {
 
 /**
  * Build centralized, role-filtered navigation structure based on verified capabilities.
+ * Implements the exact 8-group Normal User sidebar hierarchy.
  */
 export function getNavigationCategories({
   user,
@@ -119,82 +128,100 @@ export function getNavigationCategories({
   user: UserIdentity | null;
   currentEvent?: { id: string; name: string; createdBy?: string; ownerId?: string; ownerSupabaseId?: string } | null;
 }): NavCategory[] {
-  const hasEventOps = canManageEventOperations(user, currentEvent);
   const categories: NavCategory[] = [];
 
-  // 1. Core & Overview (Visible to all authenticated users)
+  // 1. Event Discovery
   categories.push({
-    title: 'Core & Overview',
+    title: 'Event Discovery',
     items: [
-      { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-      { label: 'Events Catalog', path: '/events', icon: Calendar },
       { label: 'Explore Events', path: '/explore', icon: Compass },
+      { label: 'My Registrations', path: '/registrations', icon: CheckCircle2 },
     ],
   });
 
-  // 2. Event Operations (Strictly restricted to verified event owners and platform admins with an active event)
-  if (hasEventOps && currentEvent) {
-    const operationalItems: NavItem[] = [
-      { label: 'Import Guests', path: '/import', icon: FileSpreadsheet, requiresHost: true },
-      { label: 'Issued Tickets', path: '/tickets', icon: Ticket, requiresHost: true },
-      {
-        label: 'Scan & Turnstiles',
-        path: '/scan',
-        icon: QrCode,
-        badge: 'Live',
-        badgeColor: 'bg-stone-100 text-stone-800 border border-stone-200',
-        requiresHost: true,
-      },
-      {
-        label: 'Staff Console',
-        path: `/events/${currentEvent.id}/staff-console`,
-        icon: Users,
-        requiresEvent: true,
-        requiresHost: true,
-      },
-      {
-        label: 'Judging & Mentors',
-        path: `/events/${currentEvent.id}/review-workspace`,
-        icon: Award,
-        requiresEvent: true,
-        requiresHost: true,
-      },
-    ];
-
-    categories.push({
-      title: 'Event Operations',
-      items: operationalItems,
-    });
-  }
-
-  // 3. Attendee & Wallet (Universal for all attendees and organizers)
+  // 2. Attendee Wallet
   categories.push({
-    title: 'Attendee & Wallet',
-    items: [{ label: 'My Pass Wallet', path: '/wallet', icon: Wallet }],
+    title: 'Attendee Wallet',
+    items: [
+      { label: 'My Passes', path: '/wallet', icon: Wallet },
+    ],
   });
 
-  // 4. Host & Workspace Management
-  if (hasOrganizerProfile(user)) {
+  // 3. My Activity
+  categories.push({
+    title: 'My Activity',
+    items: [
+      { label: 'Event History', path: '/history', icon: History },
+    ],
+  });
+
+  // 4. Event Hosting (Strict boundary: only Create Event, My Events, Reports & Analytics)
+  categories.push({
+    title: 'Event Hosting',
+    items: [
+      { label: 'Create Event', path: '/events/create', icon: Sparkles },
+      { label: 'My Events', path: '/events', icon: Calendar },
+      { label: 'Reports & Analytics', path: '/reports', icon: BarChart3 },
+    ],
+  });
+
+  // 5. Payment & Refund (Planned)
+  categories.push({
+    title: 'Payment & Refund',
+    items: [
+      {
+        label: 'Payment History',
+        path: '/payments/history',
+        icon: Receipt,
+        badge: 'Planned',
+        badgeColor: 'bg-stone-100 text-stone-500 border border-stone-200/80',
+      },
+      {
+        label: 'Refunds History & Status',
+        path: '/payments/refunds',
+        icon: RefreshCcw,
+        badge: 'Planned',
+        badgeColor: 'bg-stone-100 text-stone-500 border border-stone-200/80',
+      },
+    ],
+  });
+
+  // 6. Notifications
+  categories.push({
+    title: 'Notifications',
+    items: [
+      { label: 'Notifications', path: '/notifications', icon: Bell },
+    ],
+  });
+
+  // 7. Help & Support
+  categories.push({
+    title: 'Help & Support',
+    items: [
+      { label: 'Help Center / FAQs', path: '/support/help', icon: HelpCircle },
+      { label: 'Report an Issue', path: '/support/report', icon: AlertTriangle },
+    ],
+  });
+
+  // 8. Account & Profile
+  categories.push({
+    title: 'Account & Profile',
+    items: [
+      { label: 'My Profile', path: '/settings/profile', icon: User },
+      { label: 'Account Settings', path: '/settings/account', icon: Settings },
+      { label: 'Security & Password', path: '/settings/security', icon: ShieldCheck },
+      { label: 'Privacy Settings', path: '/settings/privacy', icon: Lock },
+    ],
+  });
+
+  // If user is authorized to manage the active event, include operational controls for the host workflow
+  if (canManageEventOperations(user, currentEvent)) {
     categories.push({
-      title: 'Workspace & Setup',
+      title: 'Event Operations',
       items: [
-        {
-          label: 'Organization Profile',
-          path: '/settings/profile',
-          icon: Building2,
-        },
-      ],
-    });
-  } else {
-    // Normal attendee: non-intrusive option to start organizing
-    categories.push({
-      title: 'Host an Event',
-      items: [
-        {
-          label: 'Become an Organizer',
-          path: '/onboarding',
-          icon: Sparkles,
-        },
+        { label: 'Import Guests', path: '/import', icon: FileSpreadsheet, requiresEvent: true, requiresHost: true },
+        { label: 'Issued Tickets', path: '/tickets', icon: Ticket, requiresEvent: true, requiresHost: true },
+        { label: 'Scan & Turnstiles', path: '/scan', icon: QrCode, requiresEvent: true, requiresHost: true },
       ],
     });
   }

@@ -89,6 +89,40 @@ export class EventRegistrationController {
     }
   };
 
+  getMyRegistrations = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const user = (req as any).user;
+      const callerSupabaseId = user?.sub || user?.id;
+
+      const items = await this.registrationService.getMyRegistrations(callerSupabaseId);
+
+      res.status(200).json({
+        success: true,
+        count: items.length,
+        data: items,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  getMyAttendanceHistory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const user = (req as any).user;
+      const callerSupabaseId = user?.sub || user?.id;
+
+      const items = await this.registrationService.getMyAttendanceHistory(callerSupabaseId);
+
+      res.status(200).json({
+        success: true,
+        count: items.length,
+        data: items,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
   getMyTeam = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { eventId } = req.params;

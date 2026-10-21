@@ -71,8 +71,12 @@ export class MongoEventRegistrationRepository {
   }
 
   async findByUserSupabaseId(userSupabaseId: string): Promise<IEventRegistrationDocument[]> {
+    const orConditions: any[] = [{ userSupabaseId }];
+    if (mongoose.Types.ObjectId.isValid(userSupabaseId)) {
+      orConditions.push({ userId: new mongoose.Types.ObjectId(userSupabaseId) });
+    }
     return await EventRegistrationModel.find({
-      userSupabaseId,
+      $or: orConditions,
     })
       .sort({ registeredAt: -1 })
       .populate('eventId')

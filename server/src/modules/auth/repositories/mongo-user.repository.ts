@@ -101,6 +101,26 @@ export class MongoUserRepository {
   }
 
   /**
+   * Update user personal profile attributes (name, phone, avatarUrl, bio).
+   */
+  async updatePersonalProfile(
+    userId: string,
+    data: { name?: string; phone?: string | null; avatarUrl?: string | null; bio?: string | null }
+  ): Promise<IUserDocument | null> {
+    const update: any = {};
+    if (data.name) update.name = data.name.trim();
+    if (data.phone !== undefined) update.phone = data.phone?.trim() || null;
+    if (data.avatarUrl !== undefined) update.avatarUrl = data.avatarUrl;
+    if (data.bio !== undefined) update['metadata.bio'] = data.bio?.trim() || null;
+
+    return UserModel.findOneAndUpdate(
+      resolveUserFilter(userId),
+      { $set: update },
+      { returnDocument: 'after' }
+    ).exec();
+  }
+
+  /**
    * Update user account status (ACTIVE vs SUSPENDED).
    */
   async updateStatus(userId: string, status: UserStatus): Promise<IUserDocument | null> {

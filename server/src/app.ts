@@ -12,6 +12,7 @@ import hostRoutes from './modules/host/host.routes';
 import { publicCredentialRouter } from './modules/events/routes/event-credential.routes';
 import attendeeRoutes from './modules/events/routes/attendee.routes';
 import { publicEventRouter } from './modules/events/routes/public-event.routes';
+import supportRoutes from './modules/support/support.routes';
 import { ticketService } from './modules/tickets/services/ticket.service';
 import { errorHandler } from './middlewares/error.middleware';
 import config from './config/env';
@@ -122,6 +123,7 @@ app.use('/api/admin/events', adminLifecycleRouter);
 app.use('/api/credentials', publicCredentialRouter);
 app.use('/api/attendee', attendeeRoutes);
 app.use('/api/public', publicEventRouter);
+app.use('/api/support', supportRoutes);
 
 // Minimal public health check endpoint for load balancers & uptime monitors
 app.get('/api/health', (_req, res) => {

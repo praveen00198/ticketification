@@ -119,10 +119,76 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
         { label: 'Organizer Onboarding', path: '/onboarding', icon: Sparkles },
       ];
     }
+    if (path === '/registrations') {
+      return [
+        { label: 'Dashboard', path: '/dashboard' },
+        { label: 'My Registrations', path: '/registrations', icon: Ticket },
+      ];
+    }
+    if (path === '/history') {
+      return [
+        { label: 'Dashboard', path: '/dashboard' },
+        { label: 'Event History', path: '/history', icon: Calendar },
+      ];
+    }
+    if (path === '/reports') {
+      return [
+        { label: 'Dashboard', path: '/dashboard' },
+        { label: 'Reports & Analytics', path: '/reports', icon: Award },
+      ];
+    }
+    if (path === '/payments/history') {
+      return [
+        { label: 'Dashboard', path: '/dashboard' },
+        { label: 'Payment History', path: '/payments/history', icon: Ticket },
+      ];
+    }
+    if (path === '/payments/refunds') {
+      return [
+        { label: 'Dashboard', path: '/dashboard' },
+        { label: 'Refunds History & Status', path: '/payments/refunds', icon: Ticket },
+      ];
+    }
+    if (path === '/notifications') {
+      return [
+        { label: 'Dashboard', path: '/dashboard' },
+        { label: 'Notifications', path: '/notifications', icon: Sparkles },
+      ];
+    }
+    if (path === '/support/help') {
+      return [
+        { label: 'Dashboard', path: '/dashboard' },
+        { label: 'Help Center / FAQs', path: '/support/help', icon: Sparkles },
+      ];
+    }
+    if (path === '/support/report') {
+      return [
+        { label: 'Dashboard', path: '/dashboard' },
+        { label: 'Report an Issue', path: '/support/report', icon: Sparkles },
+      ];
+    }
     if (path === '/settings/profile') {
       return [
         { label: 'Dashboard', path: '/dashboard' },
-        { label: 'Organizer Settings', path: '/settings/profile', icon: Building2 },
+        { label: 'My Profile', path: '/settings/profile', icon: Users },
+      ];
+    }
+    if (path === '/settings/account') {
+      return [
+        { label: 'Dashboard', path: '/dashboard' },
+        { label: 'Account Settings', path: '/settings/account', icon: Building2 },
+      ];
+    }
+    if (path === '/settings/security') {
+      return [
+        { label: 'Dashboard', path: '/dashboard' },
+        { label: 'Security & Password', path: '/settings/security', icon: Sparkles },
+      ];
+    }
+    if (path === '/settings/privacy') {
+      return [
+        { label: 'Dashboard', path: '/dashboard' },
+        { label: 'Privacy Settings', path: '/settings/privacy', icon: Sparkles },
       ];
     }
 

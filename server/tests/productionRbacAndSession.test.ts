@@ -142,9 +142,14 @@ describe('Production RBAC, Session Restoration & Custom Identity Verification', 
       const attendeeNav = getNavigationCategories({ user: attendee, currentEvent: hostOwnedEvent });
       const attendeeTitles = attendeeNav.map((c) => c.title);
       expect(attendeeTitles).not.toContain('Event Operations');
-      expect(attendeeTitles).toContain('Core & Overview');
-      expect(attendeeTitles).toContain('Attendee & Wallet');
-      expect(attendeeTitles).toContain('Host an Event');
+      expect(attendeeTitles).toContain('Event Discovery');
+      expect(attendeeTitles).toContain('Attendee Wallet');
+      expect(attendeeTitles).toContain('My Activity');
+      expect(attendeeTitles).toContain('Event Hosting');
+      expect(attendeeTitles).toContain('Payment & Refund');
+      expect(attendeeTitles).toContain('Notifications');
+      expect(attendeeTitles).toContain('Help & Support');
+      expect(attendeeTitles).toContain('Account & Profile');
 
       // Host viewing their OWN event: DOES have Event Operations
       const hostNav = getNavigationCategories({ user: host, currentEvent: hostOwnedEvent });

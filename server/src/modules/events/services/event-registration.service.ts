@@ -483,6 +483,126 @@ export class EventRegistrationService {
 
     return walletItems;
   }
+
+  /**
+   * Get all registrations belonging to the authenticated attendee.
+   */
+  async getMyRegistrations(userSupabaseId: string) {
+    const callerUser = await this.userRepo.findBySupabaseId(userSupabaseId);
+    if (!callerUser) {
+      throw new AuthorizationError('User profile not found');
+    }
+
+    const registrations = await this.registrationRepo.findByUserSupabaseId(userSupabaseId);
+    return registrations.map((reg) => {
+      const event: any = reg.eventId;
+      const cred: any = reg.credentialId;
+      return {
+        id: reg._id.toString(),
+        eventId: event?._id ? event._id.toString() : reg.eventId.toString(),
+        eventName: event?.name || 'Event Registration',
+        eventType: event?.eventType || 'GENERAL',
+        bannerUrl: event?.bannerUrl || null,
+        venue: event?.venue || {},
+        schedule: event?.schedule || {},
+        status: reg.status,
+        registrationType: reg.registrationType || 'ATTENDEE',
+        attendeeDetails: reg.attendeeDetails,
+        registeredAt: reg.registeredAt,
+        cancelledAt: reg.cancelledAt,
+        cancellationReason: reg.cancellationReason,
+        credential: cred
+          ? {
+              id: cred._id.toString(),
+              formattedId: cred.formattedId,
+              status: cred.status,
+              assetUrl: cred.asset?.publicUrl || null,
+              verificationToken: cred.verificationToken,
+            }
+          : null,
+      };
+    });
+  }
+
+  /**
+   * Get reliable event participation and verified attendance history for the user.
+   * Only marks events as attended if actual check-in records or checked-in status exist.
+   */
+  async getMyAttendanceHistory(userSupabaseId: string) {
+    const callerUser = await this.userRepo.findBySupabaseId(userSupabaseId);
+    if (!callerUser) {
+      throw new AuthorizationError('User profile not found');
+    }
+
+    const seenEventIds = new Set<string>();
+    const historyItems: any[] = [];
+
+    // 1. Gather all user credentials (from direct registrations & email invitations)
+    const registrations = await this.registrationRepo.findByUserSupabaseId(userSupabaseId);
+    const emailCreds = callerUser.email
+      ? await this.credentialRepo.findByEmail(callerUser.email.toLowerCase())
+      : [];
+
+    const allCreds: any[] = [...emailCreds];
+    for (const reg of registrations) {
+      if (reg.credentialId) {
+        const linked: any = reg.credentialId;
+        if (!allCreds.some((c) => c._id.toString() === linked._id.toString())) {
+          allCreds.push(linked);
+        }
+      }
+    }
+
+    for (const cred of allCreds) {
+      const eventIdStr = cred.eventId ? cred.eventId.toString() : '';
+      if (!eventIdStr || seenEventIds.has(eventIdStr)) continue;
+      seenEventIds.add(eventIdStr);
+
+      const event: any = await this.eventRepo.findById(eventIdStr);
+      if (!event) continue;
+
+      const hasCheckedIn =
+        cred.status === 'CHECKED_IN' ||
+        (typeof cred.checkInCount === 'number' && cred.checkInCount > 0) ||
+        Boolean(cred.firstCheckedInAt);
+
+      const now = new Date();
+      const eventEnded =
+        event.status === 'COMPLETED' ||
+        (event.schedule?.endAt && new Date(event.schedule.endAt) < now);
+
+      let attendanceStatus: 'ATTENDED' | 'ABSENT' | 'REGISTERED' = 'REGISTERED';
+      if (hasCheckedIn) {
+        attendanceStatus = 'ATTENDED';
+      } else if (eventEnded) {
+        attendanceStatus = 'ABSENT';
+      }
+
+      historyItems.push({
+        eventId: event._id.toString(),
+        eventName: event.name,
+        eventType: event.eventType || 'GENERAL',
+        venue: event.venue || {},
+        schedule: event.schedule || {},
+        credentialId: cred._id.toString(),
+        formattedId: cred.formattedId,
+        attended: hasCheckedIn,
+        attendanceStatus,
+        checkInCount: cred.checkInCount || 0,
+        firstCheckedInAt: cred.firstCheckedInAt || (cred.status === 'CHECKED_IN' ? cred.updatedAt : null),
+        lastCheckedInAt: cred.lastCheckedInAt || null,
+        status: cred.status,
+      });
+    }
+
+    historyItems.sort((a, b) => {
+      const dateA = new Date(a.schedule?.startAt || 0).getTime();
+      const dateB = new Date(b.schedule?.startAt || 0).getTime();
+      return dateB - dateA;
+    });
+
+    return historyItems;
+  }
 }
 
 export const eventRegistrationService = new EventRegistrationService();

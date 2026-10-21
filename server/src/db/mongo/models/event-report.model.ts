@@ -5,6 +5,8 @@ export type ReportCategory =
   | 'IMPERSONATION'
   | 'MISLEADING_INFO'
   | 'INAPPROPRIATE_CONTENT'
+  | 'TECHNICAL_ISSUE'
+  | 'ACCESS_ISSUE'
   | 'OTHER';
 
 export const REPORT_CATEGORIES: ReportCategory[] = [
@@ -12,6 +14,8 @@ export const REPORT_CATEGORIES: ReportCategory[] = [
   'IMPERSONATION',
   'MISLEADING_INFO',
   'INAPPROPRIATE_CONTENT',
+  'TECHNICAL_ISSUE',
+  'ACCESS_ISSUE',
   'OTHER',
 ];
 
@@ -24,7 +28,7 @@ export const REPORT_STATUSES: ReportStatus[] = [
 ];
 
 export interface IEventReport {
-  eventId: mongoose.Types.ObjectId;
+  eventId?: mongoose.Types.ObjectId | null;
   reporterEmail: string;
   reporterName?: string | null;
   reporterUserId?: mongoose.Types.ObjectId | string | null;
@@ -49,7 +53,8 @@ const EventReportSchema = new Schema<IEventReportDocument>(
     eventId: {
       type: Schema.Types.ObjectId,
       ref: 'Event',
-      required: [true, 'eventId is required'],
+      required: false,
+      default: null,
       index: true,
     },
     reporterEmail: {

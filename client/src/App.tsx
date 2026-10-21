@@ -31,6 +31,20 @@ const PublicEventDetailPage      = lazy(() => import('./pages/PublicEventDetailP
 const PricingPage                = lazy(() => import('./pages/PricingPage').then(m => ({ default: m.PricingPage })));
 const NotFoundPage               = lazy(() => import('./pages/NotFoundPage').then(m => ({ default: m.NotFoundPage })));
 
+// Normal User Dashboard Pages
+const MyRegistrationsPage        = lazy(() => import('./pages/MyRegistrationsPage').then(m => ({ default: m.MyRegistrationsPage })));
+const EventHistoryPage           = lazy(() => import('./pages/EventHistoryPage').then(m => ({ default: m.EventHistoryPage })));
+const ReportsPage                = lazy(() => import('./pages/ReportsPage').then(m => ({ default: m.ReportsPage })));
+const PaymentHistoryPage         = lazy(() => import('./pages/PaymentHistoryPage').then(m => ({ default: m.PaymentHistoryPage })));
+const RefundsHistoryPage         = lazy(() => import('./pages/RefundsHistoryPage').then(m => ({ default: m.RefundsHistoryPage })));
+const NotificationsPage          = lazy(() => import('./pages/NotificationsPage').then(m => ({ default: m.NotificationsPage })));
+const HelpCenterPage             = lazy(() => import('./pages/HelpCenterPage').then(m => ({ default: m.HelpCenterPage })));
+const ReportIssuePage            = lazy(() => import('./pages/ReportIssuePage').then(m => ({ default: m.ReportIssuePage })));
+const MyProfilePage              = lazy(() => import('./pages/MyProfilePage').then(m => ({ default: m.MyProfilePage })));
+const AccountSettingsPage        = lazy(() => import('./pages/AccountSettingsPage').then(m => ({ default: m.AccountSettingsPage })));
+const SecuritySettingsPage       = lazy(() => import('./pages/SecuritySettingsPage').then(m => ({ default: m.SecuritySettingsPage })));
+const PrivacySettingsPage        = lazy(() => import('./pages/PrivacySettingsPage').then(m => ({ default: m.PrivacySettingsPage })));
+
 import { ProtectedRoute, AuthStatus } from './routes/ProtectedRoute';
 import { HostRoute } from './routes/HostRoute';
 import { ROUTES } from './routes/paths';
@@ -249,15 +263,42 @@ const AppContent: React.FC = () => {
             <Route path={ROUTES.CREATE_EVENT} element={<CreateEventPage />} />
             <Route path={ROUTES.EVENT_DETAIL} element={<EventDetailPage />} />
 
-            {/* Attendee Pass Wallet (strictly nested inside dashboard layout) */}
+            {/* Normal User Dashboard Modules */}
+            {/* 1. Event Discovery */}
+            <Route path={ROUTES.REGISTRATIONS} element={<MyRegistrationsPage />} />
+
+            {/* 2. Attendee Wallet */}
             <Route path={ROUTES.WALLET} element={<AttendeeWalletPage />} />
+
+            {/* 3. My Activity */}
+            <Route path={ROUTES.HISTORY} element={<EventHistoryPage />} />
+
+            {/* 4. Event Hosting */}
+            <Route path={ROUTES.REPORTS} element={<ReportsPage />} />
+
+            {/* 5. Payment & Refund (Planned) */}
+            <Route path={ROUTES.PAYMENT_HISTORY} element={<PaymentHistoryPage />} />
+            <Route path={ROUTES.REFUNDS} element={<RefundsHistoryPage />} />
+
+            {/* 6. Notifications */}
+            <Route path={ROUTES.NOTIFICATIONS} element={<NotificationsPage />} />
+
+            {/* 7. Help & Support */}
+            <Route path={ROUTES.HELP_CENTER} element={<HelpCenterPage />} />
+            <Route path={ROUTES.REPORT_ISSUE} element={<ReportIssuePage />} />
+
+            {/* 8. Account & Profile */}
+            <Route path={ROUTES.PROFILE_SETTINGS} element={<MyProfilePage />} />
+            <Route path={ROUTES.PROFILE} element={<HostProfilePage />} />
+            <Route path={ROUTES.ACCOUNT_SETTINGS} element={<AccountSettingsPage />} />
+            <Route path={ROUTES.SECURITY_SETTINGS} element={<SecuritySettingsPage />} />
+            <Route path={ROUTES.PRIVACY_SETTINGS} element={<PrivacySettingsPage />} />
 
             {/* Workspace & Settings */}
             <Route
               path={ROUTES.ONBOARDING}
               element={<HostOnboardingPage onOnboardingComplete={handleOnboardingComplete} />}
             />
-            <Route path={ROUTES.PROFILE_SETTINGS} element={<HostProfilePage />} />
 
             {/* Organizer Operations (Guarded by HostRoute) */}
             <Route element={<HostRoute user={user} />}>

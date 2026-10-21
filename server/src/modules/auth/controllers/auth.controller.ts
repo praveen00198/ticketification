@@ -86,6 +86,37 @@ export class AuthController {
       next(error);
     }
   }
+
+  async updateProfile(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        throw new AuthenticationError('Unauthorized. Please authenticate first.');
+      }
+      const { name, phone, avatarUrl, bio } = req.body;
+      const { mongoUserRepository } = await import('../repositories/mongo-user.repository');
+      const updatedUser = await mongoUserRepository.updatePersonalProfile(req.user.id, {
+        name,
+        phone,
+        avatarUrl,
+        bio,
+      });
+      res.status(200).json({
+        success: true,
+        message: 'Profile updated successfully',
+        data: {
+          id: updatedUser ? String(updatedUser.supabaseUserId || updatedUser._id) : req.user.id,
+          name: updatedUser?.name,
+          email: updatedUser?.email,
+          role: updatedUser?.platformRole,
+          phone: updatedUser?.phone,
+          avatarUrl: updatedUser?.avatarUrl,
+          bio: updatedUser?.metadata?.bio,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const authController = new AuthController();

@@ -56,3 +56,6 @@ temp/
 .agents/
 skills-lock.json
 skills.json
+
+#docs
+docs/

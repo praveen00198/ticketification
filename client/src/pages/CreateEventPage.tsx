@@ -25,7 +25,7 @@ export const CreateEventPage: React.FC = () => {
             ? new Date(createdEvent.schedule.startAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             : '09:00',
           status: createdEvent.status || 'DRAFT',
-          createdBy: createdEvent.ownerId || '',
+          createdBy: createdEvent.ownerId || createdEvent.createdBy || '',
           createdAt: createdEvent.createdAt || new Date().toISOString(),
           updatedAt: createdEvent.updatedAt || new Date().toISOString(),
           eventType: createdEvent.eventType,
@@ -35,7 +35,7 @@ export const CreateEventPage: React.FC = () => {
     } catch {
       // Ignore background refresh errors
     }
-    navigate('/events');
+    navigate('/dashboard');
   };
 
   const handleCancel = () => {

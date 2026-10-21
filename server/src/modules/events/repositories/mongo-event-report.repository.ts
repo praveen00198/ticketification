@@ -62,6 +62,28 @@ export class MongoEventReportRepository {
       )
       .exec();
   }
+
+  /**
+   * Find reports submitted by a specific user or email.
+   */
+  async findByReporter(reporterUserId?: string, reporterEmail?: string): Promise<IEventReportDocument[]> {
+    const orConditions: any[] = [];
+    if (reporterUserId) {
+      orConditions.push({ reporterUserId });
+      if (mongoose.Types.ObjectId.isValid(reporterUserId)) {
+        orConditions.push({ reporterUserId: new mongoose.Types.ObjectId(reporterUserId) });
+      }
+    }
+    if (reporterEmail) {
+      orConditions.push({ reporterEmail: reporterEmail.toLowerCase().trim() });
+    }
+    if (orConditions.length === 0) return [];
+    return await this.model
+      .find({ $or: orConditions })
+      .populate('eventId', 'name slug date venue')
+      .sort({ createdAt: -1 })
+      .exec();
+  }
 }
 
 export const mongoEventReportRepository = new MongoEventReportRepository();
