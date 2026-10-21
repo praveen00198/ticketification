@@ -224,3 +224,29 @@ export function getTicketPreviewUrl(ticketImageUrl?: string): string {
   return ticketImageUrl;
 }
 
+/**
+ * Safely extracts a user-readable error message string from any API error.
+ * Guarantees that a raw object (e.g., { message, code, details }) is never returned,
+ * preventing "Objects are not valid as a React child" crashes.
+ */
+export function extractErrorMessage(error: any, fallbackMessage: string = 'An unexpected error occurred'): string {
+  if (!error) return fallbackMessage;
+  if (typeof error === 'string') return error;
+
+  // Check structured backend error response: { error: { message, code, details } }
+  if (typeof error.response?.data?.error?.message === 'string') {
+    return error.response.data.error.message;
+  }
+  if (typeof error.response?.data?.error === 'string') {
+    return error.response.data.error;
+  }
+  if (typeof error.response?.data?.message === 'string') {
+    return error.response.data.message;
+  }
+  if (typeof error.message === 'string' && error.message) {
+    return error.message;
+  }
+  return fallbackMessage;
+}
+
+

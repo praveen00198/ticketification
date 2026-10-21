@@ -11,6 +11,7 @@ import {
   X,
 } from 'lucide-react';
 import { hostApi, InstitutionType, HostProfileData } from '../api/host';
+import { extractErrorMessage } from '../api/client';
 
 export const HostProfilePage: React.FC = () => {
   const navigate = useNavigate();
@@ -93,7 +94,7 @@ export const HostProfilePage: React.FC = () => {
     } catch (err: any) {
       setFieldErrors((prev) => ({
         ...prev,
-        logo: err.response?.data?.error || 'Failed to upload logo image.',
+        logo: extractErrorMessage(err, 'Failed to upload logo image.'),
       }));
     } finally {
       setIsUploadingLogo(false);
@@ -157,7 +158,7 @@ export const HostProfilePage: React.FC = () => {
     } catch (err: any) {
       setNotification({
         type: 'error',
-        message: err.response?.data?.error || 'Failed to save organizer profile.',
+        message: extractErrorMessage(err, 'Failed to save organizer profile.'),
       });
     } finally {
       setSaving(false);

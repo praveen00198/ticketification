@@ -14,6 +14,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { attendeeApi } from '../api/attendee';
+import { extractErrorMessage } from '../api/client';
 import { ROUTES } from '../routes/paths';
 
 export const EventHistoryPage: React.FC = () => {
@@ -32,7 +33,7 @@ export const EventHistoryPage: React.FC = () => {
         setHistory(res.data || []);
       }
     } catch (err: any) {
-      setError(err?.response?.data?.error || 'Failed to load attendance history.');
+      setError(extractErrorMessage(err, 'Failed to load attendance history.'));
     } finally {
       setLoading(false);
     }

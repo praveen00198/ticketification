@@ -17,6 +17,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { hostApi, InstitutionType, HostProfileData } from '../api/host';
+import { extractErrorMessage } from '../api/client';
 
 interface HostOnboardingPageProps {
   onOnboardingComplete?: (data: HostProfileData) => void;
@@ -97,7 +98,7 @@ export const HostOnboardingPage: React.FC<HostOnboardingPageProps> = ({ onOnboar
     } catch (err: any) {
       setFieldErrors((prev) => ({
         ...prev,
-        logo: err.response?.data?.error || 'Failed to upload logo image. Please try again.',
+        logo: extractErrorMessage(err, 'Failed to upload logo image. Please try again.'),
       }));
     } finally {
       setIsUploadingLogo(false);
@@ -178,10 +179,10 @@ export const HostOnboardingPage: React.FC<HostOnboardingPageProps> = ({ onOnboar
         onOnboardingComplete(result);
       }
     } catch (err: any) {
-      const message =
-        err.response?.data?.error ||
-        err.response?.data?.message ||
-        'Unable to initialize organizer workspace. Please review your entries and try again.';
+      const message = extractErrorMessage(
+        err,
+        'Unable to initialize organizer workspace. Please review your entries and try again.'
+      );
       setErrorMsg(message);
     } finally {
       setIsSubmitting(false);

@@ -92,13 +92,15 @@ export class AuthController {
       if (!req.user) {
         throw new AuthenticationError('Unauthorized. Please authenticate first.');
       }
-      const { name, phone, avatarUrl, bio } = req.body;
+      const { name, phone, avatarUrl, bio, preferences, privacy } = req.body;
       const { mongoUserRepository } = await import('../repositories/mongo-user.repository');
       const updatedUser = await mongoUserRepository.updatePersonalProfile(req.user.id, {
         name,
         phone,
         avatarUrl,
         bio,
+        preferences,
+        privacy,
       });
       res.status(200).json({
         success: true,
@@ -111,6 +113,8 @@ export class AuthController {
           phone: updatedUser?.phone,
           avatarUrl: updatedUser?.avatarUrl,
           bio: updatedUser?.metadata?.bio,
+          preferences: updatedUser?.metadata?.preferences,
+          privacy: updatedUser?.metadata?.privacy,
         },
       });
     } catch (error) {

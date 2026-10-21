@@ -383,6 +383,11 @@ export class AuthService {
             role: mongoUser.platformRole || 'USER',
             isOnboarded,
             organizationName,
+            phone: mongoUser.phone,
+            avatarUrl: mongoUser.avatarUrl,
+            bio: mongoUser.metadata?.bio,
+            preferences: mongoUser.metadata?.preferences,
+            privacy: mongoUser.metadata?.privacy,
           };
         }
       } catch (mErr: any) {

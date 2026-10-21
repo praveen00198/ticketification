@@ -101,17 +101,26 @@ export class MongoUserRepository {
   }
 
   /**
-   * Update user personal profile attributes (name, phone, avatarUrl, bio).
+   * Update user personal profile attributes (name, phone, avatarUrl, bio, preferences, privacy).
    */
   async updatePersonalProfile(
     userId: string,
-    data: { name?: string; phone?: string | null; avatarUrl?: string | null; bio?: string | null }
+    data: {
+      name?: string;
+      phone?: string | null;
+      avatarUrl?: string | null;
+      bio?: string | null;
+      preferences?: Record<string, any>;
+      privacy?: Record<string, any>;
+    }
   ): Promise<IUserDocument | null> {
     const update: any = {};
     if (data.name) update.name = data.name.trim();
     if (data.phone !== undefined) update.phone = data.phone?.trim() || null;
     if (data.avatarUrl !== undefined) update.avatarUrl = data.avatarUrl;
     if (data.bio !== undefined) update['metadata.bio'] = data.bio?.trim() || null;
+    if (data.preferences !== undefined) update['metadata.preferences'] = data.preferences;
+    if (data.privacy !== undefined) update['metadata.privacy'] = data.privacy;
 
     return UserModel.findOneAndUpdate(
       resolveUserFilter(userId),

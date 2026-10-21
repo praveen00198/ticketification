@@ -77,7 +77,21 @@ router.get('/faqs', (_req: Request, res: Response) => {
 router.post('/report', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { eventId, category, reason, reporterEmail, reporterName } = req.body;
-    const user = (req as any).user;
+    let user = (req as any).user;
+    if (!user && req.headers.authorization?.startsWith('Bearer ')) {
+      try {
+        const token = req.headers.authorization.split(' ')[1]?.trim();
+        if (token) {
+          const { verifyJwtToken } = await import('../../utils/local-auth');
+          const payload = verifyJwtToken(token);
+          if (payload?.id) {
+            user = { id: String(payload.id), email: payload.email, name: (payload as any).name };
+          }
+        }
+      } catch {
+        // Fallback to anonymous reporter
+      }
+    }
 
     const email = (user?.email || reporterEmail || '').trim().toLowerCase();
     const name = (user?.name || reporterName || '').trim() || null;

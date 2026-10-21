@@ -8,7 +8,7 @@ import {
   Loader2,
   Save,
 } from 'lucide-react';
-import { apiClient } from '../api/client';
+import { apiClient, extractErrorMessage } from '../api/client';
 
 export const MyProfilePage: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -37,7 +37,7 @@ export const MyProfilePage: React.FC = () => {
       } catch (err: any) {
         setNotification({
           type: 'error',
-          message: err?.response?.data?.error || 'Failed to load user profile.',
+          message: extractErrorMessage(err, 'Failed to load user profile.'),
         });
       } finally {
         setLoading(false);
@@ -69,7 +69,7 @@ export const MyProfilePage: React.FC = () => {
     } catch (err: any) {
       setNotification({
         type: 'error',
-        message: err?.response?.data?.error || 'Failed to update profile.',
+        message: extractErrorMessage(err, 'Failed to update profile.'),
       });
     } finally {
       setSaving(false);

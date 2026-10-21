@@ -48,20 +48,20 @@ export const RefundsHistoryPage: React.FC = () => {
           <div className="p-4 rounded-xl bg-stone-50/70 border border-stone-200/80 space-y-2">
             <div className="flex items-center gap-2 text-stone-700 font-semibold text-xs">
               <RotateCcw className="w-4 h-4 text-emerald-600" />
-              <span>Automated Reversal</span>
+              <span>Gateway Reversals</span>
             </div>
             <p className="text-[11px] text-stone-500">
-              Approved refunds credited directly back to the original funding instrument within 5-7 banking days.
+              When paid ticketing is enabled, approved refunds will route through the original payment processor.
             </p>
           </div>
 
           <div className="p-4 rounded-xl bg-stone-50/70 border border-stone-200/80 space-y-2">
             <div className="flex items-center gap-2 text-stone-700 font-semibold text-xs">
               <ShieldAlert className="w-4 h-4 text-emerald-600" />
-              <span>Dispute Escalation</span>
+              <span>Host Communication</span>
             </div>
             <p className="text-[11px] text-stone-500">
-              Platform mediation available if an event is cancelled or postponed without host notification.
+              Direct communication channels with event organizers for event cancellation inquiries.
             </p>
           </div>
         </div>

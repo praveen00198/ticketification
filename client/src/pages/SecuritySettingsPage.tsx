@@ -9,7 +9,7 @@ import {
   Loader2,
   Save,
 } from 'lucide-react';
-import { apiClient } from '../api/client';
+import { apiClient, extractErrorMessage } from '../api/client';
 
 export const SecuritySettingsPage: React.FC = () => {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -63,7 +63,7 @@ export const SecuritySettingsPage: React.FC = () => {
         setError(res.error || 'Failed to update password.');
       }
     } catch (err: any) {
-      setError(err?.response?.data?.error || 'Failed to update password. Verify your current password.');
+      setError(extractErrorMessage(err, 'Failed to update password. Verify your current password.'));
     } finally {
       setLoading(false);
     }

@@ -3,43 +3,86 @@ import {
   Globe,
   Bell,
   CheckCircle2,
+  AlertCircle,
   Save,
   UserCheck,
+  Loader2,
 } from 'lucide-react';
-import { apiClient } from '../api/client';
+import { apiClient, extractErrorMessage } from '../api/client';
 
 export const AccountSettingsPage: React.FC = () => {
+  const [loading, setLoading] = useState(true);
   const [timezone, setTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
   const [dateFormat, setDateFormat] = useState('YYYY-MM-DD');
   const [notifyOnTicketIssued, setNotifyOnTicketIssued] = useState(true);
   const [notifyOnScheduleChange, setNotifyOnScheduleChange] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [userData, setUserData] = useState<any>(null);
 
   useEffect(() => {
     const fetchUser = async () => {
+      setLoading(true);
       try {
         const res: any = await apiClient.get('/auth/me');
         if (res.user) {
           setUserData(res.user);
+          if (res.user.preferences) {
+            if (res.user.preferences.timezone) setTimezone(res.user.preferences.timezone);
+            if (res.user.preferences.dateFormat) setDateFormat(res.user.preferences.dateFormat);
+            if (res.user.preferences.notifyOnTicketIssued !== undefined) {
+              setNotifyOnTicketIssued(Boolean(res.user.preferences.notifyOnTicketIssued));
+            }
+            if (res.user.preferences.notifyOnScheduleChange !== undefined) {
+              setNotifyOnScheduleChange(Boolean(res.user.preferences.notifyOnScheduleChange));
+            }
+          }
         }
-      } catch (e) {
-        // Ignored
+      } catch (err: any) {
+        setError(extractErrorMessage(err, 'Failed to load user preferences.'));
+      } finally {
+        setLoading(false);
       }
     };
     fetchUser();
   }, []);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    setTimeout(() => {
+    setError(null);
+    setSavedSuccess(false);
+
+    try {
+      const res: any = await apiClient.put('/auth/profile', {
+        preferences: {
+          timezone,
+          dateFormat,
+          notifyOnTicketIssued,
+          notifyOnScheduleChange,
+        },
+      });
+
+      if (res.success) {
+        setSavedSuccess(true);
+        setTimeout(() => setSavedSuccess(false), 4000);
+      }
+    } catch (err: any) {
+      setError(extractErrorMessage(err, 'Failed to save account preferences.'));
+    } finally {
       setSaving(false);
-      setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 3000);
-    }, 400);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="py-20 flex flex-col items-center justify-center text-stone-400 gap-3">
+        <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
+        <p className="text-xs font-medium text-stone-500">Loading account preferences...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -54,7 +97,14 @@ export const AccountSettingsPage: React.FC = () => {
       {savedSuccess && (
         <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>Preferences saved successfully.</span>
+          <span>Preferences saved successfully to your account profile.</span>
+        </div>
+      )}
+
+      {error && (
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+          <span>{error}</span>
         </div>
       )}
 
@@ -176,8 +226,17 @@ export const AccountSettingsPage: React.FC = () => {
             disabled={saving}
             className="inline-flex items-center gap-2 px-5 py-2.5 font-semibold text-white bg-zinc-900 rounded-lg hover:bg-zinc-800 transition-colors disabled:opacity-50 shadow-2xs"
           >
-            <Save className="w-3.5 h-3.5" />
-            Save Preferences
+            {saving ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="w-3.5 h-3.5" />
+                Save Preferences
+              </>
+            )}
           </button>
         </div>
       </form>

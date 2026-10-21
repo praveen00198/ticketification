@@ -206,7 +206,12 @@ export const eventsApi = {
       time: item.schedule?.startAt
         ? new Date(item.schedule.startAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         : (item.time || '09:00'),
-      venue: item.venue?.name || item.venue || (item.venue?.type === 'ONLINE' ? 'Online Virtual Event' : 'TBD'),
+      venue: typeof item.venue === 'string'
+        ? (item.venue.trim() || 'TBD')
+        : (item.venue?.name ||
+           ([item.venue?.address, item.venue?.city].filter(Boolean).join(', ') || null) ||
+           (item.venue?.type === 'ONLINE' ? 'Online Virtual Event' : item.venue?.type === 'HYBRID' ? 'Hybrid Event' : item.venue?.type === 'PHYSICAL' ? 'Physical Venue' : 'TBD')),
+
       description: item.description || null,
       organizerName: item.organizerName || null,
       status: item.status || 'DRAFT',

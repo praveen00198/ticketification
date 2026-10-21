@@ -15,6 +15,7 @@ import {
   Ban,
 } from 'lucide-react';
 import { attendeeApi } from '../api/attendee';
+import { extractErrorMessage } from '../api/client';
 import { ROUTES } from '../routes/paths';
 
 export const MyRegistrationsPage: React.FC = () => {
@@ -34,7 +35,7 @@ export const MyRegistrationsPage: React.FC = () => {
         setRegistrations(res.data || []);
       }
     } catch (err: any) {
-      setError(err?.response?.data?.error || 'Failed to load registrations.');
+      setError(extractErrorMessage(err, 'Failed to load registrations.'));
     } finally {
       setLoading(false);
     }
@@ -58,7 +59,7 @@ export const MyRegistrationsPage: React.FC = () => {
         await fetchRegistrations();
       }
     } catch (err: any) {
-      alert(err?.response?.data?.error || 'Failed to cancel registration.');
+      alert(extractErrorMessage(err, 'Failed to cancel registration.'));
     } finally {
       setCancellingId(null);
     }

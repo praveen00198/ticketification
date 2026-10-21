@@ -11,6 +11,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { supportApi, SupportReportItem } from '../api/support';
+import { extractErrorMessage } from '../api/client';
 import { useEvent } from '../context/EventContext';
 
 export const ReportIssuePage: React.FC = () => {
@@ -72,7 +73,7 @@ export const ReportIssuePage: React.FC = () => {
         await fetchMyReports();
       }
     } catch (err: any) {
-      setSubmitError(err?.response?.data?.error || 'Failed to submit report. Please try again.');
+      setSubmitError(extractErrorMessage(err, 'Failed to submit report. Please try again.'));
     } finally {
       setSubmitting(false);
     }

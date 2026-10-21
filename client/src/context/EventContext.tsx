@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { EventItem } from '../types';
 import { eventsApi } from '../api/events';
-import { getStoredAuthToken } from '../api/client';
+import { getStoredAuthToken, extractErrorMessage } from '../api/client';
 
 interface EventContextType {
   events: EventItem[];
@@ -69,7 +69,7 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         localStorage.removeItem('selected_event_id');
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to load events');
+      setError(extractErrorMessage(err, 'Failed to load events'));
     } finally {
       setLoading(false);
     }

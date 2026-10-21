@@ -6,8 +6,11 @@ import {
   ShieldCheck,
   Info,
   Check,
-  Trash2,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react';
+import { attendeeApi } from '../api/attendee';
+import { apiClient } from '../api/client';
 
 interface NotificationItem {
   id: string;
@@ -18,66 +21,117 @@ interface NotificationItem {
   read: boolean;
 }
 
-const STORAGE_KEY = 'ticketification_user_notifications';
+const READ_IDS_KEY = 'ticketification_read_notification_ids';
 
 export const NotificationsPage: React.FC = () => {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'ALL' | 'UNREAD' | 'READ'>('ALL');
-
-  useEffect(() => {
-    // Load persisted notification state
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        setNotifications(JSON.parse(saved));
-        return;
-      } catch (e) {
-        // Fall back to bootstrapping from recent activity
-      }
+  const [readIds, setReadIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem(READ_IDS_KEY);
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
     }
+  });
 
-    // Initialize with system notification + registration updates
-    const initNotifications: NotificationItem[] = [
-      {
-        id: 'sys-welcome',
-        title: 'Welcome to Ticketification',
-        message: 'Your account is verified and ready. You can explore public conferences, hackathons, and generate verified credentials.',
-        category: 'SYSTEM',
-        timestamp: new Date().toISOString(),
-        read: false,
-      },
-      {
-        id: 'sys-sec-1',
-        title: 'Cryptographic Credential Engine Active',
-        message: 'Your passes utilize dynamic HMAC verification tokens for anti-screenshot fraud prevention at venue turnstiles.',
-        category: 'SECURITY',
-        timestamp: new Date(Date.now() - 3600000).toISOString(),
-        read: true,
-      },
-    ];
+  const loadRealActivityNotifications = async () => {
+    setLoading(true);
+    try {
+      const [regRes, passesRes] = await Promise.allSettled([
+        attendeeApi.getMyRegistrations(),
+        apiClient.get('/tickets/my-passes'),
+      ]);
 
-    setNotifications(initNotifications);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(initNotifications));
-  }, []);
+      const items: NotificationItem[] = [];
 
-  const saveNotifications = (items: NotificationItem[]) => {
-    setNotifications(items);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+      // Derive notifications from confirmed and pending registrations
+      if (regRes.status === 'fulfilled' && regRes.value.success && Array.isArray(regRes.value.data)) {
+        for (const reg of regRes.value.data) {
+          const eventName = reg.event?.name || reg.eventId?.name || 'Registered Event';
+          const regId = reg.id || reg._id;
+          const status = reg.status || 'CONFIRMED';
+          const dateStr = reg.createdAt || new Date().toISOString();
+
+          items.push({
+            id: `reg-${regId}`,
+            title:
+              status === 'CONFIRMED'
+                ? `Registration Confirmed: ${eventName}`
+                : status === 'CANCELLED'
+                ? `Registration Cancelled: ${eventName}`
+                : `Registration Pending: ${eventName}`,
+            message:
+              status === 'CONFIRMED'
+                ? `Your registration is confirmed. Your digital credential is ready in your Attendee Wallet.`
+                : status === 'CANCELLED'
+                ? `Your registration for ${eventName} has been cancelled.`
+                : `Your registration request is pending host review.`,
+            category: 'REGISTRATION',
+            timestamp: dateStr,
+            read: readIds.has(`reg-${regId}`),
+          });
+        }
+      }
+
+      // Derive notifications from verified attendance / check-in events
+      if (passesRes.status === 'fulfilled' && passesRes.value?.data?.passes && Array.isArray(passesRes.value.data.passes)) {
+        for (const pass of passesRes.value.data.passes) {
+          if (pass.status === 'USED' || pass.checkedIn) {
+            const passId = pass.id || pass._id;
+            const eventName = pass.eventName || 'Event';
+            items.push({
+              id: `checkin-${passId}`,
+              title: `Turnstile Check-In Verified: ${eventName}`,
+              message: `Your gate credential was scanned and successfully verified at the venue turnstile.`,
+              category: 'EVENT',
+              timestamp: pass.checkedInAt || pass.updatedAt || new Date().toISOString(),
+              read: readIds.has(`checkin-${passId}`),
+            });
+          }
+        }
+      }
+
+      // Sort newest first
+      items.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      setNotifications(items);
+    } catch {
+      setNotifications([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  useEffect(() => {
+    loadRealActivityNotifications();
+  }, []);
+
+  const persistReadIds = (newSet: Set<string>) => {
+    setReadIds(newSet);
+    localStorage.setItem(READ_IDS_KEY, JSON.stringify(Array.from(newSet)));
+  };
 
   const toggleReadStatus = (id: string) => {
-    const updated = notifications.map((n) => (n.id === id ? { ...n, read: !n.read } : n));
-    saveNotifications(updated);
+    const nextSet = new Set(readIds);
+    if (nextSet.has(id)) {
+      nextSet.delete(id);
+    } else {
+      nextSet.add(id);
+    }
+    persistReadIds(nextSet);
+
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: nextSet.has(id) } : n))
+    );
   };
 
   const markAllAsRead = () => {
-    const updated = notifications.map((n) => ({ ...n, read: true }));
-    saveNotifications(updated);
-  };
+    const nextSet = new Set(readIds);
+    notifications.forEach((n) => nextSet.add(n.id));
+    persistReadIds(nextSet);
 
-  const clearAllNotifications = () => {
-    saveNotifications([]);
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
   const filteredNotifications = notifications.filter((n) => {
@@ -115,11 +169,20 @@ export const NotificationsPage: React.FC = () => {
             )}
           </div>
           <p className="text-sm text-stone-500 mt-1">
-            Stay informed about your registrations, ticket approvals, and schedule updates.
+            Real-time event updates, registration confirmations, and turnstile check-in records.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={loadRealActivityNotifications}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-stone-700 bg-white border border-stone-300 rounded-lg hover:bg-stone-50 transition-colors shadow-2xs"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+
           {unreadCount > 0 && (
             <button
               onClick={markAllAsRead}
@@ -127,16 +190,6 @@ export const NotificationsPage: React.FC = () => {
             >
               <Check className="w-3.5 h-3.5" />
               Mark all read
-            </button>
-          )}
-
-          {notifications.length > 0 && (
-            <button
-              onClick={clearAllNotifications}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-rose-700 bg-white border border-rose-200 rounded-lg hover:bg-rose-50 transition-colors shadow-2xs"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              Clear all
             </button>
           )}
         </div>
@@ -169,8 +222,13 @@ export const NotificationsPage: React.FC = () => {
         </span>
       </div>
 
-      {/* List */}
-      {filteredNotifications.length === 0 ? (
+      {/* Loading state */}
+      {loading ? (
+        <div className="py-20 flex flex-col items-center justify-center text-stone-400 gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
+          <p className="text-xs font-medium text-stone-500">Checking for event updates...</p>
+        </div>
+      ) : filteredNotifications.length === 0 ? (
         <div className="py-16 text-center border border-dashed border-stone-200 rounded-2xl bg-stone-50/50 p-8 space-y-4">
           <div className="w-12 h-12 rounded-full bg-stone-100 flex items-center justify-center mx-auto text-stone-400">
             <Bell className="w-6 h-6" />
@@ -184,7 +242,7 @@ export const NotificationsPage: React.FC = () => {
                 : 'Notification center is empty'}
             </h3>
             <p className="text-xs text-stone-500 max-w-sm mx-auto mt-1">
-              You are all caught up. Updates on registrations, event check-ins, and schedule alterations will arrive here.
+              You are all caught up. Updates on event registrations, credential passes, and turnstile check-ins will arrive here.
             </p>
           </div>
         </div>

@@ -104,6 +104,7 @@ describe('Phase 20: Attendee Self-Service Platform Engine', () => {
   describe('1. Self-Registration & Credential Auto-Issuance', () => {
     it('should register attendee and auto-issue active credential', async () => {
       jest.spyOn(MongoEventRepository.prototype, 'findById').mockResolvedValue(mockEvent as any);
+      jest.spyOn(MongoEventRepository.prototype, 'reserveRegistrationSlot').mockResolvedValue(true);
       jest.spyOn(MongoUserRepository.prototype, 'findBySupabaseId').mockResolvedValue(mockUser as any);
       jest.spyOn(MongoEventRegistrationRepository.prototype, 'findByEventAndUser').mockResolvedValue(null);
       jest.spyOn(MongoEventRegistrationRepository.prototype, 'countByEvent').mockResolvedValue(10);
@@ -198,7 +199,7 @@ describe('Phase 20: Attendee Self-Service Platform Engine', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(updateStatusSpy).toHaveBeenCalledWith(registrationId, eventId, 'CANCELLED', expect.any(Date), 'Schedule conflict');
+      expect(updateStatusSpy).toHaveBeenCalledWith(registrationId, eventId, 'CANCELLED', expect.any(Date), 'Schedule conflict', 'CONFIRMED');
       expect(revokeCredSpy).toHaveBeenCalledWith(eventId, credentialId, 'REVOKED', 'Schedule conflict');
     });
 

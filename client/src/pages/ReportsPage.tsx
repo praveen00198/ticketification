@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
-  BarChart3,
   TrendingUp,
   Users,
   Ticket,
@@ -14,10 +13,26 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { useEvent } from '../context/EventContext';
-import { apiClient } from '../api/client';
+import { apiClient, extractErrorMessage } from '../api/client';
 import { ROUTES } from '../routes/paths';
+import { EmptyEventsState } from '../components/ui';
+
+const formatVenueLabel = (venue: any): string => {
+  if (!venue) return 'Online / Designated Venue';
+  if (typeof venue === 'string') return venue;
+  if (typeof venue === 'object') {
+    return (
+      venue.name ||
+      venue.address ||
+      venue.city ||
+      (venue.type ? `Venue (${venue.type})` : 'Online / Designated Venue')
+    );
+  }
+  return String(venue);
+};
 
 export const ReportsPage: React.FC = () => {
+  const navigate = useNavigate();
   const { events, currentEvent, setCurrentEvent, loading: eventsLoading } = useEvent();
   const [selectedEventId, setSelectedEventId] = useState<string>(currentEvent?.id || '');
   const [stats, setStats] = useState<any>(null);
@@ -50,7 +65,7 @@ export const ReportsPage: React.FC = () => {
         setRecentActivity(res.data.recentActivity || []);
       }
     } catch (err: any) {
-      setError(err?.response?.data?.error || 'Failed to fetch analytics for the selected event.');
+      setError(extractErrorMessage(err, 'Failed to fetch analytics for the selected event.'));
     } finally {
       setLoadingStats(false);
     }
@@ -71,6 +86,9 @@ export const ReportsPage: React.FC = () => {
   };
 
   const selectedEvent = events.find((e) => e.id === selectedEventId) || currentEvent;
+  const hasReportableActivity =
+    stats &&
+    ((stats.totalTickets ?? 0) > 0 || (stats.checkedIn ?? 0) > 0 || recentActivity.length > 0);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -115,40 +133,51 @@ export const ReportsPage: React.FC = () => {
           <p className="text-xs font-medium text-stone-500">Loading authorized events...</p>
         </div>
       ) : events.length === 0 ? (
-        <div className="py-16 text-center border border-dashed border-stone-200 rounded-2xl bg-stone-50/50 p-8 space-y-4">
-          <div className="w-12 h-12 rounded-full bg-stone-100 flex items-center justify-center mx-auto text-stone-400">
-            <BarChart3 className="w-6 h-6" />
-          </div>
-          <div>
-            <h3 className="text-base font-semibold text-zinc-900">No events hosted yet</h3>
-            <p className="text-xs text-stone-500 max-w-sm mx-auto mt-1">
-              Analytics are available for events you organize. Create your first event to unlock live turnstile tracking and reporting.
-            </p>
-          </div>
-          <Link
-            to={ROUTES.CREATE_EVENT}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-zinc-900 rounded-lg hover:bg-zinc-800 transition-colors shadow-2xs"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Create Event
-          </Link>
+        <div className="py-12">
+          <EmptyEventsState
+            title="No Analytics Available Yet"
+            description="Reports will appear here once your events have activity to report."
+            slotText="ANALYTICS PIPELINE"
+            categoryText="TURNSTILE REPORTING • EVENT METRICS"
+            actionText="Create Event"
+            onAction={() => navigate(ROUTES.CREATE_EVENT)}
+            actionIcon={<Plus className="w-4 h-4" />}
+          />
         </div>
       ) : (
         <div className="space-y-6">
           {error && (
-            <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-sm flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
-              <span>{error}</span>
+            <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+                <span>{error}</span>
+              </div>
+              <button
+                onClick={() => fetchStats(selectedEventId)}
+                className="px-3 py-1.5 text-xs font-semibold bg-white border border-rose-300 rounded-lg text-rose-700 hover:bg-rose-100 transition-colors shrink-0 shadow-2xs"
+              >
+                Retry Loading Analytics
+              </button>
             </div>
           )}
 
-          {/* KPI Metrics */}
           {loadingStats ? (
-            <div className="py-12 flex justify-center">
-              <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
+            <div className="py-16 flex flex-col items-center justify-center gap-3">
+              <Loader2 className="w-7 h-7 animate-spin text-emerald-600" />
+              <p className="text-xs font-medium text-stone-500">Retrieving turnstile metrics...</p>
             </div>
-          ) : stats ? (
+          ) : !hasReportableActivity ? (
+            <div className="py-12">
+              <EmptyEventsState
+                title="No Analytics Available Yet"
+                description="Reports will appear here once your events have activity to report."
+                slotText="AWAITING ATTENDEES"
+                categoryText="METRICS STANDBY • LIVE SCANNING"
+              />
+            </div>
+          ) : (
             <>
+              {/* KPI Metrics */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-white border border-stone-200 rounded-xl p-5 shadow-2xs">
                   <div className="flex items-center justify-between">
@@ -222,11 +251,15 @@ export const ReportsPage: React.FC = () => {
                     </div>
                     <div>
                       <span className="text-stone-400">Venue:</span>
-                      <p className="font-medium text-zinc-800 mt-0.5">{selectedEvent?.venue || 'Online / Designated Venue'}</p>
+                      <p className="font-medium text-zinc-800 mt-0.5">
+                        {formatVenueLabel(selectedEvent?.venue)}
+                      </p>
                     </div>
                     <div>
                       <span className="text-stone-400">Date:</span>
-                      <p className="font-medium text-zinc-800 mt-0.5">{selectedEvent?.date || 'Scheduled'}</p>
+                      <p className="font-medium text-zinc-800 mt-0.5">
+                        {selectedEvent?.date || 'Scheduled'}
+                      </p>
                     </div>
                   </div>
 
@@ -262,7 +295,12 @@ export const ReportsPage: React.FC = () => {
                             </div>
                           </div>
                           <span className="text-[11px] text-stone-400">
-                            {act.timestamp ? new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recent'}
+                            {act.timestamp
+                              ? new Date(act.timestamp).toLocaleTimeString([], {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                              : 'Recent'}
                           </span>
                         </div>
                       ))}
@@ -271,10 +309,6 @@ export const ReportsPage: React.FC = () => {
                 </div>
               </div>
             </>
-          ) : (
-            <div className="py-12 text-center text-xs text-stone-400">
-              Select an event to view reports.
-            </div>
           )}
         </div>
       )}
