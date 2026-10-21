@@ -74,16 +74,6 @@ export const PrivacySettingsPage: React.FC = () => {
             </div>
           </div>
         </div>
-
-        {/* Future Governance Notice */}
-        <div className="pt-3 border-t border-stone-100">
-          <div className="p-4 rounded-xl bg-stone-50/50 border border-dashed border-stone-200 space-y-1 text-[11px] text-stone-500">
-            <span className="font-semibold text-zinc-800">Planned Collaboration Preferences</span>
-            <p className="leading-relaxed">
-              Granular public attendee roster visibility and organizer direct messaging preferences will become configurable alongside multi-track hackathon and conference participant networking features.
-            </p>
-          </div>
-        </div>
       </div>
     </div>
   );

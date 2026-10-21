@@ -41,10 +41,11 @@ export const AccountSettingsPage: React.FC = () => {
             if (userObj.preferences.dateFormat) {
               setDateFormat(userObj.preferences.dateFormat);
             }
+            const uid = userObj.id || userObj._id;
             setStoredUserPreferences({
               timezone: userObj.preferences.timezone || timezone,
               dateFormat: userObj.preferences.dateFormat || dateFormat,
-            });
+            }, uid);
           }
         }
       } catch (err: any) {
@@ -71,7 +72,8 @@ export const AccountSettingsPage: React.FC = () => {
       });
 
       if (res.success) {
-        setStoredUserPreferences({ timezone, dateFormat });
+        const uid = userData?.id || userData?._id;
+        setStoredUserPreferences({ timezone, dateFormat }, uid);
         setSavedSuccess(true);
         setTimeout(() => setSavedSuccess(false), 4000);
       } else {

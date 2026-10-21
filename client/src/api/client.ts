@@ -95,6 +95,38 @@ export function clearStoredAuthToken(): void {
   localStorage.removeItem('admin_token');
 }
 
+/**
+ * Safely decodes the current authenticated user ID from the active JWT token.
+ * Returns null if no token exists, or if token is invalid/unparseable.
+ */
+export function getAuthenticatedUserIdFromToken(): string | null {
+  const token = getStoredAuthToken();
+  if (!token) return null;
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    let jsonString = '';
+    if (typeof atob === 'function') {
+      jsonString = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+    } else if (typeof Buffer !== 'undefined') {
+      jsonString = Buffer.from(base64, 'base64').toString('utf-8');
+    }
+    if (!jsonString) return null;
+    const parsed = JSON.parse(jsonString);
+    const resolvedId = parsed.id || parsed.userId || parsed._id;
+    return resolvedId ? String(resolvedId) : null;
+  } catch {
+    return null;
+  }
+}
+
 apiClient.interceptors.request.use((config) => {
   const token = getStoredAuthToken();
   if (token && config.headers) {

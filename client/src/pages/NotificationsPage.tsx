@@ -19,7 +19,7 @@ interface NotificationItem {
   title: string;
   message: string;
   category: 'REGISTRATION' | 'SECURITY' | 'SYSTEM' | 'EVENT';
-  timestamp: string;
+  timestamp: string | null;
   read: boolean;
 }
 
@@ -86,7 +86,9 @@ export const NotificationsPage: React.FC = () => {
           const eventName = reg.event?.name || reg.eventId?.name || 'Registered Event';
           const regId = reg.id || reg._id;
           const status = reg.status || 'CONFIRMED';
-          const dateStr = reg.createdAt || new Date().toISOString();
+          const rawDate = reg.createdAt || reg.registeredAt;
+          const isValidDate = rawDate && !isNaN(new Date(rawDate).getTime());
+          const dateStr = isValidDate ? new Date(rawDate).toISOString() : null;
           const notifId = `reg-${regId}`;
 
           items.push({
@@ -118,21 +120,28 @@ export const NotificationsPage: React.FC = () => {
             const passId = pass.id || pass._id;
             const eventName = pass.eventName || 'Event';
             const notifId = `checkin-${passId}`;
+            const rawDate = pass.checkedInAt || pass.firstCheckedInAt || pass.updatedAt;
+            const isValidDate = rawDate && !isNaN(new Date(rawDate).getTime());
+            const dateStr = isValidDate ? new Date(rawDate).toISOString() : null;
 
             items.push({
               id: notifId,
               title: `Turnstile Check-In Verified: ${eventName}`,
               message: `Your gate credential was scanned and successfully verified at the venue turnstile.`,
               category: 'EVENT',
-              timestamp: pass.checkedInAt || pass.updatedAt || new Date().toISOString(),
+              timestamp: dateStr,
               read: currentReadSet.has(notifId),
             });
           }
         }
       }
 
-      // Sort newest notifications first
-      items.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      // Sort newest notifications first; items without timestamp sort to the bottom
+      items.sort((a, b) => {
+        const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return timeB - timeA;
+      });
       setNotifications(items);
     } catch (err: any) {
       setError(extractErrorMessage(err, 'Failed to retrieve notification updates. Please retry.'));
@@ -339,7 +348,7 @@ export const NotificationsPage: React.FC = () => {
                     {notif.message}
                   </p>
                   <span className="text-[11px] text-stone-400 block pt-0.5">
-                    {formatLocalizedDateTime(notif.timestamp)}
+                    {notif.timestamp ? formatLocalizedDateTime(notif.timestamp) : 'Date unavailable'}
                   </span>
                 </div>
               </div>

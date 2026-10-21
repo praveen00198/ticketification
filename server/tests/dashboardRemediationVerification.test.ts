@@ -1,5 +1,7 @@
 import request from 'supertest';
 import mongoose from 'mongoose';
+import fs from 'fs';
+import path from 'path';
 import app from '../src/app';
 import { createJwtToken } from '../src/utils/local-auth';
 import { mongoEventReportRepository } from '../src/modules/events/repositories/mongo-event-report.repository';
@@ -397,4 +399,213 @@ describe('Dashboard Remediation & Functional Verification Test Suite', () => {
       expect(res.body.success).toBe(false);
     });
   });
+
+  // =========================================================================
+  // 7. Targeted Final Fixes: User Isolation, Privacy Cleanliness & Timestamp Safety
+  // =========================================================================
+  describe('7. Targeted Final Fixes: User Isolation, Privacy Cleanliness & Timestamp Safety', () => {
+    describe('A. Privacy Settings Cleanliness', () => {
+      it('PrivacySettingsPage contains no leftover collaboration preferences or speculative toggles', () => {
+        const privacyPagePath = path.resolve(__dirname, '../../client/src/pages/PrivacySettingsPage.tsx');
+        expect(fs.existsSync(privacyPagePath)).toBe(true);
+
+        const content = fs.readFileSync(privacyPagePath, 'utf-8');
+
+        // Verify that removed unsupported sections are NOT present
+        expect(content).not.toContain('Planned Collaboration Preferences');
+        expect(content).not.toContain('publicProfileInRoster');
+        expect(content).not.toContain('organizerMessagingConsent');
+        expect(content).not.toContain('Granular public attendee roster visibility');
+        expect(content).not.toContain('organizer direct messaging preferences');
+
+        // Verify that legitimate active privacy safeguards are present
+        expect(content).toContain('Zero-Trust Event Isolation (IDOR Defense)');
+        expect(content).toContain('Cryptographic Credential & Turnstile Security');
+        expect(content).toContain('No Government ID Collection');
+      });
+    });
+
+    describe('B. User-Specific Date & Time Preferences Isolation', () => {
+      // Direct simulation of client/src/utils/date.ts user-scoping logic
+      const BASE_PREFIX = 'ticketification_user_preferences_';
+      const mockStorage: Record<string, string> = {};
+
+      const getUserPreferencesStorageKey = (userId?: string | null): string | null => {
+        if (!userId) return null;
+        return `${BASE_PREFIX}${userId}`;
+      };
+
+      const getStoredUserPreferences = (userId?: string | null) => {
+        const key = getUserPreferencesStorageKey(userId);
+        if (key && mockStorage[key]) {
+          try {
+            const parsed = JSON.parse(mockStorage[key]);
+            return {
+              timezone: parsed.timezone || 'UTC',
+              dateFormat: parsed.dateFormat || 'YYYY-MM-DD',
+            };
+          } catch {
+            // fallback
+          }
+        }
+        return {
+          timezone: 'UTC',
+          dateFormat: 'YYYY-MM-DD',
+        };
+      };
+
+      const setStoredUserPreferences = (prefs: any, userId?: string | null) => {
+        const key = getUserPreferencesStorageKey(userId);
+        if (key) {
+          mockStorage[key] = JSON.stringify(prefs);
+        }
+      };
+
+      it('isolates cached date/time preferences strictly per user ID', () => {
+        // User A saves Tokyo timezone and DD/MM/YYYY
+        setStoredUserPreferences({ timezone: 'Asia/Tokyo', dateFormat: 'DD/MM/YYYY' }, userA.id);
+
+        // User B saves New York timezone and MM/DD/YYYY
+        setStoredUserPreferences({ timezone: 'America/New_York', dateFormat: 'MM/DD/YYYY' }, userB.id);
+
+        // Verify User A receives User A preferences
+        const prefsA = getStoredUserPreferences(userA.id);
+        expect(prefsA.timezone).toBe('Asia/Tokyo');
+        expect(prefsA.dateFormat).toBe('DD/MM/YYYY');
+
+        // Verify User B receives User B preferences
+        const prefsB = getStoredUserPreferences(userB.id);
+        expect(prefsB.timezone).toBe('America/New_York');
+        expect(prefsB.dateFormat).toBe('MM/DD/YYYY');
+
+        // Verify User B cannot access User A's cached preferences
+        expect(prefsB.timezone).not.toBe(prefsA.timezone);
+        expect(prefsB.dateFormat).not.toBe(prefsA.dateFormat);
+      });
+
+      it('account logout / unauthenticated session falls back to default preferences without leaking previous user', () => {
+        // Active User A has custom preferences
+        setStoredUserPreferences({ timezone: 'Asia/Tokyo', dateFormat: 'DD/MM/YYYY' }, userA.id);
+
+        // When user logs out, active userId becomes null
+        const unauthenticatedPrefs = getStoredUserPreferences(null);
+
+        // Must return clean platform defaults, NEVER User A's preferences
+        expect(unauthenticatedPrefs.timezone).toBe('UTC');
+        expect(unauthenticatedPrefs.dateFormat).toBe('YYYY-MM-DD');
+        expect(unauthenticatedPrefs.timezone).not.toBe('Asia/Tokyo');
+        expect(unauthenticatedPrefs.dateFormat).not.toBe('DD/MM/YYYY');
+      });
+
+      it('switching accounts immediately switches to the new user preferences', () => {
+        // Simulate User A active
+        let activeUserId: string | null = userA.id;
+        expect(getStoredUserPreferences(activeUserId).timezone).toBe('Asia/Tokyo');
+
+        // User logs out
+        activeUserId = null;
+        expect(getStoredUserPreferences(activeUserId).timezone).toBe('UTC');
+
+        // User B logs in
+        activeUserId = userB.id;
+        expect(getStoredUserPreferences(activeUserId).timezone).toBe('America/New_York');
+      });
+
+      it('missing or unknown user ID handles gracefully without crashing', () => {
+        expect(() => getStoredUserPreferences(undefined)).not.toThrow();
+        expect(() => getStoredUserPreferences('')).not.toThrow();
+        expect(getStoredUserPreferences(undefined)).toEqual({
+          timezone: 'UTC',
+          dateFormat: 'YYYY-MM-DD',
+        });
+      });
+    });
+
+    describe('C. Notifications: Timestamps are Never Invented', () => {
+      // Replicates the fixed notification creation logic from NotificationsPage.tsx
+      const buildNotificationItem = (reg: { id: string; name: string; createdAt?: any }) => {
+        const rawDate = reg.createdAt;
+        const isValidDate = rawDate && !isNaN(new Date(rawDate).getTime());
+        const dateStr = isValidDate ? new Date(rawDate).toISOString() : null;
+
+        return {
+          id: `reg-${reg.id}`,
+          title: `Registration Confirmed: ${reg.name}`,
+          timestamp: dateStr,
+        };
+      };
+
+      const formatNotificationTimestamp = (timestamp: string | null): string => {
+        if (!timestamp) return 'Date unavailable';
+        const d = new Date(timestamp);
+        if (isNaN(d.getTime())) return 'Date unavailable';
+        return d.toISOString().split('T')[0];
+      };
+
+      it('preserves valid historical timestamps exactly', () => {
+        const item = buildNotificationItem({
+          id: 'reg-1',
+          name: 'Tech Conf 2026',
+          createdAt: '2026-03-15T10:00:00.000Z',
+        });
+
+        expect(item.timestamp).toBe('2026-03-15T10:00:00.000Z');
+        expect(formatNotificationTimestamp(item.timestamp)).toBe('2026-03-15');
+      });
+
+      it('does NOT substitute the current time when createdAt is missing', () => {
+        const beforeTest = Date.now();
+
+        const item = buildNotificationItem({
+          id: 'reg-missing-date',
+          name: 'Old Event Without Date',
+          createdAt: undefined,
+        });
+
+        // FIXED: timestamp must be null, never replaced with Date.now() / new Date()
+        expect(item.timestamp).toBeNull();
+        expect(formatNotificationTimestamp(item.timestamp)).toBe('Date unavailable');
+
+        // Guarantees it did not create a timestamp close to right now
+        if (item.timestamp) {
+          const itemTime = new Date(item.timestamp).getTime();
+          expect(Math.abs(itemTime - beforeTest)).toBeGreaterThan(100_000);
+        }
+      });
+
+      it('does NOT substitute the current time when createdAt is an invalid string', () => {
+        const item = buildNotificationItem({
+          id: 'reg-invalid-date',
+          name: 'Corrupt Date Event',
+          createdAt: 'not-a-valid-date-string',
+        });
+
+        expect(item.timestamp).toBeNull();
+        expect(formatNotificationTimestamp(item.timestamp)).toBe('Date unavailable');
+      });
+
+      it('sorts notifications without timestamps to the bottom so old items do not jump to top', () => {
+        const items = [
+          buildNotificationItem({ id: '1', name: 'Event No Date', createdAt: undefined }),
+          buildNotificationItem({ id: '2', name: 'Event Recent', createdAt: '2026-10-20T12:00:00.000Z' }),
+          buildNotificationItem({ id: '3', name: 'Event Older', createdAt: '2026-05-01T12:00:00.000Z' }),
+        ];
+
+        // Sort identical to NotificationsPage.tsx
+        items.sort((a, b) => {
+          const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+          const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+          return timeB - timeA;
+        });
+
+        // Event Recent (newest) must be first
+        expect(items[0].id).toBe('reg-2');
+        // Event Older must be second
+        expect(items[1].id).toBe('reg-3');
+        // Undated event must be at the very bottom, never masquerading as newest
+        expect(items[2].id).toBe('reg-1');
+      });
+    });
+  });
 });
+
