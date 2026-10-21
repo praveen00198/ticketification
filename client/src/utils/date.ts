@@ -5,6 +5,10 @@
  * configured regional timezone and date display format preferences.
  * Scopes cached preferences strictly per authenticated user to prevent
  * cross-account leaks on shared browsers.
+ *
+ * Note on security boundary: User ID extraction from token is strictly limited to
+ * client-side localStorage preference namespacing and NEVER used as proof of
+ * authentication or authorization (which is enforced strictly by the backend).
  */
 
 import { getAuthenticatedUserIdFromToken } from '../api/client';
@@ -20,6 +24,15 @@ const BASE_PREFERENCES_KEY_PREFIX = 'ticketification_user_preferences_';
 const LEGACY_GLOBAL_KEY = 'ticketification_user_preferences';
 
 /**
+ * Platform standard default localization preferences for unauthenticated or unconfigured sessions.
+ * Canonical platform default is UTC and ISO standard date format (YYYY-MM-DD).
+ */
+export const DEFAULT_LOCALIZATION_PREFERENCES: UserLocalizationPreferences = {
+  timezone: 'UTC',
+  dateFormat: 'YYYY-MM-DD',
+};
+
+/**
  * Resolves the user-specific storage key for localization preferences.
  * Returns null if no authenticated user session exists.
  */
@@ -31,7 +44,7 @@ export function getUserPreferencesStorageKey(userId?: string | null): string | n
 
 /**
  * Retrieve cached user localization preferences from localStorage for the active user.
- * If unauthenticated or no preferences are cached for this user, returns clean system defaults.
+ * If unauthenticated or no preferences are cached for this user, returns canonical platform defaults (UTC, YYYY-MM-DD).
  */
 export function getStoredUserPreferences(userId?: string): UserLocalizationPreferences {
   const storageKey = getUserPreferencesStorageKey(userId);
@@ -41,20 +54,17 @@ export function getStoredUserPreferences(userId?: string): UserLocalizationPrefe
       if (raw) {
         const parsed = JSON.parse(raw);
         return {
-          timezone: parsed.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
-          dateFormat: parsed.dateFormat || 'YYYY-MM-DD',
+          timezone: parsed.timezone || DEFAULT_LOCALIZATION_PREFERENCES.timezone,
+          dateFormat: parsed.dateFormat || DEFAULT_LOCALIZATION_PREFERENCES.dateFormat,
         };
       }
     } catch {
-      // Fallback to runtime defaults
+      // Fallback to platform defaults
     }
   }
 
   // Fallback defaults for unauthenticated users or users with no custom settings
-  return {
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
-    dateFormat: 'YYYY-MM-DD',
-  };
+  return { ...DEFAULT_LOCALIZATION_PREFERENCES };
 }
 
 /**
@@ -108,8 +118,8 @@ export function formatLocalizedDate(
   if (isNaN(d.getTime())) return 'Date unavailable';
 
   const prefs = overridePreferences || getStoredUserPreferences();
-  const tz = prefs.timezone || 'UTC';
-  const format = prefs.dateFormat || 'YYYY-MM-DD';
+  const tz = prefs.timezone || DEFAULT_LOCALIZATION_PREFERENCES.timezone || 'UTC';
+  const format = prefs.dateFormat || DEFAULT_LOCALIZATION_PREFERENCES.dateFormat || 'YYYY-MM-DD';
 
   try {
     const formatter = new Intl.DateTimeFormat('en-US', {
@@ -157,7 +167,7 @@ export function formatLocalizedDateTime(
   if (isNaN(d.getTime())) return 'Date unavailable';
 
   const prefs = overridePreferences || getStoredUserPreferences();
-  const tz = prefs.timezone || 'UTC';
+  const tz = prefs.timezone || DEFAULT_LOCALIZATION_PREFERENCES.timezone || 'UTC';
   const dateStr = formatLocalizedDate(d, prefs);
 
   try {

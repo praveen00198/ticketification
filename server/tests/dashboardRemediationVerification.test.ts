@@ -519,6 +519,15 @@ describe('Dashboard Remediation & Functional Verification Test Suite', () => {
           dateFormat: 'YYYY-MM-DD',
         });
       });
+
+      it('verifies date.ts exports canonical DEFAULT_LOCALIZATION_PREFERENCES with UTC and YYYY-MM-DD', () => {
+        const dateUtilsPath = path.resolve(__dirname, '../../client/src/utils/date.ts');
+        expect(fs.existsSync(dateUtilsPath)).toBe(true);
+        const content = fs.readFileSync(dateUtilsPath, 'utf-8');
+        expect(content).toContain("timezone: 'UTC'");
+        expect(content).toContain("dateFormat: 'YYYY-MM-DD'");
+        expect(content).not.toContain("Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'");
+      });
     });
 
     describe('C. Notifications: Timestamps are Never Invented', () => {

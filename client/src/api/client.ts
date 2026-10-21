@@ -98,6 +98,10 @@ export function clearStoredAuthToken(): void {
 /**
  * Safely decodes the current authenticated user ID from the active JWT token.
  * Returns null if no token exists, or if token is invalid/unparseable.
+ *
+ * NOTE: This helper is used strictly for client-side localStorage preference namespacing
+ * (e.g. ticketification_user_preferences_${userId}). It is NEVER used as proof of
+ * authentication or authorization, which is enforced solely by backend middleware on every request.
  */
 export function getAuthenticatedUserIdFromToken(): string | null {
   const token = getStoredAuthToken();
