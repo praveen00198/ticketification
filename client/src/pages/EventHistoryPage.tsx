@@ -81,12 +81,12 @@ export const EventHistoryPage: React.FC = () => {
   const totalAttended = history.filter((h) => h.attendanceStatus === 'ATTENDED').length;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="w-full space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-stone-200 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Event History</h1>
-          <p className="text-sm text-stone-500 mt-1">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-900">Event History</h1>
+          <p className="text-xs text-stone-500 mt-0.5">
             Verified participation and check-in timeline based on cryptographic turnstile records.
           </p>
         </div>

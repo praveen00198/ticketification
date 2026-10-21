@@ -131,7 +131,7 @@ export const EventDetailPage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6 w-full">
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white border border-surface-border p-6 rounded-2xl shadow-sm">
         <div className="flex items-center gap-3">

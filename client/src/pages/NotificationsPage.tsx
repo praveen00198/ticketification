@@ -207,17 +207,17 @@ export const NotificationsPage: React.FC = () => {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-stone-200 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Notifications</h1>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-900">Notifications</h1>
             {unreadCount > 0 && (
               <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
                 {unreadCount} unread
               </span>
             )}
           </div>
-          <p className="text-sm text-stone-500 mt-1">
+          <p className="text-xs text-stone-500 mt-0.5">
             Real-time event updates, registration confirmations, and turnstile check-in records.
           </p>
         </div>

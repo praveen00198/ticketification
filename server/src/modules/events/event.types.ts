@@ -3,12 +3,23 @@ import {
   AttendanceMode,
   VenueType,
   EventStatus,
+  HostingType,
+  OrganizationVerificationStatus,
+  IEventOrganization,
   IEventVenue,
   IEventSchedule,
   IEventRegistration,
 } from '../../db/mongo/models/event.model';
 
-export { EventType, AttendanceMode, VenueType, EventStatus };
+export {
+  EventType,
+  AttendanceMode,
+  VenueType,
+  EventStatus,
+  HostingType,
+  OrganizationVerificationStatus,
+  IEventOrganization,
+};
 
 export const DEFAULT_CREDENTIAL_TERMINOLOGY: Record<EventType, string> = {
   CONCERT: 'Ticket',
@@ -44,6 +55,8 @@ export interface CreateEventWizardDTO {
     registrationRequired?: boolean;
     capacity?: number;
   };
+  hostingType?: HostingType;
+  organization?: IEventOrganization;
 }
 
 export interface UpdateEventDraftDTO {
@@ -64,6 +77,8 @@ export interface UpdateEventDraftDTO {
     registrationRequired?: boolean;
     capacity?: number;
   };
+  hostingType?: HostingType;
+  organization?: Partial<IEventOrganization>;
 }
 
 export interface CanonicalEventResponse {
@@ -88,6 +103,12 @@ export interface CanonicalEventResponse {
     capacity?: number;
   };
   status: EventStatus;
+  hostingType?: HostingType;
+  organization?: IEventOrganization;
+  organizationVerificationStatus?: OrganizationVerificationStatus;
+  verificationLevel?: string;
+  verificationStatus?: string;
+  displayStatus?: string;
   createdAt: string;
   updatedAt: string;
 }

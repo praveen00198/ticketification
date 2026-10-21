@@ -108,12 +108,12 @@ export const MyRegistrationsPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="w-full space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-stone-200 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-900">My Registrations</h1>
-          <p className="text-sm text-stone-500 mt-1">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-900">My Registrations</h1>
+          <p className="text-xs text-stone-500 mt-0.5">
             Track and manage your upcoming event entries, approval statuses, and active registrations.
           </p>
         </div>

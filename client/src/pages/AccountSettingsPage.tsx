@@ -98,9 +98,9 @@ export const AccountSettingsPage: React.FC = () => {
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       {/* Header */}
-      <div className="border-b border-stone-200 pb-5">
-        <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Account Settings</h1>
-        <p className="text-sm text-stone-500 mt-1">
+      <div>
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-900">Account Settings</h1>
+        <p className="text-xs text-stone-500 mt-0.5">
           Configure regional clock formatting, timezone display, and platform localization.
         </p>
       </div>

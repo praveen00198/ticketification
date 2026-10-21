@@ -70,6 +70,30 @@ export class EventLifecycleService {
 
     // Business precondition: Pre-Publish verification gate
     if (targetStatus === 'PUBLISHED') {
+      if (
+        event.organizationVerificationStatus === 'PENDING' ||
+        event.verificationStatus === 'PENDING'
+      ) {
+        throw new AppError(
+          'Organization verification is pending. The event cannot be published until verified.',
+          400
+        );
+      }
+      if (
+        event.organizationVerificationStatus === 'REJECTED' ||
+        event.verificationStatus === 'REJECTED'
+      ) {
+        throw new AppError(
+          'Organization verification was rejected. The event cannot be published.',
+          400
+        );
+      }
+      if (event.hostingType === 'ORGANIZATION' && event.verificationStatus !== 'VERIFIED') {
+        throw new AppError(
+          'Organization-hosted events must be officially verified and approved before publication.',
+          400
+        );
+      }
       if (event.verificationStatus !== 'VERIFIED') {
         throw new AppError(
           'Event must be officially verified and approved before it can be published.',

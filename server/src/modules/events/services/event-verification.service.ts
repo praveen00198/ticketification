@@ -23,6 +23,7 @@ import {
   VerificationRiskTier,
 } from '../../../db/mongo/models/event-verification.model';
 import { IEventDocument } from '../../../db/mongo/models/event.model';
+import { auditService } from './audit.service';
 
 const PUBLIC_EMAIL_DOMAINS = new Set([
   'gmail.com',
@@ -463,13 +464,37 @@ export class EventVerificationService {
 
     if (decision === 'APPROVED') {
       event.verificationStatus = 'VERIFIED';
+      event.organizationVerificationStatus = 'APPROVED';
       event.verificationLevel = verification.riskTier;
       event.status = 'APPROVED';
     } else {
       event.verificationStatus = 'REJECTED';
+      event.organizationVerificationStatus = 'REJECTED';
       event.status = 'DRAFT';
     }
     await event.save();
+
+    // Immutable audit log
+    try {
+      await auditService.record({
+        actorId: adminObjectId,
+        actorEmail: 'admin@ticketification.internal',
+        actorRole: 'ADMIN',
+        eventId: event._id,
+        action: `EVENT_VERIFICATION_${decision}`,
+        targetEntity: 'EventVerification',
+        targetId: verification?._id?.toString() || String(event._id),
+        metadata: {
+          decision,
+          reviewNotes,
+          riskTier: verification?.riskTier || 'UNVERIFIED',
+          newStatus: event.status,
+          verificationStatus: event.verificationStatus,
+        },
+      });
+    } catch (auditErr) {
+      console.warn('[EventVerificationService] Audit log record warning:', auditErr);
+    }
 
     return {
       verification: updatedVerification!,

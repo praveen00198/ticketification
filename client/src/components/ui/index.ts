@@ -4,6 +4,7 @@ export * from './Badge';
 export * from './Card';
 export * from './EmptyState';
 export * from './EmptyEventsState';
+export * from './ErrorState';
 export * from './StatCard';
 export * from './Tabs';
 export * from './Modal';

@@ -108,6 +108,32 @@ export type EventVerificationStatus = 'UNVERIFIED' | 'PENDING' | 'VERIFIED' | 'R
 export const EVENT_VERIFICATION_LEVELS: EventVerificationLevel[] = ['UNVERIFIED', 'LOW', 'MEDIUM', 'HIGH'];
 export const EVENT_VERIFICATION_STATUSES: EventVerificationStatus[] = ['UNVERIFIED', 'PENDING', 'VERIFIED', 'REJECTED'];
 
+export type HostingType = 'INDIVIDUAL' | 'ORGANIZATION';
+export const HOSTING_TYPES: HostingType[] = ['INDIVIDUAL', 'ORGANIZATION'];
+
+export type OrganizationVerificationStatus =
+  | 'NOT_REQUIRED'
+  | 'PENDING'
+  | 'APPROVED'
+  | 'REJECTED';
+export const ORGANIZATION_VERIFICATION_STATUSES: OrganizationVerificationStatus[] = [
+  'NOT_REQUIRED',
+  'PENDING',
+  'APPROVED',
+  'REJECTED',
+];
+
+export interface IEventOrganization {
+  name: string;
+  institutionType?: string;
+  institutionName?: string;
+  officialEmail?: string;
+  department?: string;
+  designation?: string;
+  websiteUrl?: string;
+  documentUrls?: string[];
+}
+
 export interface IEventStatusHistory {
   fromStatus: EventStatus;
   toStatus: EventStatus;
@@ -130,6 +156,9 @@ export interface IEvent {
   schedule: IEventSchedule;
   registration?: IEventRegistration;
   status: EventStatus;
+  hostingType?: HostingType;
+  organization?: IEventOrganization;
+  organizationVerificationStatus?: OrganizationVerificationStatus;
   verificationLevel?: EventVerificationLevel;
   verificationStatus?: EventVerificationStatus;
   institutionId?: mongoose.Types.ObjectId;
@@ -365,6 +394,34 @@ const EventSchema = new Schema<IEventDocument>(
       required: true,
       index: true,
     },
+    hostingType: {
+      type: String,
+      enum: {
+        values: HOSTING_TYPES,
+        message: 'Invalid hostingType: {VALUE}',
+      },
+      default: 'INDIVIDUAL',
+      index: true,
+    },
+    organization: {
+      name: { type: String, trim: true, maxlength: 150 },
+      institutionType: { type: String, trim: true },
+      institutionName: { type: String, trim: true, maxlength: 150 },
+      officialEmail: { type: String, trim: true, lowercase: true, maxlength: 150 },
+      department: { type: String, trim: true, maxlength: 100 },
+      designation: { type: String, trim: true, maxlength: 100 },
+      websiteUrl: { type: String, trim: true, maxlength: 200 },
+      documentUrls: { type: [String], default: [] },
+    },
+    organizationVerificationStatus: {
+      type: String,
+      enum: {
+        values: ORGANIZATION_VERIFICATION_STATUSES,
+        message: 'Invalid organizationVerificationStatus: {VALUE}',
+      },
+      default: 'NOT_REQUIRED',
+      index: true,
+    },
     verificationLevel: {
       type: String,
       enum: {
@@ -423,6 +480,8 @@ EventSchema.index({ ownerId: 1, createdAt: -1 });
 EventSchema.index({ ownerSupabaseId: 1, createdAt: -1 });
 EventSchema.index({ ownerId: 1, status: 1 });
 EventSchema.index({ ownerId: 1, eventType: 1 });
+EventSchema.index({ hostingType: 1, organizationVerificationStatus: 1 });
+EventSchema.index({ 'organization.name': 1 });
 EventSchema.index({ name: 'text', description: 'text' });
 
 export const EventModel: Model<IEventDocument> =

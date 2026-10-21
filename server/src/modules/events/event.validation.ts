@@ -8,6 +8,7 @@ import {
   EventType,
   AttendanceMode,
   VenueType,
+  HostingType,
   DEFAULT_CREDENTIAL_TERMINOLOGY,
 } from './event.types';
 import {
@@ -214,6 +215,43 @@ export function validateEventWizardInput(body: any): CreateEventWizardDTO {
     };
   }
 
+  // 10. Hosting Type & Organization
+  let hostingType: HostingType = 'INDIVIDUAL';
+  if (body.hostingType !== undefined && body.hostingType !== null) {
+    const rawHostType = String(body.hostingType).trim().toUpperCase();
+    if (!['INDIVIDUAL', 'ORGANIZATION'].includes(rawHostType)) {
+      throw new ValidationError(`Invalid hostingType: "${body.hostingType}". Allowed: INDIVIDUAL, ORGANIZATION.`);
+    }
+    hostingType = rawHostType as HostingType;
+  }
+
+  let organization: CreateEventWizardDTO['organization'];
+  if (hostingType === 'ORGANIZATION') {
+    if (!body.organization || typeof body.organization !== 'object') {
+      throw new ValidationError('Organization details are required for organization-hosted events.');
+    }
+    const orgName = typeof body.organization.name === 'string' ? body.organization.name.trim() : '';
+    if (!orgName || orgName.length < 2 || orgName.length > 150) {
+      throw new ValidationError('Organization name is required and must be between 2 and 150 characters.');
+    }
+
+    let officialEmail = body.organization.officialEmail ? String(body.organization.officialEmail).trim().toLowerCase() : undefined;
+    if (officialEmail && !/^\S+@\S+\.\S+$/.test(officialEmail)) {
+      throw new ValidationError('Invalid official institutional email format.');
+    }
+
+    organization = {
+      name: orgName,
+      institutionType: body.organization.institutionType ? String(body.organization.institutionType).trim() : undefined,
+      institutionName: body.organization.institutionName ? String(body.organization.institutionName).trim() : undefined,
+      officialEmail,
+      department: body.organization.department ? String(body.organization.department).trim() : undefined,
+      designation: body.organization.designation ? String(body.organization.designation).trim() : undefined,
+      websiteUrl: body.organization.websiteUrl ? String(body.organization.websiteUrl).trim() : undefined,
+      documentUrls: Array.isArray(body.organization.documentUrls) ? body.organization.documentUrls : [],
+    };
+  }
+
   return {
     eventType,
     name,
@@ -224,6 +262,8 @@ export function validateEventWizardInput(body: any): CreateEventWizardDTO {
     venue,
     schedule,
     registration,
+    hostingType,
+    organization,
   };
 }
 

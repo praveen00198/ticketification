@@ -3,6 +3,7 @@ import { mongoEventRepository, MongoEventRepository, EventQueryOptions, Paginate
 import { ticketTypeRepository, TicketTypeRepository, CreateTicketTypeInput } from '../repositories/ticket-type.repository';
 import { userRepository, UserRepository } from '../../auth/repositories/user.repository';
 import { mongoUserRepository, MongoUserRepository } from '../../auth/repositories/mongo-user.repository';
+import { mongoEventVerificationRepository, MongoEventVerificationRepository } from '../repositories/mongo-event-verification.repository';
 import { supabaseStorageService, SupabaseStorageService } from '../../tickets/services/supabase-storage.service';
 import {
   ValidationError,
@@ -19,6 +20,8 @@ import {
   CreateEventWizardDTO,
   UpdateEventDraftDTO,
   CanonicalEventResponse,
+  HostingType,
+  OrganizationVerificationStatus,
   DEFAULT_CREDENTIAL_TERMINOLOGY,
 } from '../event.types';
 import { IEventDocument } from '../../../db/mongo/models/event.model';
@@ -38,13 +41,21 @@ export class EventService {
     private readonly userRepo: UserRepository = userRepository,
     private readonly mongoEventRepo: MongoEventRepository = mongoEventRepository,
     private readonly mongoUserRepo: MongoUserRepository = mongoUserRepository,
-    private readonly storageService: SupabaseStorageService = supabaseStorageService
+    private readonly storageService: SupabaseStorageService = supabaseStorageService,
+    private readonly eventVerificationRepo: MongoEventVerificationRepository = mongoEventVerificationRepository
   ) {}
 
   /**
    * Helper to format a MongoDB event document into CanonicalEventResponse.
    */
   private formatCanonicalEvent(doc: IEventDocument): CanonicalEventResponse {
+    let displayStatus: string = doc.status;
+    if (doc.organizationVerificationStatus === 'PENDING' || doc.verificationStatus === 'PENDING') {
+      displayStatus = 'Draft — Organization Verification Pending';
+    } else if (doc.organizationVerificationStatus === 'REJECTED' || doc.verificationStatus === 'REJECTED') {
+      displayStatus = 'Draft — Organization Verification Rejected';
+    }
+
     return {
       id: doc._id.toString(),
       ownerId: doc.ownerId.toString(),
@@ -69,6 +80,12 @@ export class EventService {
           }
         : undefined,
       status: doc.status,
+      hostingType: doc.hostingType || 'INDIVIDUAL',
+      organization: doc.organization,
+      organizationVerificationStatus: doc.organizationVerificationStatus || 'NOT_REQUIRED',
+      verificationStatus: doc.verificationStatus || 'UNVERIFIED',
+      verificationLevel: doc.verificationLevel || 'UNVERIFIED',
+      displayStatus,
       createdAt: doc.createdAt.toISOString(),
       updatedAt: doc.updatedAt.toISOString(),
     };
@@ -76,29 +93,39 @@ export class EventService {
 
   /**
    * Phase 4: Create a new Event Draft via the Event Creation Wizard.
-   * Enforces organizer onboarding prerequisite and zero-trust owner derivation.
+   * Removes mandatory hostProfile onboarding requirement and links organization verification to the event.
    */
   async createEventWizard(
     supabaseUserId: string,
     data: CreateEventWizardDTO
   ): Promise<CanonicalEventResponse> {
-    // 1. Verify organizer onboarding prerequisite
-    const user = await this.mongoUserRepo.findBySupabaseId(supabaseUserId);
+    // 1. Resolve authenticated user identity
+    let user = await this.mongoUserRepo.findBySupabaseId(supabaseUserId);
+    if (!user) {
+      const sqlUser = await this.userRepo.findById(supabaseUserId);
+      user = await this.mongoUserRepo.create({
+        supabaseUserId,
+        email: sqlUser?.email || `${supabaseUserId}@ticketification.internal`,
+        name: sqlUser?.name || 'User',
+        platformRole: sqlUser?.role === 'ADMIN' ? 'ADMIN' : 'USER',
+        status: 'ACTIVE',
+      });
+    }
 
-    const isOnboarded =
-      user &&
-      user.hostProfile &&
-      user.hostProfile.organizationName &&
-      user.workspaceStatus === 'ACTIVE';
-
-    if (!isOnboarded) {
+    if (user.status === 'SUSPENDED' || user.workspaceStatus === 'SUSPENDED') {
       throw new AuthorizationError(
-        'Organizer onboarding required. Please complete organizer setup before creating events.',
-        { code: 'ONBOARDING_REQUIRED' }
+        'Your account or workspace is suspended. You cannot create events.',
+        { code: 'ACCOUNT_SUSPENDED' }
       );
     }
 
-    // 2. Prepare canonical MongoDB Event document
+    // 2. Resolve hosting type & organization association
+    const hostingType: HostingType = data.hostingType === 'ORGANIZATION' ? 'ORGANIZATION' : 'INDIVIDUAL';
+    const isOrg = hostingType === 'ORGANIZATION';
+    const orgVerificationStatus: OrganizationVerificationStatus = isOrg ? 'PENDING' : 'NOT_REQUIRED';
+    const initialVerificationStatus = isOrg ? 'PENDING' : 'UNVERIFIED';
+
+    // 3. Prepare canonical MongoDB Event document
     const credentialTerminology =
       data.credentialTerminology || DEFAULT_CREDENTIAL_TERMINOLOGY[data.eventType];
 
@@ -125,7 +152,45 @@ export class EventService {
           }
         : undefined,
       status: 'DRAFT',
+      hostingType,
+      organization: isOrg && data.organization ? {
+        name: data.organization.name,
+        institutionType: data.organization.institutionType,
+        institutionName: data.organization.institutionName,
+        officialEmail: data.organization.officialEmail,
+        department: data.organization.department,
+        designation: data.organization.designation,
+        websiteUrl: data.organization.websiteUrl,
+        documentUrls: data.organization.documentUrls || [],
+      } : undefined,
+      organizationVerificationStatus: orgVerificationStatus,
+      verificationStatus: initialVerificationStatus,
+      verificationLevel: 'UNVERIFIED',
     });
+
+    // 4. Create or associate event verification record if organization-hosted
+    if (isOrg && data.organization) {
+      try {
+        await this.eventVerificationRepo.createVerification({
+          eventId: eventDoc._id,
+          ownerId: user._id,
+          institutionName: data.organization.name,
+          institutionType: (data.organization.institutionType as any) || 'CORPORATE',
+          officialEmail: data.organization.officialEmail || user.email,
+          department: data.organization.department || 'General',
+          designation: data.organization.designation || 'Event Organizer',
+          websiteUrl: data.organization.websiteUrl,
+          documentUrls: data.organization.documentUrls || [],
+          otpVerified: false,
+          riskScore: 30,
+          riskTier: 'LOW',
+          riskFactors: ['ORGANIZATION_VERIFICATION_PENDING'],
+          status: 'PENDING',
+        });
+      } catch (verifErr) {
+        console.warn('[EventService] Auto-created verification record notice:', verifErr);
+      }
+    }
 
     return this.formatCanonicalEvent(eventDoc);
   }

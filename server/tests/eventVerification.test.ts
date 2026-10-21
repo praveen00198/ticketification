@@ -23,12 +23,9 @@ import { mongoEventRepository } from '../src/modules/events/repositories/mongo-e
 import { mongoEventVerificationRepository } from '../src/modules/events/repositories/mongo-event-verification.repository';
 import { eventVerificationService } from '../src/modules/events/services/event-verification.service';
 import { supabaseStorageService } from '../src/modules/tickets/services/supabase-storage.service';
+import { createJwtToken } from '../src/utils/local-auth';
 
 describe('Phase 5: Event Verification & Risk Engine', () => {
-  const hostToken = 'valid-host-token-phase5';
-  const intruderToken = 'valid-intruder-token-phase5';
-  const adminToken = 'valid-admin-token-phase5';
-
   const hostUser = {
     id: 'host-user-uuid-ph5',
     email: 'host.phase5@college.edu',
@@ -46,6 +43,10 @@ describe('Phase 5: Event Verification & Risk Engine', () => {
     email: 'admin.phase5@ticketification.com',
     role: 'ADMIN' as const,
   };
+
+  const hostToken = createJwtToken(hostUser);
+  const intruderToken = createJwtToken(intruderUser);
+  const adminToken = createJwtToken(adminUser);
 
   const hostMongoId = new mongoose.Types.ObjectId();
   const intruderMongoId = new mongoose.Types.ObjectId();
@@ -145,42 +146,43 @@ describe('Phase 5: Event Verification & Risk Engine', () => {
       return null;
     });
 
+    const userMap: Record<string, any> = {
+      [hostUser.id]: {
+        _id: hostMongoId,
+        supabaseUserId: hostUser.id,
+        email: hostUser.email,
+        name: 'Host Professor',
+        platformRole: 'USER',
+        status: 'ACTIVE',
+        workspaceStatus: 'ACTIVE',
+        hostProfile: { organizationName: 'National Engineering College', institutionType: 'COLLEGE_UNIVERSITY' },
+      },
+      [intruderUser.id]: {
+        _id: intruderMongoId,
+        supabaseUserId: intruderUser.id,
+        email: intruderUser.email,
+        name: 'Intruder',
+        platformRole: 'USER',
+        status: 'ACTIVE',
+        workspaceStatus: 'ACTIVE',
+      },
+      [adminUser.id]: {
+        _id: adminMongoId,
+        supabaseUserId: adminUser.id,
+        email: adminUser.email,
+        name: 'Platform Admin',
+        platformRole: 'ADMIN',
+        status: 'ACTIVE',
+      },
+    };
+
     // Mock Mongo user repository
+    jest.spyOn(mongoUserRepository, 'findById').mockImplementation(async (id: string): Promise<any> => {
+      return userMap[id] || null;
+    });
+
     jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockImplementation(async (id: string): Promise<any> => {
-      if (id === hostUser.id) {
-        return {
-          _id: hostMongoId,
-          supabaseUserId: hostUser.id,
-          email: hostUser.email,
-          name: 'Host Professor',
-          platformRole: 'USER',
-          status: 'ACTIVE',
-          workspaceStatus: 'ACTIVE',
-          hostProfile: { organizationName: 'National Engineering College', institutionType: 'COLLEGE_UNIVERSITY' },
-        };
-      }
-      if (id === intruderUser.id) {
-        return {
-          _id: intruderMongoId,
-          supabaseUserId: intruderUser.id,
-          email: intruderUser.email,
-          name: 'Intruder',
-          platformRole: 'USER',
-          status: 'ACTIVE',
-          workspaceStatus: 'ACTIVE',
-        };
-      }
-      if (id === adminUser.id) {
-        return {
-          _id: adminMongoId,
-          supabaseUserId: adminUser.id,
-          email: adminUser.email,
-          name: 'Platform Admin',
-          platformRole: 'ADMIN',
-          status: 'ACTIVE',
-        };
-      }
-      return null;
+      return userMap[id] || null;
     });
 
     // Mock Mongo Event repository

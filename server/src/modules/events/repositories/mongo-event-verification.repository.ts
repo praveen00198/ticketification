@@ -9,6 +9,19 @@ import {
 
 export class MongoEventVerificationRepository {
   /**
+   * Create or update verification record.
+   */
+  async createVerification(data: Partial<IEventVerification>): Promise<IEventVerificationDocument> {
+    if (data.eventId) {
+      const existing = await EventVerificationModel.findOne({ eventId: data.eventId });
+      if (existing) {
+        Object.assign(existing, data);
+        return existing.save();
+      }
+    }
+    return EventVerificationModel.create(data);
+  }
+  /**
    * Find verification by eventId.
    */
   async findByEventId(

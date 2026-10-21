@@ -39,6 +39,24 @@ export interface EventSchedule {
   timezone: string;
 }
 
+export type HostingType = 'INDIVIDUAL' | 'ORGANIZATION';
+export type OrganizationVerificationStatus =
+  | 'NOT_REQUIRED'
+  | 'PENDING'
+  | 'APPROVED'
+  | 'REJECTED';
+
+export interface EventOrganizationPayload {
+  name: string;
+  institutionType?: string;
+  institutionName?: string;
+  officialEmail?: string;
+  department?: string;
+  designation?: string;
+  websiteUrl?: string;
+  documentUrls?: string[];
+}
+
 export interface CreateEventWizardPayload {
   eventType: EventType;
   name: string;
@@ -53,6 +71,8 @@ export interface CreateEventWizardPayload {
     registrationRequired?: boolean;
     capacity?: number;
   };
+  hostingType?: HostingType;
+  organization?: EventOrganizationPayload;
 }
 
 export interface UpdateEventDraftPayload {
@@ -69,6 +89,8 @@ export interface UpdateEventDraftPayload {
     registrationRequired?: boolean;
     capacity?: number;
   };
+  hostingType?: HostingType;
+  organization?: Partial<EventOrganizationPayload>;
 }
 
 export interface CanonicalEventItem {
@@ -89,6 +111,12 @@ export interface CanonicalEventItem {
     capacity?: number;
   };
   status: string;
+  hostingType?: HostingType;
+  organization?: EventOrganizationPayload;
+  organizationVerificationStatus?: OrganizationVerificationStatus;
+  verificationLevel?: string;
+  verificationStatus?: string;
+  displayStatus?: string;
   createdAt: string;
   updatedAt: string;
 }

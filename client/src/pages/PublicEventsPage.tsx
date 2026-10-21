@@ -8,9 +8,7 @@ import {
   ArrowRight,
   ShieldCheck,
   Sparkles,
-  RefreshCw,
   X,
-  AlertCircle,
 } from "lucide-react";
 import {
   RiCompass3Line,
@@ -29,7 +27,7 @@ import {
   RiCloseLine,
 } from "@remixicon/react";
 import { publicApi, PublicEventSummary } from "../api/public";
-import { EmptyEventsState } from "../components/ui";
+import { EmptyEventsState, ErrorState } from "../components/ui";
 
 const PRIMARY_EVENT_TYPES = [
   { label: "All Categories", value: "ALL", icon: RiCompass3Line },
@@ -669,23 +667,15 @@ export const PublicEventsPage: React.FC = () => {
           </div>
         ) : error ? (
           /* ── Error State with Retry ── */
-          <div className="py-16 text-center bg-white border border-rose-200 rounded-2xl p-8 space-y-4 max-w-lg mx-auto">
-            <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 mx-auto flex items-center justify-center">
-              <AlertCircle className="w-6 h-6" />
-            </div>
-            <div className="space-y-1">
-              <h3 className="text-base font-bold text-stone-900">
-                Failed to Load Catalog
-              </h3>
-              <p className="text-xs text-stone-600 leading-relaxed">{error}</p>
-            </div>
-            <button
-              onClick={fetchEvents}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-stone-900 text-white font-medium text-xs hover:bg-stone-800 transition-colors shadow-sm"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              Try Again
-            </button>
+          <div className="min-h-[420px] w-full flex flex-col items-center justify-center my-auto">
+            <ErrorState
+              title="Failed to Load Catalog"
+              description={error}
+              onRetry={fetchEvents}
+              retryText="Try Again"
+              statusText="CATALOG DISRUPTED"
+              errorCode="ERR_CATALOG_SYNC"
+            />
           </div>
         ) : events.length === 0 ? (
           <div className="min-h-[420px] w-full flex flex-col items-center justify-center">

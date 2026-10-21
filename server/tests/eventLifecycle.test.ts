@@ -21,24 +21,28 @@ import { userRepository } from '../src/modules/auth/repositories/user.repository
 import { mongoUserRepository } from '../src/modules/auth/repositories/mongo-user.repository';
 import { mongoEventRepository } from '../src/modules/events/repositories/mongo-event.repository';
 import { eventLifecycleService } from '../src/modules/events/services/event-lifecycle.service';
+import { createJwtToken } from '../src/utils/local-auth';
 
 describe('Phase 6: Event Lifecycle Engine', () => {
   const hostUser = {
     id: 'mock-host-uuid-phase6',
     email: 'host.phase6@university.edu',
+    role: 'USER' as const,
   };
   const intruderUser = {
     id: 'mock-intruder-uuid-phase6',
     email: 'intruder@other.edu',
+    role: 'USER' as const,
   };
   const adminUser = {
     id: 'mock-admin-uuid-phase6',
     email: 'platform.admin@ticketification.com',
+    role: 'ADMIN' as const,
   };
 
-  const hostToken = 'valid-host-token-phase6';
-  const intruderToken = 'valid-intruder-token-phase6';
-  const adminToken = 'valid-admin-token-phase6';
+  const hostToken = createJwtToken(hostUser);
+  const intruderToken = createJwtToken(intruderUser);
+  const adminToken = createJwtToken(adminUser);
 
   const hostMongoId = new mongoose.Types.ObjectId();
   const intruderMongoId = new mongoose.Types.ObjectId();
@@ -90,6 +94,35 @@ describe('Phase 6: Event Lifecycle Engine', () => {
       return { data: { user: null }, error: { message: 'Invalid JWT' } };
     });
 
+    const userMap: Record<string, any> = {
+      [hostUser.id]: {
+        _id: hostMongoId,
+        supabaseUserId: hostUser.id,
+        email: hostUser.email,
+        name: 'Lead Host',
+        platformRole: 'USER',
+        status: 'ACTIVE',
+        workspaceStatus: 'ACTIVE',
+      },
+      [intruderUser.id]: {
+        _id: intruderMongoId,
+        supabaseUserId: intruderUser.id,
+        email: intruderUser.email,
+        name: 'Intruder',
+        platformRole: 'USER',
+        status: 'ACTIVE',
+        workspaceStatus: 'ACTIVE',
+      },
+      [adminUser.id]: {
+        _id: adminMongoId,
+        supabaseUserId: adminUser.id,
+        email: adminUser.email,
+        name: 'Platform Admin',
+        platformRole: 'ADMIN',
+        status: 'ACTIVE',
+      },
+    };
+
     // Mock PostgreSQL user repository
     jest.spyOn(userRepository, 'findById').mockImplementation(async (id: string): Promise<any> => {
       if (id === hostUser.id) return { id: hostUser.id, name: 'Lead Host', email: hostUser.email, role: 'USER' };
@@ -99,40 +132,12 @@ describe('Phase 6: Event Lifecycle Engine', () => {
     });
 
     // Mock Mongo user repository
+    jest.spyOn(mongoUserRepository, 'findById').mockImplementation(async (id: string): Promise<any> => {
+      return userMap[id] || null;
+    });
+
     jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockImplementation(async (id: string): Promise<any> => {
-      if (id === hostUser.id) {
-        return {
-          _id: hostMongoId,
-          supabaseUserId: hostUser.id,
-          email: hostUser.email,
-          name: 'Lead Host',
-          platformRole: 'USER',
-          status: 'ACTIVE',
-          workspaceStatus: 'ACTIVE',
-        };
-      }
-      if (id === intruderUser.id) {
-        return {
-          _id: intruderMongoId,
-          supabaseUserId: intruderUser.id,
-          email: intruderUser.email,
-          name: 'Intruder',
-          platformRole: 'USER',
-          status: 'ACTIVE',
-          workspaceStatus: 'ACTIVE',
-        };
-      }
-      if (id === adminUser.id) {
-        return {
-          _id: adminMongoId,
-          supabaseUserId: adminUser.id,
-          email: adminUser.email,
-          name: 'Platform Admin',
-          platformRole: 'ADMIN',
-          status: 'ACTIVE',
-        };
-      }
-      return null;
+      return userMap[id] || null;
     });
 
     // Mock Mongo Event repository

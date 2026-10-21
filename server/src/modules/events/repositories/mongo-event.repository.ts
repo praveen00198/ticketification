@@ -181,6 +181,16 @@ export class MongoEventRepository {
 
     const query: Record<string, any> = {
       status: { $in: ['PUBLISHED', 'REGISTRATION_OPEN', 'EVENT_LIVE'] },
+      organizationVerificationStatus: { $nin: ['PENDING', 'REJECTED'] },
+      verificationStatus: { $nin: ['PENDING', 'REJECTED'] },
+      $and: [
+        {
+          $or: [
+            { hostingType: { $ne: 'ORGANIZATION' } },
+            { hostingType: 'ORGANIZATION', verificationStatus: 'VERIFIED' },
+          ],
+        },
+      ],
     };
 
     if (options.eventType && options.eventType !== 'ALL') {
@@ -201,12 +211,14 @@ export class MongoEventRepository {
 
     if (options.search && options.search.trim()) {
       const searchRegex = { $regex: options.search.trim(), $options: 'i' };
-      query.$or = [
-        { name: searchRegex },
-        { description: searchRegex },
-        { 'venue.city': searchRegex },
-        { 'venue.name': searchRegex },
-      ];
+      query.$and.push({
+        $or: [
+          { name: searchRegex },
+          { description: searchRegex },
+          { 'venue.city': searchRegex },
+          { 'venue.name': searchRegex },
+        ],
+      });
     }
 
     const [events, total] = await Promise.all([
@@ -241,6 +253,12 @@ export class MongoEventRepository {
       .findOne({
         _id: id,
         status: { $in: ['PUBLISHED', 'REGISTRATION_OPEN', 'EVENT_LIVE'] },
+        organizationVerificationStatus: { $nin: ['PENDING', 'REJECTED'] },
+        verificationStatus: { $nin: ['PENDING', 'REJECTED'] },
+        $or: [
+          { hostingType: { $ne: 'ORGANIZATION' } },
+          { hostingType: 'ORGANIZATION', verificationStatus: 'VERIFIED' },
+        ],
       })
       .exec();
   }
@@ -252,6 +270,8 @@ export class MongoEventRepository {
     const isObjectId = mongoose.Types.ObjectId.isValid(hostIdentifier);
     const query: Record<string, any> = {
       status: { $in: ['PUBLISHED', 'REGISTRATION_OPEN', 'EVENT_LIVE'] },
+      organizationVerificationStatus: { $nin: ['PENDING', 'REJECTED'] },
+      verificationStatus: { $nin: ['PENDING', 'REJECTED'] },
       $or: [
         { ownerSupabaseId: hostIdentifier },
         ...(isObjectId ? [{ ownerId: new mongoose.Types.ObjectId(hostIdentifier) }] : []),

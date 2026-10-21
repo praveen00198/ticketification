@@ -16,7 +16,7 @@ import {
   Settings,
   Ticket as TicketIcon,
 } from 'lucide-react';
-import { Button, Badge, Modal, Input, InView, AnimatedGroup, EmptyEventsState } from '../components/ui';
+import { Button, Badge, Modal, Input, InView, AnimatedGroup, EmptyEventsState, ErrorState } from '../components/ui';
 import { formatLocalizedDate } from '../utils/date';
 
 const formatVenueLabel = (venue: any): string => {
@@ -103,7 +103,7 @@ export const EventsPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="w-full flex-1 flex flex-col min-h-full space-y-6">
       {/* Top Banner (Seamless in single container box) */}
       <InView direction="up" distance={12}>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2">
@@ -149,25 +149,16 @@ export const EventsPage: React.FC = () => {
           Loading your events...
         </div>
       ) : eventLoadError ? (
-        <div className="p-8 rounded-2xl bg-white border border-stone-200/90 text-center space-y-4 max-w-lg mx-auto my-8 shadow-xs">
-          <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-200">
-            <AlertCircle className="w-6 h-6" />
-          </div>
-          <div>
-            <h3 className="text-base font-bold text-stone-900">Failed to Load Events</h3>
-            <p className="text-xs text-stone-500 mt-1">{eventLoadError}</p>
-          </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => refreshEvents()}
-            className="!rounded-full px-5 py-2"
-          >
-            Retry Loading Events
-          </Button>
+        <div className="flex-1 flex flex-col items-center justify-center w-full min-h-[420px] my-auto">
+          <ErrorState
+            title="Failed to Load Events"
+            description={eventLoadError}
+            onRetry={() => refreshEvents()}
+            retryText="Retry Loading Events"
+          />
         </div>
       ) : events.length === 0 ? (
-        <div className="py-6 sm:py-10">
+        <div className="flex-1 flex flex-col items-center justify-center w-full min-h-[420px] my-auto">
           <EmptyEventsState
             title="No Events Created Yet"
             description="Create your first event to start managing registrations and attendees."
@@ -198,6 +189,8 @@ export const EventsPage: React.FC = () => {
                         variant={
                           event.status === 'ACTIVE' || event.status === 'PUBLISHED'
                             ? 'emerald'
+                            : event.organizationVerificationStatus === 'PENDING'
+                            ? 'amber'
                             : event.status === 'DRAFT'
                             ? 'amber'
                             : event.status === 'COMPLETED'
@@ -206,8 +199,15 @@ export const EventsPage: React.FC = () => {
                         }
                         size="sm"
                       >
-                        {event.status}
+                        {event.organizationVerificationStatus === 'PENDING'
+                          ? 'Draft — Verification Pending'
+                          : event.displayStatus || event.status}
                       </Badge>
+                      {event.verificationStatus === 'VERIFIED' && (
+                        <Badge variant="emerald" size="sm">
+                          Verified
+                        </Badge>
+                      )}
                       {event.eventType && (
                         <Badge variant="neutral" size="sm">
                           {event.eventType}
@@ -253,10 +253,12 @@ export const EventsPage: React.FC = () => {
                         <span className="truncate">{formatVenueLabel(event.venue)}</span>
                       </div>
                     )}
-                    {event.organizerName && (
+                    {(event.organization?.name || event.organizerName) && (
                       <div className="flex items-center gap-2">
                         <Users className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-                        <span className="text-stone-500 truncate">Host: {event.organizerName}</span>
+                        <span className="text-stone-500 truncate">
+                          {event.organization?.name ? `Org: ${event.organization.name}` : `Host: ${event.organizerName}`}
+                        </span>
                       </div>
                     )}
                     {event.credentialTerminology && (

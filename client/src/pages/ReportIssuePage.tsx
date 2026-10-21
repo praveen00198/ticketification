@@ -118,9 +118,9 @@ export const ReportIssuePage: React.FC = () => {
   return (
     <div className="max-w-5xl mx-auto space-y-8">
       {/* Header */}
-      <div className="border-b border-stone-200 pb-5">
-        <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Report an Issue</h1>
-        <p className="text-sm text-stone-500 mt-1">
+      <div>
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-900">Report an Issue</h1>
+        <p className="text-xs text-stone-500 mt-0.5">
           Submit technical bugs, access problems, or event concerns, and monitor your past issue tickets.
         </p>
       </div>

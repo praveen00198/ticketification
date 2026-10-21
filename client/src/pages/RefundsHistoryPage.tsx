@@ -6,14 +6,14 @@ export const RefundsHistoryPage: React.FC = () => {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
-      <div className="border-b border-stone-200 pb-5">
+      <div>
         <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Refunds History & Status</h1>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-900">Refunds History & Status</h1>
           <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-stone-100 text-stone-600 border border-stone-200 uppercase tracking-wider">
             Planned
           </span>
         </div>
-        <p className="text-sm text-stone-500 mt-1">
+        <p className="text-xs text-stone-500 mt-0.5">
           Monitor submitted refund requests, review organizer refund policies, and track reversal timelines.
         </p>
       </div>

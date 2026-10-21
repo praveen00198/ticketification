@@ -310,7 +310,7 @@ export const EmptyEventsState: React.FC<EmptyEventsStateProps> = ({
         <h3 className="text-xl sm:text-2xl font-serif font-normal text-stone-900 tracking-tight">
           {title}
         </h3>
-        <p className="text-xs sm:text-sm text-stone-500 max-w-md mx-auto leading-relaxed">
+        <p className="text-[11px] sm:text-xs text-stone-500 max-w-md mx-auto leading-relaxed">
           {description}
         </p>
       </div>

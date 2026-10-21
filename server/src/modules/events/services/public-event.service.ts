@@ -95,16 +95,24 @@ export class PublicEventService {
   /**
    * Helper to format host profile safely without PII.
    */
-  private formatPublicHost(user: IUserDocument | null, fallbackName = 'Event Host'): PublicHostProfile {
+  private formatPublicHost(
+    user: IUserDocument | null,
+    eventOrg?: { name?: string; institutionType?: string; websiteUrl?: string },
+    fallbackName = 'Event Host'
+  ): PublicHostProfile {
+    const orgName = eventOrg?.name || user?.hostProfile?.organizationName || user?.name || fallbackName;
+    const instType = eventOrg?.institutionType || user?.hostProfile?.institutionType || 'INDEPENDENT';
+    const website = eventOrg?.websiteUrl || user?.hostProfile?.website || null;
+
     if (!user) {
       return {
         id: 'unknown',
         name: fallbackName,
-        organizationName: fallbackName,
-        institutionType: 'INDEPENDENT',
+        organizationName: orgName,
+        institutionType: instType,
         institutionName: null,
         bio: null,
-        website: null,
+        website,
         logoUrl: null,
         hostVerificationStatus: 'UNVERIFIED',
       };
@@ -113,11 +121,11 @@ export class PublicEventService {
     return {
       id: user._id.toString(),
       name: user.name || 'Event Host',
-      organizationName: user.hostProfile?.organizationName || user.name || 'Event Organizer',
-      institutionType: user.hostProfile?.institutionType || 'INDEPENDENT',
+      organizationName: orgName,
+      institutionType: instType,
       institutionName: user.hostProfile?.institutionName || null,
       bio: user.hostProfile?.bio || null,
-      website: user.hostProfile?.website || null,
+      website,
       logoUrl: user.hostProfile?.logoUrl || user.avatarUrl || null,
       hostVerificationStatus: user.hostVerificationStatus || 'UNVERIFIED',
     };
@@ -182,7 +190,7 @@ export class PublicEventService {
 
     return {
       event: this.formatPublicEvent(event),
-      host: this.formatPublicHost(hostDoc),
+      host: this.formatPublicHost(hostDoc, event.organization),
       metrics: {
         confirmedCount,
         remainingCapacity,

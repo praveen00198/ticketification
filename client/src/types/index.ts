@@ -29,6 +29,21 @@ export interface EventItem {
   eventType?: string;
   credentialTerminology?: string;
   attendanceMode?: string;
+  hostingType?: 'INDIVIDUAL' | 'ORGANIZATION';
+  organization?: {
+    name: string;
+    institutionType?: string;
+    institutionName?: string;
+    officialEmail?: string;
+    department?: string;
+    designation?: string;
+    websiteUrl?: string;
+    documentUrls?: string[];
+  };
+  organizationVerificationStatus?: 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED';
+  verificationLevel?: string;
+  verificationStatus?: 'UNVERIFIED' | 'PENDING' | 'VERIFIED' | 'REJECTED';
+  displayStatus?: string;
   bannerUrl?: string | null;
   venueDetails?: any;
   scheduleDetails?: any;

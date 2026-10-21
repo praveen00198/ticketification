@@ -15,7 +15,7 @@ import {
 import { useEvent } from '../context/EventContext';
 import { apiClient, extractErrorMessage } from '../api/client';
 import { ROUTES } from '../routes/paths';
-import { EmptyEventsState } from '../components/ui';
+import { EmptyEventsState, ErrorState } from '../components/ui';
 import { formatLocalizedDate, formatLocalizedDateTime } from '../utils/date';
 
 const formatVenueLabel = (venue: any): string => {
@@ -91,12 +91,12 @@ export const ReportsPage: React.FC = () => {
     ((stats.totalTickets ?? 0) > 0 || (stats.checkedIn ?? 0) > 0 || (recentActivity && recentActivity.length > 0));
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="flex-1 flex flex-col w-full min-h-full space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-stone-200 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Reports & Analytics</h1>
-          <p className="text-sm text-stone-500 mt-1">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-900">Reports & Analytics</h1>
+          <p className="text-xs text-stone-500 mt-0.5">
             Turnstile attendance verification, check-in velocity, and credential issuance metrics.
           </p>
         </div>
@@ -133,7 +133,7 @@ export const ReportsPage: React.FC = () => {
           <p className="text-xs font-medium text-stone-500">Loading authorized events...</p>
         </div>
       ) : events.length === 0 ? (
-        <div className="py-12">
+        <div className="flex-1 flex flex-col items-center justify-center w-full min-h-[420px] my-auto">
           <EmptyEventsState
             title="No Analytics Available Yet"
             description="Reports will appear here once your events have activity to report."
@@ -146,22 +146,17 @@ export const ReportsPage: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-6">
-          {/* Strict Error State Separation: if error and no cached stats, display error card */}
+          {/* Strict Error State Separation: if error and no cached stats, display error state */}
           {error && !stats ? (
-            <div className="p-8 rounded-2xl bg-white border border-stone-200/90 text-center space-y-4 max-w-lg mx-auto my-8 shadow-xs">
-              <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-200">
-                <AlertCircle className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-stone-900">Failed to Load Analytics</h3>
-                <p className="text-xs text-stone-500 mt-1">{error}</p>
-              </div>
-              <button
-                onClick={() => fetchStats(selectedEventId)}
-                className="px-5 py-2 text-xs font-semibold bg-zinc-900 text-white rounded-full hover:bg-zinc-800 transition-colors shadow-2xs"
-              >
-                Retry Loading Analytics
-              </button>
+            <div className="flex-1 flex flex-col items-center justify-center w-full min-h-[420px] my-auto">
+              <ErrorState
+                title="Failed to Load Analytics"
+                description={error}
+                onRetry={() => fetchStats(selectedEventId)}
+                retryText="Retry Loading Analytics"
+                statusText="ANALYTICS DISRUPTED"
+                errorCode="ERR_REPORTING_SYNC"
+              />
             </div>
           ) : (
             <>
@@ -186,7 +181,7 @@ export const ReportsPage: React.FC = () => {
                   <p className="text-xs font-medium text-stone-500">Retrieving turnstile metrics...</p>
                 </div>
               ) : !hasReportableActivity ? (
-                <div className="py-12">
+                <div className="flex-1 flex flex-col items-center justify-center w-full min-h-[420px] my-auto">
                   <EmptyEventsState
                     title="No Analytics Available Yet"
                     description="Reports will appear here once your events have activity to report."
@@ -282,7 +277,7 @@ export const ReportsPage: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="pt-3 border-t border-stone-100">
+                      <div className="pt-2">
                         <Link
                           to={ROUTES.DASHBOARD}
                           className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-800"
@@ -299,7 +294,7 @@ export const ReportsPage: React.FC = () => {
                           No check-in scans recorded yet for this event.
                         </div>
                       ) : (
-                        <div className="divide-y divide-stone-100">
+                        <div className="space-y-2">
                           {recentActivity.slice(0, 5).map((act: any, idx: number) => (
                             <div key={idx} className="py-2.5 flex items-center justify-between text-xs">
                               <div className="flex items-center gap-2.5">

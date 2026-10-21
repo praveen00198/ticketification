@@ -34,6 +34,7 @@ import {
   EventType,
   AttendanceMode,
   VenueType,
+  HostingType,
   CreateEventWizardPayload,
 } from '../../api/events';
 
@@ -224,6 +225,16 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
   const [endTime, setEndTime] = useState<string>('18:00');
   const [timezone, setTimezone] = useState<string>('Asia/Kolkata');
 
+  // Organization Association & Verification state
+  const [hostingType, setHostingType] = useState<HostingType>('INDIVIDUAL');
+  const [orgName, setOrgName] = useState<string>('');
+  const [orgInstitutionType, setOrgInstitutionType] = useState<string>('COLLEGE_UNIVERSITY');
+  const [orgEmail, setOrgEmail] = useState<string>('');
+  const [orgDepartment, setOrgDepartment] = useState<string>('');
+  const [orgDesignation, setOrgDesignation] = useState<string>('');
+  const [orgWebsite, setOrgWebsite] = useState<string>('');
+  const [orgDocumentUrls, setOrgDocumentUrls] = useState<string[]>([]);
+
   // Handle Event Type Selection
   const handleSelectEventType = (type: EventType) => {
     setEventType(type);
@@ -345,12 +356,42 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
       return true;
     }
 
+    if (currentStep === 7) {
+      if (hostingType === 'ORGANIZATION') {
+        if (!orgName.trim()) {
+          setErrorMessage('Organization name is required.');
+          return false;
+        }
+        if (orgName.trim().length < 2 || orgName.trim().length > 150) {
+          setErrorMessage('Organization name must be between 2 and 150 characters.');
+          return false;
+        }
+        if (!orgEmail.trim()) {
+          setErrorMessage('Official institutional email is required for organization verification.');
+          return false;
+        }
+        if (!/^\S+@\S+\.\S+$/.test(orgEmail.trim())) {
+          setErrorMessage('Please enter a valid institutional email address.');
+          return false;
+        }
+        if (!orgDepartment.trim()) {
+          setErrorMessage('Department or faculty is required.');
+          return false;
+        }
+        if (!orgDesignation.trim()) {
+          setErrorMessage('Your designation or role in the organization is required.');
+          return false;
+        }
+      }
+      return true;
+    }
+
     return true;
   };
 
   const handleNext = () => {
     if (validateStep(step)) {
-      setStep((prev) => Math.min(prev + 1, 7));
+      setStep((prev) => Math.min(prev + 1, 8));
     }
   };
 
@@ -361,7 +402,7 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
 
   // Submit Draft
   const handleSaveDraft = async () => {
-    if (!validateStep(6)) return;
+    if (!validateStep(6) || !validateStep(7)) return;
 
     try {
       setIsSubmitting(true);
@@ -400,6 +441,19 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                 capacity: capacity ? parseInt(capacity, 10) : undefined,
               }
             : undefined,
+        hostingType,
+        organization:
+          hostingType === 'ORGANIZATION'
+            ? {
+                name: orgName.trim(),
+                institutionType: orgInstitutionType,
+                officialEmail: orgEmail.trim(),
+                department: orgDepartment.trim(),
+                designation: orgDesignation.trim(),
+                websiteUrl: orgWebsite.trim() || undefined,
+                documentUrls: orgDocumentUrls,
+              }
+            : undefined,
       };
 
       const created = await eventsApi.createEvent(payload);
@@ -410,18 +464,14 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
         navigate('/events');
       }
     } catch (err: any) {
-      if (err?.code === 'ONBOARDING_REQUIRED' || err?.message?.includes('onboarding required')) {
-        setErrorMessage('Organizer onboarding required. Please complete organizer setup before creating events.');
-      } else {
-        setErrorMessage(err.message || 'Failed to save event draft. Please check your entries.');
-      }
+      setErrorMessage(err.message || 'Failed to save event draft. Please check your entries.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   // Steps Progress calculation
-  const progressPercent = Math.round(((step - 1) / 6) * 100);
+  const progressPercent = Math.round(((step - 1) / 7) * 100);
 
   return (
     <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6">
@@ -429,7 +479,7 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <span className="text-xs font-semibold tracking-wider uppercase text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded">
-            Step {step} of 7
+            Step {step} of 8
           </span>
           <h1 className="text-2xl font-semibold text-zinc-900 mt-2">
             {step === 1 && 'What type of event are you hosting?'}
@@ -438,7 +488,8 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
             {step === 4 && 'How will attendees be managed?'}
             {step === 5 && 'Where is your event hosted?'}
             {step === 6 && 'Set the event schedule & timezone'}
-            {step === 7 && 'Review and save your event draft'}
+            {step === 7 && 'Organization Association & Verification'}
+            {step === 8 && 'Review and save your event draft'}
           </h1>
           <p className="text-sm text-zinc-600 mt-1">
             {step === 1 && 'Select an event category to tailor pass labels, workflows, and configuration defaults.'}
@@ -447,7 +498,8 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
             {step === 4 && 'Choose whether to take registrations on Ticketification or import an existing roster.'}
             {step === 5 && 'Configure your in-person venue, online conference link, or hybrid attendance format.'}
             {step === 6 && 'Specify start and end dates and times in your local timezone.'}
-            {step === 7 && 'Verify all details before saving your draft. You can edit this anytime before submitting.'}
+            {step === 7 && 'Specify whether this event is individually hosted or hosted on behalf of an organization.'}
+            {step === 8 && 'Verify all details before saving your draft. You can edit this anytime before submitting.'}
           </p>
         </div>
 
@@ -1043,16 +1095,232 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
           </div>
         )}
 
-        {/* ================= STEP 7: REVIEW & SAVE ================= */}
+        {/* ================= STEP 7: ORGANIZATION ASSOCIATION & VERIFICATION ================= */}
         {step === 7 && (
           <div className="space-y-6">
-            <div className="bg-emerald-50 p-4 rounded-md border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                <span>Ready to create your event! Review your configuration below.</span>
+            <div>
+              <label className="block text-sm font-semibold text-zinc-900 mb-1">
+                How is this event being hosted?
+              </label>
+              <p className="text-xs text-zinc-500 mb-4">
+                You can host events independently or on behalf of an institution. Organization-hosted events require verification before public publication.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Option 1: Individual */}
+                <div
+                  onClick={() => setHostingType('INDIVIDUAL')}
+                  className={`p-4 rounded-xl border cursor-pointer transition-all ${
+                    hostingType === 'INDIVIDUAL'
+                      ? 'border-emerald-600 bg-emerald-50/40 shadow-xs ring-1 ring-emerald-500'
+                      : 'border-zinc-200 hover:border-zinc-300 bg-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                        hostingType === 'INDIVIDUAL' ? 'bg-emerald-600 text-white' : 'bg-zinc-100 text-zinc-600'
+                      }`}
+                    >
+                      <UserCheck className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-semibold text-zinc-900">Individually Hosted</h4>
+                      <p className="text-xs text-zinc-500">Personal or independent project</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-zinc-600 mt-3 leading-relaxed">
+                    Host independently using your personal account. No organizational verification documents or institutional domain approval required.
+                  </p>
+                </div>
+
+                {/* Option 2: Organization */}
+                <div
+                  onClick={() => setHostingType('ORGANIZATION')}
+                  className={`p-4 rounded-xl border cursor-pointer transition-all ${
+                    hostingType === 'ORGANIZATION'
+                      ? 'border-emerald-600 bg-emerald-50/40 shadow-xs ring-1 ring-emerald-500'
+                      : 'border-zinc-200 hover:border-zinc-300 bg-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                        hostingType === 'ORGANIZATION' ? 'bg-emerald-600 text-white' : 'bg-zinc-100 text-zinc-600'
+                      }`}
+                    >
+                      <Building2 className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-semibold text-zinc-900">On Behalf of Organization</h4>
+                      <p className="text-xs text-zinc-500">College, Company, Club, Non-Profit</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-zinc-600 mt-3 leading-relaxed">
+                    Associate with an institution. Requires verification details. The event is saved as Draft — Verification Pending until reviewed.
+                  </p>
+                </div>
               </div>
-              <span className="font-semibold text-emerald-900 uppercase tracking-wider text-[11px]">
-                Status: DRAFT
+            </div>
+
+            {/* If Organization is selected, show details form */}
+            {hostingType === 'ORGANIZATION' && (
+              <div className="p-5 rounded-xl border border-zinc-200 bg-zinc-50/50 space-y-4 animate-in fade-in-50 duration-200">
+                <div className="flex items-center gap-2 pb-2 border-b border-zinc-200">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  <span className="text-xs font-bold text-zinc-900 uppercase tracking-wider">
+                    Organization Verification Details
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Organization Name */}
+                  <div className="sm:col-span-2">
+                    <label htmlFor="org-name" className="block text-xs font-semibold text-zinc-800 mb-1">
+                      Organization / Institution Name <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      id="org-name"
+                      type="text"
+                      value={orgName}
+                      onChange={(e) => setOrgName(e.target.value)}
+                      placeholder="e.g. Stanford University, Google Developer Student Club, TechCorp"
+                      className="w-full px-3 py-2 rounded border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  {/* Institution Type */}
+                  <div>
+                    <label htmlFor="org-type" className="block text-xs font-semibold text-zinc-800 mb-1">
+                      Institution Category <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      id="org-type"
+                      value={orgInstitutionType}
+                      onChange={(e) => setOrgInstitutionType(e.target.value)}
+                      className="w-full px-3 py-2 rounded border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    >
+                      <option value="COLLEGE_UNIVERSITY">College / University</option>
+                      <option value="CORPORATE">Corporate / Enterprise</option>
+                      <option value="NON_PROFIT">Non-Profit / NGO</option>
+                      <option value="COMMUNITY_CLUB">Community Club / Society</option>
+                      <option value="INDEPENDENT">Independent Entity</option>
+                      <option value="GOVERNMENT">Government / Public Body</option>
+                    </select>
+                  </div>
+
+                  {/* Official Institutional Email */}
+                  <div>
+                    <label htmlFor="org-email" className="block text-xs font-semibold text-zinc-800 mb-1">
+                      Official Institutional Email <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      id="org-email"
+                      type="email"
+                      value={orgEmail}
+                      onChange={(e) => setOrgEmail(e.target.value)}
+                      placeholder="e.g. dean@stanford.edu or events@acme.com"
+                      className="w-full px-3 py-2 rounded border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  {/* Department */}
+                  <div>
+                    <label htmlFor="org-dept" className="block text-xs font-semibold text-zinc-800 mb-1">
+                      Department / Faculty <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      id="org-dept"
+                      type="text"
+                      value={orgDepartment}
+                      onChange={(e) => setOrgDepartment(e.target.value)}
+                      placeholder="e.g. Computer Science & Engineering"
+                      className="w-full px-3 py-2 rounded border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  {/* Designation */}
+                  <div>
+                    <label htmlFor="org-desig" className="block text-xs font-semibold text-zinc-800 mb-1">
+                      Your Designation / Role <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      id="org-desig"
+                      type="text"
+                      value={orgDesignation}
+                      onChange={(e) => setOrgDesignation(e.target.value)}
+                      placeholder="e.g. Faculty Coordinator, Event Lead, Director"
+                      className="w-full px-3 py-2 rounded border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  {/* Website URL */}
+                  <div className="sm:col-span-2">
+                    <label htmlFor="org-web" className="block text-xs font-semibold text-zinc-800 mb-1">
+                      Organization Website URL <span className="text-zinc-400 font-normal">(Optional)</span>
+                    </label>
+                    <input
+                      id="org-web"
+                      type="url"
+                      value={orgWebsite}
+                      onChange={(e) => setOrgWebsite(e.target.value)}
+                      placeholder="https://example.org"
+                      className="w-full px-3 py-2 rounded border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  {/* Authorization Document URL */}
+                  <div className="sm:col-span-2">
+                    <label htmlFor="org-doc" className="block text-xs font-semibold text-zinc-800 mb-1">
+                      Authorization Document / Reference URL <span className="text-zinc-400 font-normal">(Optional)</span>
+                    </label>
+                    <input
+                      id="org-doc"
+                      type="url"
+                      value={orgDocumentUrls[0] || ''}
+                      onChange={(e) => {
+                        const val = e.target.value.trim();
+                        setOrgDocumentUrls(val ? [val] : []);
+                      }}
+                      placeholder="https://example.org/authorization-letter.pdf"
+                      className="w-full px-3 py-2 rounded border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                    <p className="text-[11px] text-zinc-400 mt-1">
+                      Link to an institutional permission letter, accreditation, or student council approval.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="leading-relaxed">
+                    <span className="font-semibold">Publication Notice:</span> Organization-hosted events will be saved as{' '}
+                    <span className="font-bold underline">Draft — Organization Verification Pending</span>. They will remain non-public and cannot be published until verified and approved by a platform administrator.
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ================= STEP 8: REVIEW & SAVE ================= */}
+        {step === 8 && (
+          <div className="space-y-6">
+            <div className={`p-4 rounded-md border text-xs flex items-center justify-between ${
+              hostingType === 'ORGANIZATION'
+                ? 'bg-amber-50 border-amber-200 text-amber-900'
+                : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+            }`}>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className={`w-4 h-4 ${hostingType === 'ORGANIZATION' ? 'text-amber-600' : 'text-emerald-600'}`} />
+                <span>
+                  {hostingType === 'ORGANIZATION'
+                    ? 'Review event & organization verification details before saving.'
+                    : 'Ready to create your event! Review your configuration below.'}
+                </span>
+              </div>
+              <span className="font-semibold uppercase tracking-wider text-[11px] px-2 py-0.5 rounded bg-white/70 border border-current">
+                {hostingType === 'ORGANIZATION' ? 'DRAFT — VERIFICATION PENDING' : 'Status: DRAFT'}
               </span>
             </div>
 
@@ -1141,6 +1409,41 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                   </span>
                 </div>
               </div>
+
+              {/* Card 5: Hosting & Verification */}
+              <div className="p-4 rounded border border-zinc-200 bg-zinc-50/50 relative md:col-span-2">
+                <button
+                  type="button"
+                  onClick={() => setStep(7)}
+                  className="absolute top-3 right-3 text-xs text-emerald-600 hover:underline"
+                >
+                  Edit
+                </button>
+                <div className="text-[11px] font-semibold uppercase text-zinc-400">Hosting & Verification Association</div>
+                {hostingType === 'ORGANIZATION' ? (
+                  <div className="mt-2 space-y-1.5 text-xs text-zinc-700">
+                    <div className="font-bold text-sm text-zinc-900 flex items-center gap-2">
+                      <Building2 className="w-4 h-4 text-emerald-600" />
+                      <span>{orgName}</span>
+                      <span className="text-[10px] bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 rounded-full">
+                        Verification Pending
+                      </span>
+                    </div>
+                    <div className="text-zinc-600">Category: <span className="font-medium text-zinc-800">{orgInstitutionType}</span></div>
+                    <div className="text-zinc-600">Official Email: <span className="font-medium text-zinc-800">{orgEmail}</span></div>
+                    <div className="text-zinc-600">Affiliation: <span className="font-medium text-zinc-800">{orgDepartment} ({orgDesignation})</span></div>
+                    {orgWebsite && <div className="text-zinc-600">Website: <a href={orgWebsite} target="_blank" rel="noopener noreferrer" className="text-emerald-600 underline">{orgWebsite}</a></div>}
+                  </div>
+                ) : (
+                  <div className="mt-2 flex items-center gap-2 text-xs text-zinc-700">
+                    <UserCheck className="w-4 h-4 text-emerald-600" />
+                    <span className="font-medium text-zinc-900">Individually Hosted</span>
+                    <span className="text-[10px] bg-zinc-200 text-zinc-700 font-semibold px-2 py-0.5 rounded-full">
+                      No Org Verification Required
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -1162,7 +1465,7 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
           <div />
         )}
 
-        {step < 7 ? (
+        {step < 8 ? (
           <button
             type="button"
             onClick={handleNext}
@@ -1186,7 +1489,7 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
             ) : (
               <>
                 <ShieldCheck className="w-4 h-4" />
-                Save Event Draft
+                {hostingType === 'ORGANIZATION' ? 'Save & Submit for Verification' : 'Save Event Draft'}
               </>
             )}
           </button>

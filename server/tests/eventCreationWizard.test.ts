@@ -19,15 +19,13 @@ import app from '../src/app';
 import { userRepository } from '../src/modules/auth/repositories/user.repository';
 import { mongoUserRepository } from '../src/modules/auth/repositories/mongo-user.repository';
 import { mongoEventRepository } from '../src/modules/events/repositories/mongo-event.repository';
+import { mongoEventVerificationRepository } from '../src/modules/events/repositories/mongo-event-verification.repository';
 import { supabaseStorageService } from '../src/modules/tickets/services/supabase-storage.service';
+import { createJwtToken } from '../src/utils/local-auth';
 import mongoose from 'mongoose';
 
 describe('Phase 4: Event Creation Engine & Wizard', () => {
   jest.setTimeout(30000);
-
-  const hostUserToken = 'valid-host-token-phase4';
-  const otherUserToken = 'valid-other-token-phase4';
-  const unonboardedUserToken = 'valid-unonboarded-token-phase4';
 
   const hostUser = {
     id: 'host-user-uuid-ph4',
@@ -47,9 +45,21 @@ describe('Phase 4: Event Creation Engine & Wizard', () => {
     role: 'USER' as const,
   };
 
+  const adminUser = {
+    id: 'admin-user-uuid-ph4',
+    email: 'admin.phase4@ticketification.com',
+    role: 'ADMIN' as const,
+  };
+
+  const hostUserToken = createJwtToken(hostUser);
+  const otherUserToken = createJwtToken(otherUser);
+  const unonboardedUserToken = createJwtToken(unonboardedUser);
+  const adminUserToken = createJwtToken(adminUser);
+
   const hostMongoId = new mongoose.Types.ObjectId();
   const otherMongoId = new mongoose.Types.ObjectId();
   const unonboardedMongoId = new mongoose.Types.ObjectId();
+  const adminMongoId = new mongoose.Types.ObjectId();
 
   const validWizardPayload = {
     eventType: 'HACKATHON',
@@ -78,6 +88,49 @@ describe('Phase 4: Event Creation Engine & Wizard', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+
+    const userMap: Record<string, any> = {
+      [hostUser.id]: {
+        _id: hostMongoId,
+        supabaseUserId: hostUser.id,
+        email: hostUser.email,
+        name: 'Host Organizer',
+        platformRole: 'USER',
+        status: 'ACTIVE',
+        workspaceStatus: 'ACTIVE',
+        hostVerificationStatus: 'UNVERIFIED',
+      },
+      [otherUser.id]: {
+        _id: otherMongoId,
+        supabaseUserId: otherUser.id,
+        email: otherUser.email,
+        name: 'Other User',
+        platformRole: 'USER',
+        status: 'ACTIVE',
+        workspaceStatus: 'ACTIVE',
+        hostVerificationStatus: 'UNVERIFIED',
+      },
+      [unonboardedUser.id]: {
+        _id: unonboardedMongoId,
+        supabaseUserId: unonboardedUser.id,
+        email: unonboardedUser.email,
+        name: 'New User',
+        platformRole: 'USER',
+        status: 'ACTIVE',
+        hostProfile: null, // HostProfile not required!
+        workspaceStatus: 'ACTIVE',
+        hostVerificationStatus: 'UNVERIFIED',
+      },
+      [adminUser.id]: {
+        _id: adminMongoId,
+        supabaseUserId: adminUser.id,
+        email: adminUser.email,
+        name: 'Platform Admin',
+        platformRole: 'ADMIN',
+        status: 'ACTIVE',
+        workspaceStatus: 'ACTIVE',
+      },
+    };
 
     mockGetUser.mockReset();
     mockGetUser.mockImplementation(async (token?: string): Promise<any> => {
@@ -112,88 +165,55 @@ describe('Phase 4: Event Creation Engine & Wizard', () => {
     });
 
     jest.spyOn(userRepository, 'findById').mockImplementation(async (id: string): Promise<any> => {
-      if (id === hostUser.id) {
-        return { id: hostUser.id, name: 'Host Organizer', email: hostUser.email, role: 'USER' };
-      }
-      if (id === otherUser.id) {
-        return { id: otherUser.id, name: 'Other User', email: otherUser.email, role: 'USER' };
-      }
-      if (id === unonboardedUser.id) {
-        return { id: unonboardedUser.id, name: 'New User', email: unonboardedUser.email, role: 'USER' };
+      const u = userMap[id];
+      if (u) {
+        return { id: u.supabaseUserId, name: u.name, email: u.email, role: u.platformRole };
       }
       return null;
+    });
+
+    jest.spyOn(mongoUserRepository, 'findById').mockImplementation(async (id: string): Promise<any> => {
+      return userMap[id] || null;
     });
 
     jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockImplementation(async (id: string): Promise<any> => {
-      if (id === hostUser.id) {
-        return {
-          _id: hostMongoId,
-          supabaseUserId: hostUser.id,
-          email: hostUser.email,
-          name: 'Host Organizer',
-          platformRole: 'USER',
-          status: 'ACTIVE',
-          hostProfile: {
-            organizationName: 'HackIndia Summit',
-            institutionType: 'COLLEGE_UNIVERSITY',
-            onboardedAt: new Date(),
-          },
-          workspaceStatus: 'ACTIVE',
-          hostVerificationStatus: 'UNVERIFIED',
-        };
-      }
-      if (id === otherUser.id) {
-        return {
-          _id: otherMongoId,
-          supabaseUserId: otherUser.id,
-          email: otherUser.email,
-          name: 'Other User',
-          platformRole: 'USER',
-          status: 'ACTIVE',
-          hostProfile: {
-            organizationName: 'Other Community',
-            institutionType: 'INDEPENDENT',
-            onboardedAt: new Date(),
-          },
-          workspaceStatus: 'ACTIVE',
-          hostVerificationStatus: 'UNVERIFIED',
-        };
-      }
-      if (id === unonboardedUser.id) {
-        return {
-          _id: unonboardedMongoId,
-          supabaseUserId: unonboardedUser.id,
-          email: unonboardedUser.email,
-          name: 'New User',
-          platformRole: 'USER',
-          status: 'ACTIVE',
-          hostProfile: null, // Not onboarded!
-          workspaceStatus: 'ACTIVE',
-          hostVerificationStatus: 'UNVERIFIED',
-        };
-      }
-      return null;
+      return userMap[id] || null;
     });
   });
 
-  describe('1. Organizer Onboarding Prerequisite Gate', () => {
-    it('should reject event creation if caller has not completed organizer onboarding (HTTP 403)', async () => {
+  describe('1. Organizer Onboarding Prerequisite Removal & Account State Gate', () => {
+    it('should allow authenticated user without a hostProfile to create an event draft (HTTP 201)', async () => {
+      const createSpy = jest.spyOn(mongoEventRepository, 'create').mockImplementation(async (data: any) => ({
+        _id: new mongoose.Types.ObjectId(),
+        ...data,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+
       const res = await request(app)
         .post('/api/events')
         .set('Authorization', `Bearer ${unonboardedUserToken}`)
         .send(validWizardPayload);
 
-      expect(res.status).toBe(403);
-      expect(res.body.success).toBe(false);
-      expect(res.body.error.message || res.body.error).toContain('Organizer onboarding required');
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.ownerSupabaseId).toBe(unonboardedUser.id);
+      expect(res.body.data.hostingType).toBe('INDIVIDUAL');
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ownerSupabaseId: unonboardedUser.id,
+          hostingType: 'INDIVIDUAL',
+        })
+      );
     });
 
-    it('should reject event creation if caller workspaceStatus is SUSPENDED', async () => {
+    it('should reject event creation if caller workspaceStatus is SUSPENDED (HTTP 403)', async () => {
       jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockResolvedValue({
         _id: hostMongoId,
         supabaseUserId: hostUser.id,
         email: hostUser.email,
-        hostProfile: { organizationName: 'Suspended Org' },
+        platformRole: 'USER',
+        status: 'ACTIVE',
         workspaceStatus: 'SUSPENDED',
       } as any);
 
@@ -203,7 +223,26 @@ describe('Phase 4: Event Creation Engine & Wizard', () => {
         .send(validWizardPayload);
 
       expect(res.status).toBe(403);
-      expect(res.body.error.message || res.body.error).toContain('Organizer onboarding required');
+      expect(res.body.error.message || res.body.error).toContain('suspended');
+    });
+
+    it('should reject event creation if caller account status is SUSPENDED (HTTP 403)', async () => {
+      jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockResolvedValue({
+        _id: hostMongoId,
+        supabaseUserId: hostUser.id,
+        email: hostUser.email,
+        platformRole: 'USER',
+        status: 'SUSPENDED',
+        workspaceStatus: 'ACTIVE',
+      } as any);
+
+      const res = await request(app)
+        .post('/api/events')
+        .set('Authorization', `Bearer ${hostUserToken}`)
+        .send(validWizardPayload);
+
+      expect(res.status).toBe(403);
+      expect(res.body.error.message || res.body.error).toContain('suspended');
     });
   });
 
@@ -659,4 +698,298 @@ describe('Phase 4: Event Creation Engine & Wizard', () => {
       expect(res.body.data.bannerUrl).toContain('supabase.internal');
     });
   });
+
+  describe('7. Hosting Type & Organization Association Engine', () => {
+    it('should create individually hosted event with NOT_REQUIRED verification status', async () => {
+      const createSpy = jest.spyOn(mongoEventRepository, 'create').mockImplementation(async (data: any) => ({
+        _id: new mongoose.Types.ObjectId(),
+        ...data,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+
+      const res = await request(app)
+        .post('/api/events')
+        .set('Authorization', `Bearer ${hostUserToken}`)
+        .send({
+          ...validWizardPayload,
+          hostingType: 'INDIVIDUAL',
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.hostingType).toBe('INDIVIDUAL');
+      expect(res.body.data.organizationVerificationStatus).toBe('NOT_REQUIRED');
+      expect(res.body.data.displayStatus).toBe('DRAFT');
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hostingType: 'INDIVIDUAL',
+          organizationVerificationStatus: 'NOT_REQUIRED',
+        })
+      );
+    });
+
+    it('should create organization-hosted event with linked verification record and PENDING status', async () => {
+      const eventId = new mongoose.Types.ObjectId();
+      const createSpy = jest.spyOn(mongoEventRepository, 'create').mockImplementation(async (data: any) => ({
+        _id: eventId,
+        ...data,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+
+      const verificationSpy = jest
+        .spyOn(mongoEventVerificationRepository, 'createVerification')
+        .mockResolvedValue({
+          _id: new mongoose.Types.ObjectId(),
+          eventId,
+          status: 'PENDING',
+        } as any);
+
+      const orgPayload = {
+        ...validWizardPayload,
+        hostingType: 'ORGANIZATION',
+        organization: {
+          name: 'Stanford Robotics Club',
+          institutionType: 'COLLEGE_UNIVERSITY',
+          officialEmail: 'robotics@stanford.edu',
+          department: 'Engineering',
+          designation: 'Club President',
+          website: 'https://robotics.stanford.edu',
+          authorizationDocumentUrl: 'https://supabase.internal/auth-doc.pdf',
+        },
+      };
+
+      const res = await request(app)
+        .post('/api/events')
+        .set('Authorization', `Bearer ${hostUserToken}`)
+        .send(orgPayload);
+
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.hostingType).toBe('ORGANIZATION');
+      expect(res.body.data.organizationVerificationStatus).toBe('PENDING');
+      expect(res.body.data.displayStatus).toBe('Draft — Organization Verification Pending');
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hostingType: 'ORGANIZATION',
+          organizationVerificationStatus: 'PENDING',
+          organization: expect.objectContaining({
+            name: 'Stanford Robotics Club',
+            officialEmail: 'robotics@stanford.edu',
+          }),
+        })
+      );
+      expect(verificationSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventId,
+          institutionName: 'Stanford Robotics Club',
+          officialEmail: 'robotics@stanford.edu',
+          status: 'PENDING',
+        })
+      );
+    });
+
+    it('should allow the same user to host different events with different organizations or individually', async () => {
+      jest.spyOn(mongoEventRepository, 'create').mockImplementation(async (data: any) => ({
+        _id: new mongoose.Types.ObjectId(),
+        ...data,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+
+      jest.spyOn(mongoEventVerificationRepository, 'createVerification').mockResolvedValue({} as any);
+
+      // Event 1: Org A
+      const res1 = await request(app)
+        .post('/api/events')
+        .set('Authorization', `Bearer ${hostUserToken}`)
+        .send({
+          ...validWizardPayload,
+          name: 'AI Symposium',
+          hostingType: 'ORGANIZATION',
+          organization: {
+            name: 'MIT AI Lab',
+            institutionType: 'COLLEGE_UNIVERSITY',
+            officialEmail: 'director@ailab.mit.edu',
+          },
+        });
+      expect(res1.status).toBe(201);
+      expect(res1.body.data.organization?.name).toBe('MIT AI Lab');
+
+      // Event 2: Org B
+      const res2 = await request(app)
+        .post('/api/events')
+        .set('Authorization', `Bearer ${hostUserToken}`)
+        .send({
+          ...validWizardPayload,
+          name: 'Open Source Summit',
+          hostingType: 'ORGANIZATION',
+          organization: {
+            name: 'Linux Foundation Chapter',
+            institutionType: 'CORPORATE',
+            officialEmail: 'chapter@linux.org',
+          },
+        });
+      expect(res2.status).toBe(201);
+      expect(res2.body.data.organization?.name).toBe('Linux Foundation Chapter');
+
+      // Event 3: Independent
+      const res3 = await request(app)
+        .post('/api/events')
+        .set('Authorization', `Bearer ${hostUserToken}`)
+        .send({
+          ...validWizardPayload,
+          name: 'Weekend Indie Hack',
+          hostingType: 'INDIVIDUAL',
+        });
+      expect(res3.status).toBe(201);
+      expect(res3.body.data.hostingType).toBe('INDIVIDUAL');
+      expect(res3.body.data.organization).toBeUndefined();
+    });
+
+    it('should reject direct publish attempt on organization event with PENDING verification (HTTP 400)', async () => {
+      const orgPendingEventId = new mongoose.Types.ObjectId();
+      jest.spyOn(mongoEventRepository, 'findById').mockResolvedValue({
+        _id: orgPendingEventId,
+        ownerId: hostMongoId,
+        ownerSupabaseId: hostUser.id,
+        name: 'Unverified Org Event',
+        eventType: 'HACKATHON',
+        credentialTerminology: 'Pass',
+        attendanceMode: 'TICKETIFICATION_REGISTRATION',
+        venue: { type: 'PHYSICAL', name: 'Auditorium', city: 'City', country: 'Country' },
+        schedule: { startAt: new Date(Date.now() + 86400000), endAt: new Date(Date.now() + 172800000), timezone: 'Asia/Kolkata' },
+        status: 'APPROVED',
+        hostingType: 'ORGANIZATION',
+        organizationVerificationStatus: 'PENDING',
+        verificationStatus: 'PENDING',
+        statusHistory: [],
+      } as any);
+
+      const res = await request(app)
+        .post(`/api/events/${orgPendingEventId.toString()}/publish`)
+        .set('Authorization', `Bearer ${hostUserToken}`);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.message || res.body.error).toContain('Organization verification is pending');
+    });
+
+    it('should reject non-admin user from reviewing or approving verification (HTTP 403)', async () => {
+      const targetEventId = new mongoose.Types.ObjectId();
+
+      const res = await request(app)
+        .post(`/api/admin/verifications/${targetEventId.toString()}/review`)
+        .set('Authorization', `Bearer ${hostUserToken}`) // Non-admin!
+        .send({
+          decision: 'APPROVED',
+          reviewNotes: 'Self-approval attempt',
+        });
+
+      expect(res.status).toBe(403);
+    });
+
+    it('should allow platform admin to approve verification and set organizationVerificationStatus to APPROVED', async () => {
+      const targetEventId = new mongoose.Types.ObjectId();
+      const mockEvent = {
+        _id: targetEventId,
+        ownerId: hostMongoId,
+        ownerSupabaseId: hostUser.id,
+        name: 'Stanford Hackathon',
+        status: 'DRAFT',
+        hostingType: 'ORGANIZATION',
+        organizationVerificationStatus: 'PENDING',
+        verificationStatus: 'PENDING',
+        save: jest.fn().mockResolvedValue(true),
+      };
+
+      jest.spyOn(mongoEventRepository, 'findById').mockResolvedValue(mockEvent as any);
+      jest.spyOn(mongoEventVerificationRepository, 'findByEventId').mockResolvedValue({
+        _id: new mongoose.Types.ObjectId(),
+        eventId: targetEventId,
+        status: 'PENDING',
+        riskScore: 25,
+        reviewHistory: [],
+        save: jest.fn().mockResolvedValue(true),
+      } as any);
+      jest.spyOn(mongoEventVerificationRepository, 'reviewVerification').mockResolvedValue({
+        _id: new mongoose.Types.ObjectId(),
+        eventId: targetEventId,
+        status: 'VERIFIED',
+      } as any);
+
+      const res = await request(app)
+        .post(`/api/admin/verifications/${targetEventId.toString()}/review`)
+        .set('Authorization', `Bearer ${adminUserToken}`)
+        .send({
+          decision: 'APPROVED',
+          reviewNotes: 'Approved official affiliation',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(mockEvent.organizationVerificationStatus).toBe('APPROVED');
+      expect(mockEvent.verificationStatus).toBe('VERIFIED');
+    });
+
+    it('should allow platform admin to reject verification, setting organizationVerificationStatus to REJECTED', async () => {
+      const targetEventId = new mongoose.Types.ObjectId();
+      const mockEvent = {
+        _id: targetEventId,
+        ownerId: hostMongoId,
+        ownerSupabaseId: hostUser.id,
+        name: 'Dubious Org Event',
+        status: 'DRAFT',
+        hostingType: 'ORGANIZATION',
+        organizationVerificationStatus: 'PENDING',
+        verificationStatus: 'PENDING',
+        save: jest.fn().mockResolvedValue(true),
+      };
+
+      jest.spyOn(mongoEventRepository, 'findById').mockResolvedValue(mockEvent as any);
+      jest.spyOn(mongoEventVerificationRepository, 'findByEventId').mockResolvedValue({
+        _id: new mongoose.Types.ObjectId(),
+        eventId: targetEventId,
+        status: 'PENDING',
+        riskScore: 85,
+        reviewHistory: [],
+        save: jest.fn().mockResolvedValue(true),
+      } as any);
+      jest.spyOn(mongoEventVerificationRepository, 'reviewVerification').mockResolvedValue({
+        _id: new mongoose.Types.ObjectId(),
+        eventId: targetEventId,
+        status: 'REJECTED',
+      } as any);
+
+      const res = await request(app)
+        .post(`/api/admin/verifications/${targetEventId.toString()}/review`)
+        .set('Authorization', `Bearer ${adminUserToken}`)
+        .send({
+          decision: 'REJECTED',
+          reviewNotes: 'Invalid authorization letter provided',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(mockEvent.organizationVerificationStatus).toBe('REJECTED');
+    });
+
+    it('should exclude pending and rejected organization events from public queries', async () => {
+      const publicQuerySpy = jest.spyOn(mongoEventRepository, 'findPublicEvents').mockResolvedValue({
+        events: [],
+        total: 0,
+        page: 1,
+        limit: 12,
+        totalPages: 0,
+      });
+
+      const res = await request(app).get('/api/public/events?page=1&limit=12');
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.events).toEqual([]);
+      expect(publicQuerySpy).toHaveBeenCalled();
+    });
+  });
 });
+

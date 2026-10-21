@@ -169,7 +169,7 @@ export const Dashboard: React.FC = () => {
   const checkinRate = generated > 0 ? Math.round((used / generated) * 100) : 0;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6 w-full">
       {/* Top Operational Header */}
       <InView direction="up" distance={12}>
         <div className="bg-white border border-stone-200/90 p-5 sm:p-6 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 sm:gap-6 shadow-xs">
