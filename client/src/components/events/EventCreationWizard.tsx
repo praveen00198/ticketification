@@ -28,7 +28,9 @@ import {
   ShieldCheck,
   FileSpreadsheet,
   UserCheck,
+  Check,
 } from 'lucide-react';
+import { RichTextEditor } from '../common/RichTextEditor';
 import {
   eventsApi,
   EventType,
@@ -156,6 +158,57 @@ const COMMON_TIMEZONES = [
   { value: 'Asia/Singapore', label: 'Asia/Singapore (SGT, UTC+08:00)' },
   { value: 'Asia/Tokyo', label: 'Asia/Tokyo (JST, UTC+09:00)' },
   { value: 'Australia/Sydney', label: 'Australia/Sydney (AEST/AEDT, UTC+10:00)' },
+];
+
+const STEPS_CONFIG = [
+  {
+    id: 1,
+    shortTitle: 'Category',
+    title: 'What type of event are you hosting?',
+    description: 'Select an event category to tailor pass labels, workflows, and configuration defaults.',
+  },
+  {
+    id: 2,
+    shortTitle: 'Basics & Banner',
+    title: 'Tell us the event basics',
+    description: 'Define the public title, an optional description, and a visual event banner.',
+  },
+  {
+    id: 3,
+    shortTitle: 'Credential Format',
+    title: 'Configure credential terminology',
+    description: 'Choose how credentials appear to your attendees and staff (e.g. Ticket, Pass, Badge).',
+  },
+  {
+    id: 4,
+    shortTitle: 'Attendee Mode',
+    title: 'How will attendees be managed?',
+    description: 'Choose whether to take registrations on Ticketification or import an existing roster.',
+  },
+  {
+    id: 5,
+    shortTitle: 'Venue & Location',
+    title: 'Where is your event hosted?',
+    description: 'Configure your in-person venue, online conference link, or hybrid attendance format.',
+  },
+  {
+    id: 6,
+    shortTitle: 'Schedule',
+    title: 'Set the event schedule & timezone',
+    description: 'Specify start and end dates and times in your local timezone.',
+  },
+  {
+    id: 7,
+    shortTitle: 'Organization',
+    title: 'Organization Association & Verification',
+    description: 'Specify whether this event is individually hosted or hosted on behalf of an institution.',
+  },
+  {
+    id: 8,
+    shortTitle: 'Review & Save',
+    title: 'Review and save your event draft',
+    description: 'Verify all details before saving your draft. You can edit this anytime before submitting.',
+  },
 ];
 
 export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
@@ -292,6 +345,18 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
         setErrorMessage('Event name must be between 2 and 120 characters.');
         return false;
       }
+      if (!description.trim()) {
+        setErrorMessage('Event description is required.');
+        return false;
+      }
+      if (description.trim().length < 10) {
+        setErrorMessage('Event description must be at least 10 characters.');
+        return false;
+      }
+      if (description.trim().length > 5000) {
+        setErrorMessage('Event description cannot exceed 5000 characters.');
+        return false;
+      }
       return true;
     }
 
@@ -402,7 +467,7 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
 
   // Submit Draft
   const handleSaveDraft = async () => {
-    if (!validateStep(6) || !validateStep(7)) return;
+    if (!validateStep(2) || !validateStep(6) || !validateStep(7)) return;
 
     try {
       setIsSubmitting(true);
@@ -470,133 +535,110 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
     }
   };
 
-  // Steps Progress calculation
-  const progressPercent = Math.round(((step - 1) / 7) * 100);
+  const currentStepConfig = STEPS_CONFIG.find((s) => s.id === step) || STEPS_CONFIG[0];
 
   return (
-    <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6">
-      {/* Wizard Header */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <span className="text-xs font-semibold tracking-wider uppercase text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded">
-            Step {step} of 8
-          </span>
-          <h1 className="text-2xl font-semibold text-zinc-900 mt-2">
-            {step === 1 && 'What type of event are you hosting?'}
-            {step === 2 && 'Tell us the event basics'}
-            {step === 3 && 'Configure credential terminology'}
-            {step === 4 && 'How will attendees be managed?'}
-            {step === 5 && 'Where is your event hosted?'}
-            {step === 6 && 'Set the event schedule & timezone'}
-            {step === 7 && 'Organization Association & Verification'}
-            {step === 8 && 'Review and save your event draft'}
-          </h1>
-          <p className="text-sm text-zinc-600 mt-1">
-            {step === 1 && 'Select an event category to tailor pass labels, workflows, and configuration defaults.'}
-            {step === 2 && 'Define the public title, an optional description, and a visual event banner.'}
-            {step === 3 && 'Choose how credentials appear to your attendees and staff (e.g. Ticket, Pass, Badge).'}
-            {step === 4 && 'Choose whether to take registrations on Ticketification or import an existing roster.'}
-            {step === 5 && 'Configure your in-person venue, online conference link, or hybrid attendance format.'}
-            {step === 6 && 'Specify start and end dates and times in your local timezone.'}
-            {step === 7 && 'Specify whether this event is individually hosted or hosted on behalf of an organization.'}
-            {step === 8 && 'Verify all details before saving your draft. You can edit this anytime before submitting.'}
-          </p>
-        </div>
-
-        {onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="self-start sm:self-auto text-xs text-zinc-500 hover:text-zinc-800 transition-colors"
-          >
-            Cancel & Exit
-          </button>
-        )}
-      </div>
-
-      {/* Progress Bar */}
-      <div className="w-full bg-zinc-200 h-1.5 rounded-full overflow-hidden mb-8">
-        <div
-          className="bg-emerald-500 h-full transition-all duration-300 ease-out"
-          style={{ width: `${progressPercent}%` }}
-        />
-      </div>
-
-      {/* Inline Error Alert */}
-      {errorMessage && (
-        <div className="mb-6 p-4 rounded-md bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="font-medium">Please review the following:</p>
-            <p className="mt-0.5 text-xs text-rose-700">{errorMessage}</p>
-            {errorMessage.includes('onboarding required') && (
-              <button
-                type="button"
-                onClick={() => navigate('/onboarding')}
-                className="mt-2 text-xs font-semibold text-rose-900 underline hover:no-underline"
-              >
-                Go to Organizer Onboarding &rarr;
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Step Content Container */}
-      <div className="bg-white rounded-md border border-zinc-200 shadow-sm p-6 sm:p-8 mb-8">
-        {/* ================= STEP 1: EVENT TYPE ================= */}
-        {step === 1 && (
-          <div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-              {EVENT_TYPE_CARDS.map((card) => {
-                const IconComponent = card.icon;
-                const isSelected = eventType === card.type;
-                return (
-                  <button
-                    key={card.type}
-                    type="button"
-                    onClick={() => handleSelectEventType(card.type)}
-                    className={`text-left p-4 rounded-md border transition-all flex flex-col justify-between ${
-                      isSelected
-                        ? 'border-emerald-500 bg-emerald-50/50 ring-1 ring-emerald-500'
-                        : 'border-zinc-200 hover:border-zinc-300 bg-white'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between mb-2.5">
-                        <div
-                          className={`w-9 h-9 rounded-md flex items-center justify-center ${
-                            isSelected ? 'bg-emerald-500 text-white' : 'bg-zinc-100 text-zinc-700'
-                          }`}
-                        >
-                          <IconComponent className="w-5 h-5" />
-                        </div>
-                        {isSelected && (
-                          <span className="text-xs font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded">
-                            Selected
-                          </span>
-                        )}
-                      </div>
-                      <h3 className="font-medium text-zinc-900 text-sm">{card.title}</h3>
-                      <p className="text-xs text-zinc-500 mt-1 leading-relaxed">{card.description}</p>
-                    </div>
-
-                    <div className="mt-3 pt-2.5 border-t border-zinc-100 text-[11px] text-zinc-600 flex items-center justify-between">
-                      <span>Default Pass:</span>
-                      <span className="font-medium text-zinc-800">{card.defaultCredential}</span>
-                    </div>
-                  </button>
-                );
-              })}
+    <div className="w-full">
+      <div className="flex flex-col lg:flex-row gap-8 lg:gap-20 items-start w-full">
+        {/* ── MAJOR PART: FORM CONTENT (No padding, major width) ── */}
+        <div className="flex-1 min-w-0 w-full p-0 space-y-5">
+          {/* Active Step Title & Subtitle + Cancel & Exit */}
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="flex items-center mb-2">
+                <span className="text-xs text-stone-500 font-medium">
+                  {currentStepConfig.shortTitle}
+                </span>
+              </div>
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-900">
+                {currentStepConfig.title}
+              </h1>
+              <p className="text-xs text-stone-500 max-w-2xl leading-relaxed">
+                {currentStepConfig.description}
+              </p>
             </div>
+            <button
+              type="button"
+              onClick={onCancel || (() => navigate('/events'))}
+              className="text-xs font-semibold text-stone-500 hover:text-stone-900 transition-colors cursor-pointer shrink-0 pt-1"
+            >
+              Cancel & Exit
+            </button>
           </div>
-        )}
+
+          {/* Inline Error Alert */}
+          {errorMessage && (
+            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-semibold text-rose-900">Please review the following:</p>
+                <p className="mt-0.5 text-rose-700">{errorMessage}</p>
+                {errorMessage.includes('onboarding required') && (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/onboarding')}
+                    className="mt-1.5 text-xs font-semibold text-rose-900 underline hover:no-underline cursor-pointer"
+                  >
+                    Go to Organizer Onboarding &rarr;
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Step 1: Event Type (Borderless, no enclosing box, no outer padding) */}
+          {step === 1 && (
+            <div className="w-full">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                {EVENT_TYPE_CARDS.map((card) => {
+                  const IconComponent = card.icon;
+                  const isSelected = eventType === card.type;
+                  return (
+                    <button
+                      key={card.type}
+                      type="button"
+                      onClick={() => handleSelectEventType(card.type)}
+                      className={`text-left p-3.5 sm:p-4 rounded-2xl border transition-all flex flex-col justify-between cursor-pointer ${
+                        isSelected
+                          ? 'border-stone-900 bg-stone-50/70 ring-1 ring-stone-900 shadow-2xs'
+                          : 'border-stone-200/90 hover:border-stone-300 bg-white'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between mb-2.5">
+                          <div
+                            className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
+                              isSelected ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-600'
+                            }`}
+                          >
+                            <IconComponent className="w-4 h-4" />
+                          </div>
+                          {isSelected && (
+                            <span className="text-[11px] font-semibold text-stone-900 bg-stone-200/80 px-2.5 py-0.5 rounded-full">
+                              Selected
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="font-semibold text-stone-900 text-sm leading-snug">{card.title}</h3>
+                        <p className="text-xs text-stone-500 mt-1 leading-relaxed line-clamp-2">{card.description}</p>
+                      </div>
+
+                      <div className="mt-3 pt-2.5 border-t border-stone-100 text-[11px] text-stone-500 flex items-center justify-between">
+                        <span>Default Pass:</span>
+                        <span className="font-medium text-stone-800">{card.defaultCredential}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
         {/* ================= STEP 2: BASICS & BANNER ================= */}
         {step === 2 && (
-          <div className="space-y-6">
+          <div className="space-y-5">
             <div>
-              <label htmlFor="event-name" className="block text-sm font-medium text-zinc-900 mb-1">
+              <label htmlFor="event-name" className="block text-xs font-semibold text-zinc-900 mb-1.5">
                 Event Name <span className="text-rose-500">*</span>
               </label>
               <input
@@ -606,55 +648,49 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. National HackFest 2026"
                 maxLength={120}
-                className="w-full px-3.5 py-2.5 rounded border border-zinc-300 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-xs sm:text-sm bg-white focus:outline-none focus:ring-1 focus:ring-stone-900/10 focus:border-stone-900 transition-colors placeholder-stone-400"
               />
-              <div className="flex justify-between text-xs text-zinc-400 mt-1">
+              <div className="flex justify-between text-[11px] text-stone-400 mt-1">
                 <span>Must be between 2 and 120 characters</span>
                 <span>{name.length}/120</span>
               </div>
             </div>
 
-            <div>
-              <label htmlFor="event-description" className="block text-sm font-medium text-zinc-900 mb-1">
-                Event Description <span className="text-xs text-zinc-400 font-normal">(Optional)</span>
-              </label>
-              <textarea
-                id="event-description"
-                rows={4}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Provide details about tracks, speakers, prerequisites, or schedules..."
-                maxLength={2000}
-                className="w-full px-3.5 py-2.5 rounded border border-zinc-300 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
-              />
-              <div className="flex justify-between text-xs text-zinc-400 mt-1">
-                <span>Markdown supported</span>
-                <span>{description.length}/2000</span>
-              </div>
-            </div>
+            <RichTextEditor
+              id="event-description"
+              label="Event Description"
+              required={true}
+              value={description}
+              onChange={setDescription}
+              placeholder="Provide details about tracks, speakers, prerequisites, or schedules..."
+              maxLength={5000}
+              minLength={10}
+              rows={6}
+              helperText="Markdown & rich text supported. Switch between Write, Preview, and Split views."
+            />
 
             {/* Event Banner Upload */}
             <div>
-              <label className="block text-sm font-medium text-zinc-900 mb-1">
-                Event Banner / Poster <span className="text-xs text-zinc-400 font-normal">(Optional, max 5MB)</span>
+              <label className="block text-xs font-semibold text-zinc-900 mb-1.5">
+                Event Banner / Poster <span className="text-xs text-stone-400 font-normal">(Optional, max 5MB)</span>
               </label>
 
               {bannerUrl ? (
-                <div className="relative rounded border border-zinc-200 overflow-hidden bg-zinc-50 max-h-56 flex items-center justify-center">
+                <div className="relative rounded-2xl border border-stone-200 overflow-hidden bg-stone-50 max-h-56 flex items-center justify-center">
                   <img src={bannerUrl} alt="Event Banner" className="w-full h-full object-cover" />
                   <button
                     type="button"
                     onClick={() => setBannerUrl('')}
-                    className="absolute top-2 right-2 p-1.5 rounded-full bg-white/90 text-zinc-700 hover:text-rose-600 shadow-sm"
+                    className="absolute top-2.5 right-2.5 p-1.5 rounded-full bg-white/90 text-stone-700 hover:text-rose-600 shadow-xs cursor-pointer"
                     title="Remove Banner"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
               ) : (
-                <div className="border border-dashed border-zinc-300 rounded p-6 text-center hover:bg-zinc-50/50 transition-colors">
-                  <Upload className="w-8 h-8 text-zinc-400 mx-auto mb-2" />
-                  <label className="cursor-pointer inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600 hover:text-emerald-700">
+                <div className="border border-dashed border-stone-300 rounded-2xl p-6 text-center hover:bg-stone-50/50 transition-colors">
+                  <Upload className="w-7 h-7 text-stone-400 mx-auto mb-2" />
+                  <label className="cursor-pointer inline-flex items-center gap-1.5 text-xs font-semibold text-stone-900 hover:text-black">
                     <span>Upload banner image</span>
                     <input
                       type="file"
@@ -664,10 +700,10 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                       className="hidden"
                     />
                   </label>
-                  <p className="text-xs text-zinc-400 mt-1">PNG, JPEG or WEBP (16:9 ratio recommended)</p>
+                  <p className="text-[11px] text-stone-400 mt-1">PNG, JPEG or WEBP (16:9 ratio recommended)</p>
                   {isUploadingBanner && (
-                    <div className="flex items-center justify-center gap-2 mt-2 text-xs text-zinc-600">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-500" />
+                    <div className="flex items-center justify-center gap-2 mt-2 text-xs text-stone-600">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-stone-900" />
                       <span>Uploading to cloud storage...</span>
                     </div>
                   )}
@@ -679,13 +715,13 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
 
         {/* ================= STEP 3: CREDENTIAL TERMINOLOGY ================= */}
         {step === 3 && (
-          <div className="space-y-6">
-            <div className="bg-zinc-50 p-4 rounded border border-zinc-200 text-xs text-zinc-600 leading-relaxed">
-              <strong className="text-zinc-800">Credential Terminology:</strong> Ticketification treats all tickets, badges, and passes as universal cryptographic credentials under the hood. Customize what label is printed on attendee badges and scan screens.
+          <div className="space-y-5">
+            <div className="bg-stone-50/70 p-4 rounded-2xl border border-stone-200/80 text-xs text-stone-600 leading-relaxed">
+              <strong className="text-stone-900">Credential Terminology:</strong> Ticketification treats all tickets, badges, and passes as universal cryptographic credentials under the hood. Customize what label is printed on attendee badges and scan screens.
             </div>
 
             <div>
-              <label htmlFor="cred-term" className="block text-sm font-medium text-zinc-900 mb-1">
+              <label htmlFor="cred-term" className="block text-xs font-semibold text-zinc-900 mb-1.5">
                 Pass / Ticket Display Label <span className="text-rose-500">*</span>
               </label>
               <input
@@ -695,13 +731,13 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                 onChange={(e) => setCredentialTerminology(e.target.value)}
                 placeholder="e.g. Participant Pass"
                 maxLength={50}
-                className="w-full px-3.5 py-2.5 rounded border border-zinc-300 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-xs sm:text-sm bg-white focus:outline-none focus:ring-1 focus:ring-stone-900/10 focus:border-stone-900 transition-colors"
               />
-              <p className="text-xs text-zinc-400 mt-1">Between 2 and 50 characters</p>
+              <p className="text-[11px] text-stone-400 mt-1">Between 2 and 50 characters</p>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-zinc-700 mb-2">
+              <label className="block text-xs font-semibold text-zinc-800 mb-2">
                 Quick Select Options:
               </label>
               <div className="flex flex-wrap gap-2">
@@ -719,10 +755,10 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                     key={term}
                     type="button"
                     onClick={() => setCredentialTerminology(term)}
-                    className={`text-xs px-3 py-1.5 rounded border transition-colors ${
+                    className={`text-xs px-3.5 py-1.5 rounded-full border transition-all cursor-pointer ${
                       credentialTerminology === term
-                        ? 'bg-emerald-100 border-emerald-400 text-emerald-800 font-medium'
-                        : 'bg-white border-zinc-200 text-zinc-700 hover:border-zinc-300'
+                        ? 'bg-stone-900 border-stone-900 text-white font-semibold shadow-2xs'
+                        : 'bg-white border-stone-200 text-stone-700 hover:border-stone-300'
                     }`}
                   >
                     {term}
@@ -732,21 +768,21 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
             </div>
 
             {/* Live Visual Preview */}
-            <div className="mt-6 pt-6 border-t border-zinc-100">
-              <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">
+            <div className="pt-2">
+              <label className="block text-[11px] font-semibold text-stone-400 uppercase tracking-wider mb-2">
                 Live Badge Header Preview
               </label>
-              <div className="bg-zinc-900 text-white p-4 rounded-md max-w-sm flex items-center justify-between">
+              <div className="bg-stone-900 text-white p-4 rounded-2xl max-w-sm flex items-center justify-between shadow-xs">
                 <div>
-                  <div className="text-[10px] text-zinc-400 uppercase tracking-wider">
+                  <div className="text-[10px] text-stone-400 uppercase tracking-wider font-mono">
                     {name.trim() || 'Your Event Name'}
                   </div>
-                  <div className="font-semibold text-sm text-emerald-400 mt-0.5">
+                  <div className="font-bold text-sm text-stone-100 mt-0.5">
                     {credentialTerminology.trim() || 'Ticket'}
                   </div>
                 </div>
-                <div className="w-10 h-10 rounded bg-zinc-800 flex items-center justify-center text-zinc-400">
-                  <TicketIcon className="w-5 h-5 text-emerald-400" />
+                <div className="w-10 h-10 rounded-xl bg-stone-800 flex items-center justify-center text-stone-300">
+                  <TicketIcon className="w-5 h-5 text-stone-200" />
                 </div>
               </div>
             </div>
@@ -755,29 +791,35 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
 
         {/* ================= STEP 4: ATTENDANCE & DATA MODE ================= */}
         {step === 4 && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               {/* Mode A */}
               <button
                 type="button"
                 onClick={() => setAttendanceMode('TICKETIFICATION_REGISTRATION')}
-                className={`text-left p-5 rounded-md border transition-all flex flex-col justify-between ${
+                className={`text-left p-4 sm:p-5 rounded-2xl border transition-all flex flex-col justify-between cursor-pointer ${
                   attendanceMode === 'TICKETIFICATION_REGISTRATION'
-                    ? 'border-emerald-500 bg-emerald-50/40 ring-1 ring-emerald-500'
-                    : 'border-zinc-200 hover:border-zinc-300 bg-white'
+                    ? 'border-stone-900 bg-stone-50/70 ring-1 ring-stone-900 shadow-2xs'
+                    : 'border-stone-200 hover:border-stone-300 bg-white'
                 }`}
               >
                 <div>
-                  <div className="w-9 h-9 rounded-md bg-emerald-500 text-white flex items-center justify-center mb-3">
-                    <UserCheck className="w-5 h-5" />
+                  <div
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 transition-colors ${
+                      attendanceMode === 'TICKETIFICATION_REGISTRATION'
+                        ? 'bg-stone-900 text-white'
+                        : 'bg-stone-100 text-stone-600'
+                    }`}
+                  >
+                    <UserCheck className="w-4 h-4" />
                   </div>
-                  <h3 className="font-medium text-zinc-900 text-sm">Mode A: Registration on Ticketification</h3>
-                  <p className="text-xs text-zinc-500 mt-1.5 leading-relaxed">
-                    Attendees register, claim tickets, and fill custom attendee forms directly on your event’s public registration portal.
+                  <h3 className="font-semibold text-stone-900 text-sm">Mode A: Registration on Ticketification</h3>
+                  <p className="text-xs text-stone-500 mt-1 leading-relaxed">
+                    Attendees register, claim tickets, and fill custom attendee forms directly on your event's public registration portal.
                   </p>
                 </div>
-                <div className="mt-4 pt-3 border-t border-zinc-100 text-xs text-emerald-700 font-medium">
-                  Includes self-service checkout & live registration count
+                <div className="mt-4 pt-3 border-t border-stone-100 text-[11px] text-stone-700 font-medium">
+                  Self-service checkout & live registration count
                 </div>
               </button>
 
@@ -785,43 +827,49 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
               <button
                 type="button"
                 onClick={() => setAttendanceMode('EXISTING_ATTENDEE_DATA')}
-                className={`text-left p-5 rounded-md border transition-all flex flex-col justify-between ${
+                className={`text-left p-4 sm:p-5 rounded-2xl border transition-all flex flex-col justify-between cursor-pointer ${
                   attendanceMode === 'EXISTING_ATTENDEE_DATA'
-                    ? 'border-emerald-500 bg-emerald-50/40 ring-1 ring-emerald-500'
-                    : 'border-zinc-200 hover:border-zinc-300 bg-white'
+                    ? 'border-stone-900 bg-stone-50/70 ring-1 ring-stone-900 shadow-2xs'
+                    : 'border-stone-200 hover:border-stone-300 bg-white'
                 }`}
               >
                 <div>
-                  <div className="w-9 h-9 rounded-md bg-zinc-800 text-white flex items-center justify-center mb-3">
-                    <FileSpreadsheet className="w-5 h-5" />
+                  <div
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 transition-colors ${
+                      attendanceMode === 'EXISTING_ATTENDEE_DATA'
+                        ? 'bg-stone-900 text-white'
+                        : 'bg-stone-100 text-stone-600'
+                    }`}
+                  >
+                    <FileSpreadsheet className="w-4 h-4" />
                   </div>
-                  <h3 className="font-medium text-zinc-900 text-sm">Mode B: Existing Attendee Data</h3>
-                  <p className="text-xs text-zinc-500 mt-1.5 leading-relaxed">
-                    You already collected registrations via Google Forms, Excel, an ERP, or university database. You will import rosters and issue passes in bulk.
+                  <h3 className="font-semibold text-stone-900 text-sm">Mode B: Existing Attendee Data</h3>
+                  <p className="text-xs text-stone-500 mt-1 leading-relaxed">
+                    You already collected registrations via Google Forms, Excel, an ERP, or database. You will import rosters and issue passes in bulk.
                   </p>
                 </div>
-                <div className="mt-4 pt-3 border-t border-zinc-100 text-xs text-zinc-700 font-medium">
-                  Supports Excel / CSV imports and batch issuance
+                <div className="mt-4 pt-3 border-t border-stone-100 text-[11px] text-stone-700 font-medium">
+                  Excel / CSV rosters and batch issuance
                 </div>
               </button>
             </div>
 
             {/* Mode A Conditional Options */}
             {attendanceMode === 'TICKETIFICATION_REGISTRATION' && (
-              <div className="p-4 rounded-md bg-zinc-50 border border-zinc-200 space-y-4">
-                <h4 className="text-xs font-semibold text-zinc-800 uppercase tracking-wider">
-                  Intended Registration Configuration (Draft Setting)
+              <div className="p-4 sm:p-5 rounded-2xl bg-stone-50/70 border border-stone-200/80 space-y-4">
+                <h4 className="text-[11px] font-semibold text-stone-700 uppercase tracking-wider">
+                  Registration Configuration (Draft Setting)
                 </h4>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-zinc-700 mb-1">
+                    <label className="block text-xs font-semibold text-zinc-900 mb-1.5">
                       Pricing Model
                     </label>
                     <select
                       value={pricingModel}
                       onChange={(e) => setPricingModel(e.target.value as any)}
-                      className="w-full px-3 py-2 rounded border border-zinc-300 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-xs sm:text-sm bg-white focus:outline-none focus:ring-1 focus:ring-stone-900/10 focus:border-stone-900 transition-colors"
                     >
                       <option value="FREE">Free Event (Zero fee checkout)</option>
                       <option value="PAID">Paid Event (Requires verified payment gateway)</option>
@@ -834,29 +882,29 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-zinc-700 mb-1">
+                    <label className="block text-xs font-semibold text-zinc-900 mb-1.5">
                       Expected Capacity Limit
                     </label>
                     <input
                       type="number"
                       value={capacity}
                       onChange={(e) => setCapacity(e.target.value)}
-                      placeholder="e.g. 500"
+                      placeholder="e.g. 500 (leave blank for unlimited)"
                       min={1}
-                      className="w-full px-3 py-2 rounded border border-zinc-300 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-xs sm:text-sm bg-white focus:outline-none focus:ring-1 focus:ring-stone-900/10 focus:border-stone-900 transition-colors placeholder-stone-400"
                     />
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 pt-1">
+                <div className="flex items-center gap-2.5 pt-1">
                   <input
                     type="checkbox"
                     id="reg-required"
                     checked={registrationRequired}
                     onChange={(e) => setRegistrationRequired(e.target.checked)}
-                    className="w-4 h-4 text-emerald-600 rounded border-zinc-300 focus:ring-emerald-500"
+                    className="w-4 h-4 text-stone-900 rounded border-stone-300 focus:ring-stone-900 accent-stone-900 cursor-pointer"
                   />
-                  <label htmlFor="reg-required" className="text-xs text-zinc-700 cursor-pointer">
+                  <label htmlFor="reg-required" className="text-xs text-stone-700 cursor-pointer">
                     Registration is mandatory before issuing credentials
                   </label>
                 </div>
@@ -867,10 +915,10 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
 
         {/* ================= STEP 5: VENUE CONFIGURATION ================= */}
         {step === 5 && (
-          <div className="space-y-6">
+          <div className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-zinc-900 mb-2">Venue Format</label>
-              <div className="grid grid-cols-3 gap-3">
+              <label className="block text-xs font-semibold text-zinc-900 mb-2">Venue Format</label>
+              <div className="grid grid-cols-3 gap-2.5">
                 {[
                   { id: 'PHYSICAL', label: 'Physical Venue', icon: MapPin },
                   { id: 'ONLINE', label: 'Online / Virtual', icon: Globe },
@@ -883,13 +931,13 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                       key={item.id}
                       type="button"
                       onClick={() => setVenueType(item.id as VenueType)}
-                      className={`p-3 rounded border text-center transition-all flex flex-col items-center gap-1.5 ${
+                      className={`p-3 rounded-2xl border text-center transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
                         isSelected
-                          ? 'border-emerald-500 bg-emerald-50/50 text-emerald-800 font-medium ring-1 ring-emerald-500'
-                          : 'border-zinc-200 text-zinc-600 hover:border-zinc-300'
+                          ? 'border-stone-900 bg-stone-50/70 text-stone-900 font-semibold ring-1 ring-stone-900 shadow-2xs'
+                          : 'border-stone-200 text-stone-600 hover:border-stone-300 bg-white'
                       }`}
                     >
-                      <Icon className="w-5 h-5" />
+                      <Icon className="w-4 h-4" />
                       <span className="text-xs">{item.label}</span>
                     </button>
                   );
@@ -899,9 +947,9 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
 
             {/* Physical / Hybrid Fields */}
             {(venueType === 'PHYSICAL' || venueType === 'HYBRID') && (
-              <div className="space-y-4 pt-2">
+              <div className="space-y-4 pt-1">
                 <div>
-                  <label htmlFor="venue-name" className="block text-xs font-medium text-zinc-700 mb-1">
+                  <label htmlFor="venue-name" className="block text-xs font-semibold text-zinc-900 mb-1.5">
                     Venue Name <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -910,13 +958,13 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                     value={venueName}
                     onChange={(e) => setVenueName(e.target.value)}
                     placeholder="e.g. Grand Convention Center, Hall B"
-                    className="w-full px-3.5 py-2 rounded border border-zinc-300 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-xs sm:text-sm bg-white focus:outline-none focus:ring-1 focus:ring-stone-900/10 focus:border-stone-900 transition-colors"
                   />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label htmlFor="venue-city" className="block text-xs font-medium text-zinc-700 mb-1">
+                    <label htmlFor="venue-city" className="block text-xs font-semibold text-zinc-900 mb-1.5">
                       City <span className="text-rose-500">*</span>
                     </label>
                     <input
@@ -925,12 +973,12 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                       value={venueCity}
                       onChange={(e) => setVenueCity(e.target.value)}
                       placeholder="e.g. Bengaluru"
-                      className="w-full px-3.5 py-2 rounded border border-zinc-300 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-xs sm:text-sm bg-white focus:outline-none focus:ring-1 focus:ring-stone-900/10 focus:border-stone-900 transition-colors"
                     />
                   </div>
 
                   <div>
-                    <label htmlFor="venue-country" className="block text-xs font-medium text-zinc-700 mb-1">
+                    <label htmlFor="venue-country" className="block text-xs font-semibold text-zinc-900 mb-1.5">
                       Country <span className="text-rose-500">*</span>
                     </label>
                     <input
@@ -939,15 +987,15 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                       value={venueCountry}
                       onChange={(e) => setVenueCountry(e.target.value)}
                       placeholder="e.g. India"
-                      className="w-full px-3.5 py-2 rounded border border-zinc-300 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-xs sm:text-sm bg-white focus:outline-none focus:ring-1 focus:ring-stone-900/10 focus:border-stone-900 transition-colors"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label htmlFor="venue-address" className="block text-xs font-medium text-zinc-700 mb-1">
-                      Street Address <span className="text-xs text-zinc-400 font-normal">(Optional)</span>
+                    <label htmlFor="venue-address" className="block text-xs font-semibold text-zinc-900 mb-1.5">
+                      Street Address <span className="text-stone-400 font-normal">(Optional)</span>
                     </label>
                     <input
                       id="venue-address"
@@ -955,13 +1003,13 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                       value={venueAddress}
                       onChange={(e) => setVenueAddress(e.target.value)}
                       placeholder="e.g. 100 Feet Road, Indiranagar"
-                      className="w-full px-3.5 py-2 rounded border border-zinc-300 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-xs sm:text-sm bg-white focus:outline-none focus:ring-1 focus:ring-stone-900/10 focus:border-stone-900 transition-colors"
                     />
                   </div>
 
                   <div>
-                    <label htmlFor="venue-postal" className="block text-xs font-medium text-zinc-700 mb-1">
-                      Postal Code / PIN <span className="text-xs text-zinc-400 font-normal">(Optional)</span>
+                    <label htmlFor="venue-postal" className="block text-xs font-semibold text-zinc-900 mb-1.5">
+                      Postal Code / PIN <span className="text-stone-400 font-normal">(Optional)</span>
                     </label>
                     <input
                       id="venue-postal"
@@ -969,14 +1017,14 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                       value={venuePostalCode}
                       onChange={(e) => setVenuePostalCode(e.target.value)}
                       placeholder="e.g. 560038"
-                      className="w-full px-3.5 py-2 rounded border border-zinc-300 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-xs sm:text-sm bg-white focus:outline-none focus:ring-1 focus:ring-stone-900/10 focus:border-stone-900 transition-colors"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label htmlFor="venue-region" className="block text-xs font-medium text-zinc-700 mb-1">
-                    State / Province / Region <span className="text-xs text-zinc-400 font-normal">(Optional)</span>
+                  <label htmlFor="venue-region" className="block text-xs font-semibold text-zinc-900 mb-1.5">
+                    State / Province / Region <span className="text-stone-400 font-normal">(Optional)</span>
                   </label>
                   <input
                     id="venue-region"
@@ -984,7 +1032,7 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                     value={venueRegion}
                     onChange={(e) => setVenueRegion(e.target.value)}
                     placeholder="e.g. Karnataka"
-                    className="w-full px-3.5 py-2 rounded border border-zinc-300 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-xs sm:text-sm bg-white focus:outline-none focus:ring-1 focus:ring-stone-900/10 focus:border-stone-900 transition-colors"
                   />
                 </div>
               </div>
@@ -992,19 +1040,19 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
 
             {/* Online / Hybrid Fields */}
             {(venueType === 'ONLINE' || venueType === 'HYBRID') && (
-              <div className="pt-2">
-                <label htmlFor="online-desc" className="block text-xs font-medium text-zinc-700 mb-1">
-                  Virtual Participation Description <span className="text-xs text-zinc-400 font-normal">(Optional)</span>
+              <div className="pt-1">
+                <label htmlFor="online-desc" className="block text-xs font-semibold text-zinc-900 mb-1.5">
+                  Virtual Participation Description <span className="text-stone-400 font-normal">(Optional)</span>
                 </label>
                 <textarea
                   id="online-desc"
                   rows={3}
                   value={onlineDescription}
                   onChange={(e) => setOnlineDescription(e.target.value)}
-                  placeholder="e.g. Virtual livestream will be accessible to all registered delegates via Google Meet / Zoom link..."
-                  className="w-full px-3.5 py-2 rounded border border-zinc-300 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  placeholder="e.g. Livestream will be accessible to registered delegates via Google Meet / Zoom..."
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-xs sm:text-sm bg-white focus:outline-none focus:ring-1 focus:ring-stone-900/10 focus:border-stone-900 transition-colors"
                 />
-                <p className="text-[11px] text-zinc-400 mt-1">
+                <p className="text-[11px] text-stone-400 mt-1">
                   Meeting URLs will be kept private and delivered safely upon valid credential check-in.
                 </p>
               </div>
@@ -1014,58 +1062,58 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
 
         {/* ================= STEP 6: SCHEDULE & TIMEZONE ================= */}
         {step === 6 && (
-          <div className="space-y-6">
+          <div className="space-y-5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Start */}
-              <div className="p-4 rounded border border-zinc-200 bg-zinc-50/50 space-y-3">
-                <label className="block text-xs font-semibold text-zinc-800 uppercase tracking-wider">
+              <div className="p-4 rounded-2xl border border-stone-200/90 bg-stone-50/50 space-y-3">
+                <label className="block text-[11px] font-semibold text-stone-800 uppercase tracking-wider">
                   Event Starts
                 </label>
                 <div>
-                  <label htmlFor="start-date" className="block text-xs text-zinc-600 mb-1">Start Date</label>
+                  <label htmlFor="start-date" className="block text-xs font-medium text-stone-600 mb-1">Start Date</label>
                   <input
                     id="start-date"
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full px-3 py-2 rounded border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    className="w-full px-3.5 py-2 rounded-xl border border-stone-300 text-xs sm:text-sm bg-white focus:outline-none focus:ring-1 focus:ring-stone-900/10 focus:border-stone-900"
                   />
                 </div>
                 <div>
-                  <label htmlFor="start-time" className="block text-xs text-zinc-600 mb-1">Start Time</label>
+                  <label htmlFor="start-time" className="block text-xs font-medium text-stone-600 mb-1">Start Time</label>
                   <input
                     id="start-time"
                     type="time"
                     value={startTime}
                     onChange={(e) => setStartTime(e.target.value)}
-                    className="w-full px-3 py-2 rounded border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    className="w-full px-3.5 py-2 rounded-xl border border-stone-300 text-xs sm:text-sm bg-white focus:outline-none focus:ring-1 focus:ring-stone-900/10 focus:border-stone-900"
                   />
                 </div>
               </div>
 
               {/* End */}
-              <div className="p-4 rounded border border-zinc-200 bg-zinc-50/50 space-y-3">
-                <label className="block text-xs font-semibold text-zinc-800 uppercase tracking-wider">
+              <div className="p-4 rounded-2xl border border-stone-200/90 bg-stone-50/50 space-y-3">
+                <label className="block text-[11px] font-semibold text-stone-800 uppercase tracking-wider">
                   Event Ends
                 </label>
                 <div>
-                  <label htmlFor="end-date" className="block text-xs text-zinc-600 mb-1">End Date</label>
+                  <label htmlFor="end-date" className="block text-xs font-medium text-stone-600 mb-1">End Date</label>
                   <input
                     id="end-date"
                     type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full px-3 py-2 rounded border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    className="w-full px-3.5 py-2 rounded-xl border border-stone-300 text-xs sm:text-sm bg-white focus:outline-none focus:ring-1 focus:ring-stone-900/10 focus:border-stone-900"
                   />
                 </div>
                 <div>
-                  <label htmlFor="end-time" className="block text-xs text-zinc-600 mb-1">End Time</label>
+                  <label htmlFor="end-time" className="block text-xs font-medium text-stone-600 mb-1">End Time</label>
                   <input
                     id="end-time"
                     type="time"
                     value={endTime}
                     onChange={(e) => setEndTime(e.target.value)}
-                    className="w-full px-3 py-2 rounded border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    className="w-full px-3.5 py-2 rounded-xl border border-stone-300 text-xs sm:text-sm bg-white focus:outline-none focus:ring-1 focus:ring-stone-900/10 focus:border-stone-900"
                   />
                 </div>
               </div>
@@ -1073,14 +1121,14 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
 
             {/* Timezone */}
             <div>
-              <label htmlFor="event-timezone" className="block text-sm font-medium text-zinc-900 mb-1">
+              <label htmlFor="event-timezone" className="block text-xs font-semibold text-zinc-900 mb-1.5">
                 Event Schedule Timezone <span className="text-rose-500">*</span>
               </label>
               <select
                 id="event-timezone"
                 value={timezone}
                 onChange={(e) => setTimezone(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-xs sm:text-sm bg-white focus:outline-none focus:ring-1 focus:ring-stone-900/10 focus:border-stone-900"
               >
                 {COMMON_TIMEZONES.map((tz) => (
                   <option key={tz.value} value={tz.value}>
@@ -1088,7 +1136,7 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                   </option>
                 ))}
               </select>
-              <p className="text-xs text-zinc-500 mt-1">
+              <p className="text-[11px] text-stone-400 mt-1">
                 Timestamps are normalized to UTC in storage and displayed in your chosen IANA timezone.
               </p>
             </div>
@@ -1097,78 +1145,80 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
 
         {/* ================= STEP 7: ORGANIZATION ASSOCIATION & VERIFICATION ================= */}
         {step === 7 && (
-          <div className="space-y-6">
+          <div className="space-y-5">
             <div>
-              <label className="block text-sm font-semibold text-zinc-900 mb-1">
+              <label className="block text-xs font-semibold text-zinc-900 mb-1">
                 How is this event being hosted?
               </label>
-              <p className="text-xs text-zinc-500 mb-4">
+              <p className="text-xs text-stone-500 mb-3.5">
                 You can host events independently or on behalf of an institution. Organization-hosted events require verification before public publication.
               </p>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 {/* Option 1: Individual */}
-                <div
+                <button
+                  type="button"
                   onClick={() => setHostingType('INDIVIDUAL')}
-                  className={`p-4 rounded-xl border cursor-pointer transition-all ${
+                  className={`text-left p-4 sm:p-5 rounded-2xl border cursor-pointer transition-all ${
                     hostingType === 'INDIVIDUAL'
-                      ? 'border-emerald-600 bg-emerald-50/40 shadow-xs ring-1 ring-emerald-500'
-                      : 'border-zinc-200 hover:border-zinc-300 bg-white'
+                      ? 'border-stone-900 bg-stone-50/70 shadow-2xs ring-1 ring-stone-900'
+                      : 'border-stone-200 hover:border-stone-300 bg-white'
                   }`}
                 >
                   <div className="flex items-center gap-3">
                     <div
-                      className={`w-9 h-9 rounded-lg flex items-center justify-center ${
-                        hostingType === 'INDIVIDUAL' ? 'bg-emerald-600 text-white' : 'bg-zinc-100 text-zinc-600'
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${
+                        hostingType === 'INDIVIDUAL' ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-600'
                       }`}
                     >
-                      <UserCheck className="w-5 h-5" />
+                      <UserCheck className="w-4 h-4" />
                     </div>
                     <div>
-                      <h4 className="text-sm font-semibold text-zinc-900">Individually Hosted</h4>
-                      <p className="text-xs text-zinc-500">Personal or independent project</p>
+                      <h4 className="text-sm font-semibold text-stone-900">Individually Hosted</h4>
+                      <p className="text-[11px] text-stone-500">Personal or independent project</p>
                     </div>
                   </div>
-                  <p className="text-xs text-zinc-600 mt-3 leading-relaxed">
+                  <p className="text-xs text-stone-600 mt-3 leading-relaxed">
                     Host independently using your personal account. No organizational verification documents or institutional domain approval required.
                   </p>
-                </div>
+                </button>
 
                 {/* Option 2: Organization */}
-                <div
+                <button
+                  type="button"
                   onClick={() => setHostingType('ORGANIZATION')}
-                  className={`p-4 rounded-xl border cursor-pointer transition-all ${
+                  className={`text-left p-4 sm:p-5 rounded-2xl border cursor-pointer transition-all ${
                     hostingType === 'ORGANIZATION'
-                      ? 'border-emerald-600 bg-emerald-50/40 shadow-xs ring-1 ring-emerald-500'
-                      : 'border-zinc-200 hover:border-zinc-300 bg-white'
+                      ? 'border-stone-900 bg-stone-50/70 shadow-2xs ring-1 ring-stone-900'
+                      : 'border-stone-200 hover:border-stone-300 bg-white'
                   }`}
                 >
                   <div className="flex items-center gap-3">
                     <div
-                      className={`w-9 h-9 rounded-lg flex items-center justify-center ${
-                        hostingType === 'ORGANIZATION' ? 'bg-emerald-600 text-white' : 'bg-zinc-100 text-zinc-600'
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${
+                        hostingType === 'ORGANIZATION' ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-600'
                       }`}
                     >
-                      <Building2 className="w-5 h-5" />
+                      <Building2 className="w-4 h-4" />
                     </div>
                     <div>
-                      <h4 className="text-sm font-semibold text-zinc-900">On Behalf of Organization</h4>
-                      <p className="text-xs text-zinc-500">College, Company, Club, Non-Profit</p>
+                      <h4 className="text-sm font-semibold text-stone-900">On Behalf of Organization</h4>
+                      <p className="text-[11px] text-stone-500">College, Company, Club, Non-Profit</p>
                     </div>
                   </div>
-                  <p className="text-xs text-zinc-600 mt-3 leading-relaxed">
+                  <p className="text-xs text-stone-600 mt-3 leading-relaxed">
                     Associate with an institution. Requires verification details. The event is saved as Draft — Verification Pending until reviewed.
                   </p>
-                </div>
+                </button>
               </div>
             </div>
 
             {/* If Organization is selected, show details form */}
             {hostingType === 'ORGANIZATION' && (
-              <div className="p-5 rounded-xl border border-zinc-200 bg-zinc-50/50 space-y-4 animate-in fade-in-50 duration-200">
-                <div className="flex items-center gap-2 pb-2 border-b border-zinc-200">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                  <span className="text-xs font-bold text-zinc-900 uppercase tracking-wider">
+              <div className="p-4 sm:p-5 rounded-2xl border border-stone-200/90 bg-stone-50/50 space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-stone-200/70">
+                  <ShieldCheck className="w-4 h-4 text-stone-900" />
+                  <span className="text-[11px] font-bold text-stone-900 uppercase tracking-wider">
                     Organization Verification Details
                   </span>
                 </div>
@@ -1176,7 +1226,7 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Organization Name */}
                   <div className="sm:col-span-2">
-                    <label htmlFor="org-name" className="block text-xs font-semibold text-zinc-800 mb-1">
+                    <label htmlFor="org-name" className="block text-xs font-semibold text-zinc-900 mb-1.5">
                       Organization / Institution Name <span className="text-rose-500">*</span>
                     </label>
                     <input
@@ -1185,20 +1235,20 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                       value={orgName}
                       onChange={(e) => setOrgName(e.target.value)}
                       placeholder="e.g. Stanford University, Google Developer Student Club, TechCorp"
-                      className="w-full px-3 py-2 rounded border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-xs sm:text-sm bg-white focus:outline-none focus:ring-1 focus:ring-stone-900/10 focus:border-stone-900"
                     />
                   </div>
 
                   {/* Institution Type */}
                   <div>
-                    <label htmlFor="org-type" className="block text-xs font-semibold text-zinc-800 mb-1">
+                    <label htmlFor="org-type" className="block text-xs font-semibold text-zinc-900 mb-1.5">
                       Institution Category <span className="text-rose-500">*</span>
                     </label>
                     <select
                       id="org-type"
                       value={orgInstitutionType}
                       onChange={(e) => setOrgInstitutionType(e.target.value)}
-                      className="w-full px-3 py-2 rounded border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-xs sm:text-sm bg-white focus:outline-none focus:ring-1 focus:ring-stone-900/10 focus:border-stone-900"
                     >
                       <option value="COLLEGE_UNIVERSITY">College / University</option>
                       <option value="CORPORATE">Corporate / Enterprise</option>
@@ -1211,7 +1261,7 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
 
                   {/* Official Institutional Email */}
                   <div>
-                    <label htmlFor="org-email" className="block text-xs font-semibold text-zinc-800 mb-1">
+                    <label htmlFor="org-email" className="block text-xs font-semibold text-zinc-900 mb-1.5">
                       Official Institutional Email <span className="text-rose-500">*</span>
                     </label>
                     <input
@@ -1219,14 +1269,14 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                       type="email"
                       value={orgEmail}
                       onChange={(e) => setOrgEmail(e.target.value)}
-                      placeholder="e.g. dean@stanford.edu or events@acme.com"
-                      className="w-full px-3 py-2 rounded border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      placeholder="e.g. events@college.edu or organizer@acme.com"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-xs sm:text-sm bg-white focus:outline-none focus:ring-1 focus:ring-stone-900/10 focus:border-stone-900"
                     />
                   </div>
 
                   {/* Department */}
                   <div>
-                    <label htmlFor="org-dept" className="block text-xs font-semibold text-zinc-800 mb-1">
+                    <label htmlFor="org-dept" className="block text-xs font-semibold text-zinc-900 mb-1.5">
                       Department / Faculty <span className="text-rose-500">*</span>
                     </label>
                     <input
@@ -1235,13 +1285,13 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                       value={orgDepartment}
                       onChange={(e) => setOrgDepartment(e.target.value)}
                       placeholder="e.g. Computer Science & Engineering"
-                      className="w-full px-3 py-2 rounded border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-xs sm:text-sm bg-white focus:outline-none focus:ring-1 focus:ring-stone-900/10 focus:border-stone-900"
                     />
                   </div>
 
                   {/* Designation */}
                   <div>
-                    <label htmlFor="org-desig" className="block text-xs font-semibold text-zinc-800 mb-1">
+                    <label htmlFor="org-desig" className="block text-xs font-semibold text-zinc-900 mb-1.5">
                       Your Designation / Role <span className="text-rose-500">*</span>
                     </label>
                     <input
@@ -1250,14 +1300,14 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                       value={orgDesignation}
                       onChange={(e) => setOrgDesignation(e.target.value)}
                       placeholder="e.g. Faculty Coordinator, Event Lead, Director"
-                      className="w-full px-3 py-2 rounded border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-xs sm:text-sm bg-white focus:outline-none focus:ring-1 focus:ring-stone-900/10 focus:border-stone-900"
                     />
                   </div>
 
                   {/* Website URL */}
                   <div className="sm:col-span-2">
-                    <label htmlFor="org-web" className="block text-xs font-semibold text-zinc-800 mb-1">
-                      Organization Website URL <span className="text-zinc-400 font-normal">(Optional)</span>
+                    <label htmlFor="org-web" className="block text-xs font-semibold text-zinc-900 mb-1.5">
+                      Organization Website URL <span className="text-stone-400 font-normal">(Optional)</span>
                     </label>
                     <input
                       id="org-web"
@@ -1265,14 +1315,14 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                       value={orgWebsite}
                       onChange={(e) => setOrgWebsite(e.target.value)}
                       placeholder="https://example.org"
-                      className="w-full px-3 py-2 rounded border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-xs sm:text-sm bg-white focus:outline-none focus:ring-1 focus:ring-stone-900/10 focus:border-stone-900"
                     />
                   </div>
 
                   {/* Authorization Document URL */}
                   <div className="sm:col-span-2">
-                    <label htmlFor="org-doc" className="block text-xs font-semibold text-zinc-800 mb-1">
-                      Authorization Document / Reference URL <span className="text-zinc-400 font-normal">(Optional)</span>
+                    <label htmlFor="org-doc" className="block text-xs font-semibold text-zinc-900 mb-1.5">
+                      Authorization Document / Reference URL <span className="text-stone-400 font-normal">(Optional)</span>
                     </label>
                     <input
                       id="org-doc"
@@ -1283,19 +1333,19 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                         setOrgDocumentUrls(val ? [val] : []);
                       }}
                       placeholder="https://example.org/authorization-letter.pdf"
-                      className="w-full px-3 py-2 rounded border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-xs sm:text-sm bg-white focus:outline-none focus:ring-1 focus:ring-stone-900/10 focus:border-stone-900"
                     />
-                    <p className="text-[11px] text-zinc-400 mt-1">
+                    <p className="text-[11px] text-stone-400 mt-1">
                       Link to an institutional permission letter, accreditation, or student council approval.
                     </p>
                   </div>
                 </div>
 
-                <div className="p-3.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2.5">
-                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="p-3.5 rounded-xl bg-stone-100 border border-stone-200 text-stone-800 text-xs flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-stone-700 shrink-0 mt-0.5" />
                   <div className="leading-relaxed">
                     <span className="font-semibold">Publication Notice:</span> Organization-hosted events will be saved as{' '}
-                    <span className="font-bold underline">Draft — Organization Verification Pending</span>. They will remain non-public and cannot be published until verified and approved by a platform administrator.
+                    <span className="font-semibold">Draft — Verification Pending</span>. They will remain non-public and cannot be published until verified and approved by a platform administrator.
                   </div>
                 </div>
               </div>
@@ -1305,83 +1355,83 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
 
         {/* ================= STEP 8: REVIEW & SAVE ================= */}
         {step === 8 && (
-          <div className="space-y-6">
-            <div className={`p-4 rounded-md border text-xs flex items-center justify-between ${
+          <div className="space-y-5">
+            <div className={`p-4 rounded-2xl border text-xs flex items-center justify-between ${
               hostingType === 'ORGANIZATION'
                 ? 'bg-amber-50 border-amber-200 text-amber-900'
-                : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                : 'bg-stone-50 border-stone-200 text-stone-800'
             }`}>
               <div className="flex items-center gap-2">
-                <CheckCircle2 className={`w-4 h-4 ${hostingType === 'ORGANIZATION' ? 'text-amber-600' : 'text-emerald-600'}`} />
+                <CheckCircle2 className={`w-4 h-4 ${hostingType === 'ORGANIZATION' ? 'text-amber-600' : 'text-stone-900'}`} />
                 <span>
                   {hostingType === 'ORGANIZATION'
                     ? 'Review event & organization verification details before saving.'
                     : 'Ready to create your event! Review your configuration below.'}
                 </span>
               </div>
-              <span className="font-semibold uppercase tracking-wider text-[11px] px-2 py-0.5 rounded bg-white/70 border border-current">
-                {hostingType === 'ORGANIZATION' ? 'DRAFT — VERIFICATION PENDING' : 'Status: DRAFT'}
+              <span className="font-semibold uppercase tracking-wider text-[11px] px-2.5 py-0.5 rounded-full bg-white border border-current">
+                {hostingType === 'ORGANIZATION' ? 'VERIFICATION PENDING' : 'Status: DRAFT'}
               </span>
             </div>
 
             {/* Summary Bento Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
               {/* Card 1: Event Identity */}
-              <div className="p-4 rounded border border-zinc-200 bg-zinc-50/50 relative">
+              <div className="p-4 rounded-2xl border border-stone-200/90 bg-white relative shadow-2xs">
                 <button
                   type="button"
                   onClick={() => setStep(2)}
-                  className="absolute top-3 right-3 text-xs text-emerald-600 hover:underline"
+                  className="absolute top-3.5 right-3.5 text-xs font-semibold text-stone-900 hover:underline cursor-pointer"
                 >
                   Edit
                 </button>
-                <div className="text-[11px] font-semibold uppercase text-zinc-400">Event Identity</div>
-                <h3 className="font-semibold text-zinc-900 text-base mt-1">{name}</h3>
-                <div className="text-xs text-zinc-500 mt-1">
-                  Type: <span className="font-medium text-zinc-800">{eventType}</span>
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400">Event Identity</div>
+                <h3 className="font-semibold text-stone-900 text-base mt-1">{name}</h3>
+                <div className="text-xs text-stone-500 mt-0.5">
+                  Type: <span className="font-medium text-stone-800">{eventType}</span>
                 </div>
-                {description && <p className="text-xs text-zinc-600 mt-2 line-clamp-2">{description}</p>}
+                {description && <p className="text-xs text-stone-600 mt-2 line-clamp-2">{description}</p>}
                 {bannerUrl && (
-                  <img src={bannerUrl} alt="Banner" className="w-full h-24 object-cover rounded mt-3" />
+                  <img src={bannerUrl} alt="Banner" className="w-full h-24 object-cover rounded-xl mt-3" />
                 )}
               </div>
 
               {/* Card 2: Credential Terminology */}
-              <div className="p-4 rounded border border-zinc-200 bg-zinc-50/50 relative">
+              <div className="p-4 rounded-2xl border border-stone-200/90 bg-white relative shadow-2xs">
                 <button
                   type="button"
                   onClick={() => setStep(3)}
-                  className="absolute top-3 right-3 text-xs text-emerald-600 hover:underline"
+                  className="absolute top-3.5 right-3.5 text-xs font-semibold text-stone-900 hover:underline cursor-pointer"
                 >
                   Edit
                 </button>
-                <div className="text-[11px] font-semibold uppercase text-zinc-400">Credential Terminology</div>
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400">Credential Terminology</div>
                 <div className="flex items-center gap-2 mt-2">
-                  <TicketIcon className="w-5 h-5 text-emerald-600" />
-                  <span className="font-semibold text-zinc-800 text-sm">{credentialTerminology}</span>
+                  <TicketIcon className="w-4 h-4 text-stone-900" />
+                  <span className="font-semibold text-stone-900 text-sm">{credentialTerminology}</span>
                 </div>
-                <p className="text-xs text-zinc-500 mt-2">
+                <p className="text-xs text-stone-500 mt-2">
                   Attendee badges and scanner consoles will display "{credentialTerminology}".
                 </p>
               </div>
 
               {/* Card 3: Attendance Mode */}
-              <div className="p-4 rounded border border-zinc-200 bg-zinc-50/50 relative">
+              <div className="p-4 rounded-2xl border border-stone-200/90 bg-white relative shadow-2xs">
                 <button
                   type="button"
                   onClick={() => setStep(4)}
-                  className="absolute top-3 right-3 text-xs text-emerald-600 hover:underline"
+                  className="absolute top-3.5 right-3.5 text-xs font-semibold text-stone-900 hover:underline cursor-pointer"
                 >
                   Edit
                 </button>
-                <div className="text-[11px] font-semibold uppercase text-zinc-400">Attendance Mode</div>
-                <h4 className="font-medium text-zinc-900 text-sm mt-1">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400">Attendance Mode</div>
+                <h4 className="font-semibold text-stone-900 text-sm mt-1">
                   {attendanceMode === 'TICKETIFICATION_REGISTRATION'
                     ? 'Mode A: Registration on Ticketification'
                     : 'Mode B: Existing Attendee Data Import'}
                 </h4>
                 {attendanceMode === 'TICKETIFICATION_REGISTRATION' && (
-                  <div className="text-xs text-zinc-600 mt-1">
+                  <div className="text-xs text-stone-600 mt-1">
                     Pricing: <span className="font-medium">{pricingModel}</span> • Capacity:{' '}
                     <span className="font-medium">{capacity || 'Unlimited'}</span>
                   </div>
@@ -1389,21 +1439,21 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
               </div>
 
               {/* Card 4: Venue & Schedule */}
-              <div className="p-4 rounded border border-zinc-200 bg-zinc-50/50 relative">
+              <div className="p-4 rounded-2xl border border-stone-200/90 bg-white relative shadow-2xs">
                 <button
                   type="button"
                   onClick={() => setStep(5)}
-                  className="absolute top-3 right-3 text-xs text-emerald-600 hover:underline"
+                  className="absolute top-3.5 right-3.5 text-xs font-semibold text-stone-900 hover:underline cursor-pointer"
                 >
                   Edit
                 </button>
-                <div className="text-[11px] font-semibold uppercase text-zinc-400">Venue & Schedule</div>
-                <div className="text-xs text-zinc-800 font-medium mt-1">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400">Venue & Schedule</div>
+                <div className="text-xs text-stone-800 font-medium mt-1">
                   Format: {venueType} {venueName ? `• ${venueName}` : ''}
                 </div>
-                {venueCity && <div className="text-xs text-zinc-500">{venueCity}, {venueCountry}</div>}
-                <div className="text-xs text-zinc-700 mt-2 flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-zinc-400" />
+                {venueCity && <div className="text-xs text-stone-500">{venueCity}, {venueCountry}</div>}
+                <div className="text-xs text-stone-700 mt-2 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-stone-400" />
                   <span>
                     {startDate} {startTime} &rarr; {endDate} {endTime} ({timezone})
                   </span>
@@ -1411,34 +1461,34 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
               </div>
 
               {/* Card 5: Hosting & Verification */}
-              <div className="p-4 rounded border border-zinc-200 bg-zinc-50/50 relative md:col-span-2">
+              <div className="p-4 rounded-2xl border border-stone-200/90 bg-white relative shadow-2xs md:col-span-2">
                 <button
                   type="button"
                   onClick={() => setStep(7)}
-                  className="absolute top-3 right-3 text-xs text-emerald-600 hover:underline"
+                  className="absolute top-3.5 right-3.5 text-xs font-semibold text-stone-900 hover:underline cursor-pointer"
                 >
                   Edit
                 </button>
-                <div className="text-[11px] font-semibold uppercase text-zinc-400">Hosting & Verification Association</div>
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400">Hosting & Verification</div>
                 {hostingType === 'ORGANIZATION' ? (
-                  <div className="mt-2 space-y-1.5 text-xs text-zinc-700">
-                    <div className="font-bold text-sm text-zinc-900 flex items-center gap-2">
-                      <Building2 className="w-4 h-4 text-emerald-600" />
+                  <div className="mt-2 space-y-1.5 text-xs text-stone-700">
+                    <div className="font-bold text-sm text-stone-900 flex items-center gap-2">
+                      <Building2 className="w-4 h-4 text-stone-900" />
                       <span>{orgName}</span>
-                      <span className="text-[10px] bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 rounded-full">
+                      <span className="text-[10px] bg-amber-100 text-amber-900 font-semibold px-2 py-0.5 rounded-full">
                         Verification Pending
                       </span>
                     </div>
-                    <div className="text-zinc-600">Category: <span className="font-medium text-zinc-800">{orgInstitutionType}</span></div>
-                    <div className="text-zinc-600">Official Email: <span className="font-medium text-zinc-800">{orgEmail}</span></div>
-                    <div className="text-zinc-600">Affiliation: <span className="font-medium text-zinc-800">{orgDepartment} ({orgDesignation})</span></div>
-                    {orgWebsite && <div className="text-zinc-600">Website: <a href={orgWebsite} target="_blank" rel="noopener noreferrer" className="text-emerald-600 underline">{orgWebsite}</a></div>}
+                    <div>Category: <span className="font-medium text-stone-900">{orgInstitutionType}</span></div>
+                    <div>Official Email: <span className="font-medium text-stone-900">{orgEmail}</span></div>
+                    <div>Affiliation: <span className="font-medium text-stone-900">{orgDepartment} ({orgDesignation})</span></div>
+                    {orgWebsite && <div>Website: <a href={orgWebsite} target="_blank" rel="noopener noreferrer" className="text-stone-900 underline">{orgWebsite}</a></div>}
                   </div>
                 ) : (
-                  <div className="mt-2 flex items-center gap-2 text-xs text-zinc-700">
-                    <UserCheck className="w-4 h-4 text-emerald-600" />
-                    <span className="font-medium text-zinc-900">Individually Hosted</span>
-                    <span className="text-[10px] bg-zinc-200 text-zinc-700 font-semibold px-2 py-0.5 rounded-full">
+                  <div className="mt-2 flex items-center gap-2 text-xs text-stone-700">
+                    <UserCheck className="w-4 h-4 text-stone-900" />
+                    <span className="font-medium text-stone-900">Individually Hosted</span>
+                    <span className="text-[10px] bg-stone-100 text-stone-700 font-semibold px-2 py-0.5 rounded-full">
                       No Org Verification Required
                     </span>
                   </div>
@@ -1447,56 +1497,114 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
             </div>
           </div>
         )}
+
+        {/* ── STEP NAVIGATION BUTTONS (Directly inside form, bottom) ── */}
+        <div className="pt-4 flex items-center justify-between">
+          {step > 1 ? (
+            <button
+              type="button"
+              onClick={handleBack}
+              disabled={isSubmitting}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-stone-300 text-xs font-semibold text-stone-700 bg-white hover:bg-stone-50 transition-colors disabled:opacity-50 cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Previous
+            </button>
+          ) : (
+            <div />
+          )}
+
+          {step < 8 ? (
+            <button
+              type="button"
+              onClick={handleNext}
+              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-stone-900 hover:bg-black text-xs font-semibold text-white transition-colors cursor-pointer shadow-2xs"
+            >
+              Next Step
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSaveDraft}
+              disabled={isSubmitting}
+              className="inline-flex items-center gap-2 px-7 py-2.5 rounded-full bg-stone-900 hover:bg-black text-xs font-semibold text-white transition-colors shadow-2xs disabled:opacity-50 cursor-pointer"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Saving Event Draft...
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="w-4 h-4" />
+                  {hostingType === 'ORGANIZATION' ? 'Save & Submit for Verification' : 'Save Event Draft'}
+                </>
+              )}
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Navigation Buttons */}
-      <div className="flex items-center justify-between">
-        {step > 1 ? (
-          <button
-            type="button"
-            onClick={handleBack}
-            disabled={isSubmitting}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded border border-zinc-300 text-xs font-semibold text-zinc-700 bg-white hover:bg-zinc-50 transition-colors disabled:opacity-50"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Previous
-          </button>
-        ) : (
-          <div />
-        )}
+      {/* ── MINOR PART: STREAMLINED PROGRESS SIDEBAR ── */}
+      <aside className="w-full lg:w-44 xl:w-48 shrink-0 lg:sticky lg:top-1 self-start">
+        <span className="text-[11px] font-semibold tracking-wider text-stone-400 block mb-2.5">
+          Progress
+        </span>
 
-        {step < 8 ? (
-          <button
-            type="button"
-            onClick={handleNext}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded bg-stone-900 hover:bg-black text-xs font-semibold text-white transition-colors"
-          >
-            Next Step
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={handleSaveDraft}
-            disabled={isSubmitting}
-            className="inline-flex items-center gap-2 px-6 py-2.5 rounded bg-stone-900 hover:bg-black text-xs font-semibold text-white transition-colors shadow-sm disabled:opacity-50"
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Saving Event Draft...
-              </>
-            ) : (
-              <>
-                <ShieldCheck className="w-4 h-4" />
-                {hostingType === 'ORGANIZATION' ? 'Save & Submit for Verification' : 'Save Event Draft'}
-              </>
-            )}
-          </button>
-        )}
-      </div>
+        {/* Minimal Stack of Step Items */}
+        <div className="space-y-0.5">
+          {STEPS_CONFIG.map((s) => {
+            const isCurrent = step === s.id;
+            const isCompleted = step > s.id;
+            const isClickable = s.id <= step;
+
+            return (
+              <button
+                key={s.id}
+                type="button"
+                disabled={!isClickable}
+                onClick={() => {
+                  if (isClickable) setStep(s.id);
+                }}
+                className={`w-full text-left py-1.5 px-2 rounded-md transition-colors flex items-center justify-between text-xs group ${
+                  isCurrent
+                    ? 'text-stone-900 font-semibold bg-stone-100/70'
+                    : isCompleted
+                    ? 'text-stone-600 hover:text-stone-900 hover:bg-stone-50 cursor-pointer'
+                    : 'text-stone-300 cursor-not-allowed'
+                }`}
+              >
+                <div className="flex items-center gap-2 truncate">
+                  <span
+                    className={`font-mono text-[11px] shrink-0 ${
+                      isCurrent
+                        ? 'text-stone-900 font-bold'
+                        : isCompleted
+                        ? 'text-stone-500'
+                        : 'text-stone-300'
+                    }`}
+                  >
+                    0{s.id}
+                  </span>
+                  <span className="truncate">{s.shortTitle}</span>
+                </div>
+
+                {isCompleted && (
+                  <Check className="w-3 h-3 text-stone-700 shrink-0 ml-1" />
+                )}
+                {isCurrent && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-stone-900 shrink-0 ml-1" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </aside>
     </div>
-  );
+  </div>
+);
 };
 
 export default EventCreationWizard;
+
