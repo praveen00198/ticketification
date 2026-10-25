@@ -50,6 +50,25 @@ export class EventVerificationController {
   }
 
   /**
+   * POST /api/events/:eventId/verification/retry
+   */
+  async retryVerification(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { eventId } = req.params;
+      const userId = (req as any).user?.id;
+
+      const verification = await this.verificationService.retryVerificationInitialization(eventId, userId);
+      res.status(200).json({
+        success: true,
+        data: verification,
+        message: 'Verification initialized successfully.',
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
    * POST /api/events/:eventId/verification/send-otp
    */
   async sendOtp(req: Request, res: Response, next: NextFunction): Promise<void> {

@@ -228,6 +228,10 @@ sequenceDiagram
 1. **Frontend State is Untrusted**: `localStorage`, Redux/Zustand state, cookies, or browser tokens NEVER dictate permissions on the backend.
 2. **No Default Admin Assignment**: New registrations start with platform role `USER`. No automatic `ADMIN` elevation.
 3. **Event Scoping**: Every query on an event entity (`credentials`, `teams`, `members`, `attendees`) must explicitly match `{ eventId: req.params.eventId }`.
+4. **Single Global User Identity**: Every person has one global user identity with platform role `USER`. `Host` is not a separate global identity. Legacy `isOnboarded: true` fields never grant elevated privileges or misidentify users as hosts globally.
+5. **Collaborator Operational Authorization**: Event management capabilities are authorized for the event creator (`isOwner`) or active collaborators (`HOST` and `COORDINATOR` roles in `event_members`). Scoped personnel (`JUDGE`, `MENTOR`, `VOLUNTEER`) receive only assignment-specific capabilities.
+6. **Publication Readiness Gate**: Unified readiness validation (`validatePublicationReadiness`) enforces required fields, valid schedules (`startAt` and `endAt >= startAt`), and organization verification before publication. Approved-but-incomplete events remain in `APPROVED` (non-public) until completed.
+7. **Strict Workspace Separation**: Global Dashboard routes never auto-enter Host Workspace from stale `localStorage` keys. Exiting host workspace clears event context and restores the global user navigation.
 
 ---
 

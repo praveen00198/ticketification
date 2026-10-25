@@ -85,16 +85,24 @@ export function isEventOwner(
  * Checks whether user has operational management permissions over the active event.
  * Follows least privilege:
  * 1. Platform admins have global management capability.
- * 2. Event-scoped operational modules strictly require verified event ownership.
- * 3. Mere onboarding completion or non-empty event arrays NEVER grant operational access.
+ * 2. Event owner and authorized operational collaborators (HOST, COORDINATOR) have operational capability.
+ * 3. Evaluators, Judges, Mentors, and Volunteers only possess scoped capabilities and are NOT granted host-level operational access.
+ * 4. Mere onboarding completion or non-empty event arrays NEVER grant operational access.
  */
 export function canManageEventOperations(
   user?: UserIdentity | null,
-  currentEvent?: { createdBy?: string; ownerId?: string; ownerSupabaseId?: string } | null
+  currentEvent?: { createdBy?: string; ownerId?: string; ownerSupabaseId?: string; userRole?: string; role?: string } | null
 ): boolean {
   if (!user) return false;
   if (isPlatformAdmin(user)) return true;
-  if (currentEvent && isEventOwner(user, currentEvent)) return true;
+  if (!currentEvent) return false;
+  if (isEventOwner(user, currentEvent)) return true;
+
+  const role = (currentEvent as any).userRole || (currentEvent as any).role;
+  if (role === 'HOST' || role === 'COORDINATOR') {
+    return true;
+  }
+
   return false;
 }
 
@@ -103,19 +111,38 @@ export function canManageEventOperations(
  */
 export function isHostOrOrganizer(
   user?: UserIdentity | null,
-  currentEvent?: { createdBy?: string; ownerId?: string; ownerSupabaseId?: string } | null
+  currentEvent?: { createdBy?: string; ownerId?: string; ownerSupabaseId?: string; userRole?: string; role?: string } | null
 ): boolean {
   return canManageEventOperations(user, currentEvent);
 }
 
 /**
  * Resolves human-readable display role for the user.
+ * Strictly adheres to single global user identity:
+ * - A user is globally an 'Attendee' (or 'Admin' / 'Super Admin' for platform operators).
+ * - Contextual event roles ('Host', 'Coordinator', 'Judge', 'Mentor', 'Evaluator', 'Volunteer')
+ *   are displayed only within the context of an authorized event.
+ * - isOnboarded is a legacy profile completion flag and NEVER misidentifies a user globally as 'Host'.
  */
-export function getUserDisplayRole(user?: UserIdentity | null): string {
+export function getUserDisplayRole(
+  user?: UserIdentity | null,
+  currentEvent?: { createdBy?: string; ownerId?: string; ownerSupabaseId?: string; userRole?: string; role?: string } | null
+): string {
   if (!user) return 'Guest';
   if (user.role === 'SUPER_ADMIN') return 'Super Admin';
   if (user.role === 'ADMIN') return 'Admin';
-  if (user.isOnboarded) return 'Host';
+
+  if (currentEvent) {
+    if (isEventOwner(user, currentEvent)) return 'Host';
+    const role = (currentEvent as any).userRole || (currentEvent as any).role;
+    if (role === 'HOST') return 'Host';
+    if (role === 'COORDINATOR') return 'Coordinator';
+    if (role === 'VOLUNTEER') return 'Volunteer';
+    if (role === 'MENTOR') return 'Mentor';
+    if (role === 'EVALUATOR') return 'Evaluator';
+    if (role === 'JUDGE') return 'Judge';
+  }
+
   return 'Attendee';
 }
 
@@ -126,10 +153,11 @@ export function isHostWorkspaceMode(
   pathname: string,
   currentEvent?: { id?: string } | null
 ): boolean {
+  if (!currentEvent) return false;
   if (pathname.startsWith('/events/') && !pathname.startsWith('/events/create')) {
     return true;
   }
-  if (['/import', '/tickets', '/scan', '/reports'].includes(pathname) && Boolean(currentEvent)) {
+  if (['/import', '/tickets', '/scan', '/reports'].includes(pathname)) {
     return true;
   }
   return false;
@@ -236,7 +264,7 @@ export function getHostWorkspaceNavigationCategories({
       ],
     },
     {
-      title: 'Attendee Operations',
+      title: 'Event Operations',
       items: [
         { label: 'Guest Roster', path: `/import`, icon: FileSpreadsheet, requiresEvent: true, requiresHost: true },
         { label: 'Issued Tickets', path: `/tickets`, icon: Ticket, requiresEvent: true, requiresHost: true },

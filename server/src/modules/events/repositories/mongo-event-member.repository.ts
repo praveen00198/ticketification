@@ -37,6 +37,9 @@ export class MongoEventMemberRepository {
     eventId: string | mongoose.Types.ObjectId,
     userId: string | mongoose.Types.ObjectId
   ): Promise<IEventMemberDocument | null> {
+    if (mongoose.connection.readyState !== 1) {
+      return null;
+    }
     return await this.model
       .findOne({
         eventId,

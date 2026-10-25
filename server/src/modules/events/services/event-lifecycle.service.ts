@@ -13,6 +13,7 @@ import {
   mongoUserRepository,
   MongoUserRepository,
 } from '../../auth/repositories/mongo-user.repository';
+import { assertPublicationReadiness } from '../utils/publication-readiness';
 
 export const ALLOWED_TRANSITIONS: Record<EventStatus, EventStatus[]> = {
   DRAFT: ['SUBMITTED', 'CANCELLED'],
@@ -68,52 +69,9 @@ export class EventLifecycleService {
       );
     }
 
-    // Business precondition: Pre-Publish verification gate
+    // Business precondition: Centralized Publication Readiness Gate
     if (targetStatus === 'PUBLISHED') {
-      const isOrg =
-        event.hostingType === 'ORGANIZATION' ||
-        event.organizationVerificationStatus !== 'NOT_REQUIRED';
-
-      if (isOrg) {
-        if (
-          event.organizationVerificationStatus === 'PENDING' ||
-          event.verificationStatus === 'PENDING'
-        ) {
-          throw new AppError(
-            'Organization verification is pending. The event cannot be published until verified.',
-            400
-          );
-        }
-        if (
-          event.organizationVerificationStatus === 'REJECTED' ||
-          event.verificationStatus === 'REJECTED'
-        ) {
-          throw new AppError(
-            'Organization verification was rejected. The event cannot be published.',
-            400
-          );
-        }
-        if (event.verificationStatus !== 'VERIFIED') {
-          throw new AppError(
-            'Event must be officially verified and approved before it can be published.',
-            400
-          );
-        }
-      }
-
-      // Universal readiness checks for publication across all event types
-      if (!event.name || !event.name.trim()) {
-        throw new AppError('Event name is required before publication.', 400);
-      }
-      if (!event.schedule?.startAt) {
-        throw new AppError('Event schedule start date is required before publication.', 400);
-      }
-      if (
-        event.schedule?.endAt &&
-        new Date(event.schedule.endAt) < new Date(event.schedule.startAt)
-      ) {
-        throw new AppError('Event schedule end date must be after the start date.', 400);
-      }
+      assertPublicationReadiness(event);
     }
 
     // Business precondition: Schedule checks for registration

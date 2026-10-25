@@ -50,25 +50,56 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         : [];
       setEvents(eventsList);
 
-      const targetId = preferredId || localStorage.getItem('selected_event_id');
-      if (targetId) {
-        const matched = eventsList.find((e) => e.id === targetId);
+      // Check if user is currently on an explicit event-scoped route
+      const pathname = window.location.pathname;
+      const isEventRoute =
+        (pathname.startsWith('/events/') && !pathname.startsWith('/events/create')) ||
+        ['/import', '/tickets', '/scan', '/reports'].includes(pathname);
+
+      // 1. Explicit event selection (e.g. from Event Switcher or creation)
+      if (preferredId) {
+        const matched = eventsList.find((e) => e.id === preferredId);
         if (matched) {
           setCurrentEventState(matched);
           localStorage.setItem('selected_event_id', matched.id);
           return;
         }
+      } else if (isEventRoute) {
+        // 2. Explicit event-scoped URL navigation: resolve event ID from URL path or stored ID
+        const eventIdMatch = pathname.match(/^\/events\/([a-fA-F0-9]{24}|[a-zA-Z0-9_-]+)/);
+        const urlEventId = eventIdMatch ? eventIdMatch[1] : null;
+        const targetId = urlEventId || localStorage.getItem('selected_event_id');
+
+        if (targetId) {
+          const matched = eventsList.find((e) => e.id === targetId);
+          if (matched) {
+            setCurrentEventState(matched);
+            localStorage.setItem('selected_event_id', matched.id);
+            return;
+          }
+        }
+
+        // Direct server-side verification for direct URL navigation
+        if (urlEventId && urlEventId !== 'create') {
+          try {
+            const directEvent = await eventsApi.getEvent(urlEventId);
+            if (directEvent) {
+              setCurrentEventState(directEvent);
+              localStorage.setItem('selected_event_id', directEvent.id);
+              return;
+            }
+          } catch {
+            // Inaccessible, deleted, or unauthorized event: fail closed
+            setCurrentEventState(null);
+            localStorage.removeItem('selected_event_id');
+            return;
+          }
+        }
       }
 
-      // Only default to first event if currently on an event-specific route; otherwise keep global context clean
-      const isEventRoute = window.location.pathname.startsWith('/events/') && !window.location.pathname.startsWith('/events/create');
-      if (eventsList.length > 0 && isEventRoute) {
-        setCurrentEventState(eventsList[0]);
-        localStorage.setItem('selected_event_id', eventsList[0].id);
-      } else {
-        setCurrentEventState(null);
-        localStorage.removeItem('selected_event_id');
-      }
+      // 3. Global workspace routes: keep global context clean without silent host workspace mode
+      setCurrentEventState(null);
+      localStorage.removeItem('selected_event_id');
     } catch (err: any) {
       setError(extractErrorMessage(err, 'Failed to load events'));
     } finally {

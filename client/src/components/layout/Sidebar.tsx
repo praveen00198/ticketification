@@ -220,6 +220,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {isInHostMode && (
                 <button
                   onClick={() => {
+                    setCurrentEvent(null);
                     navigate("/dashboard");
                   }}
                   className="w-full mt-1.5 flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-stone-500 hover:text-stone-900 hover:bg-stone-200/50 rounded-lg transition-colors cursor-pointer"
@@ -331,7 +332,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <div className="text-[10px] text-stone-500 truncate flex items-center gap-1">
                     <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
                     <span className="truncate">
-                      {getUserDisplayRole(user)}
+                      {getUserDisplayRole(user, currentEvent)}
                       {user.organizationName ? ` • ${user.organizationName}` : ''}
                     </span>
                   </div>

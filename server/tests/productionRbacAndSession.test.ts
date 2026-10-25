@@ -130,8 +130,14 @@ describe('Production RBAC, Session Restoration & Custom Identity Verification', 
       expect(getUserDisplayRole(null)).toBe('Guest');
       expect(getUserDisplayRole({ name: 'A', email: 'a@a.com', role: 'SUPER_ADMIN' })).toBe('Super Admin');
       expect(getUserDisplayRole({ name: 'B', email: 'b@b.com', role: 'ADMIN' })).toBe('Admin');
-      expect(getUserDisplayRole({ name: 'C', email: 'c@c.com', role: 'USER', isOnboarded: true })).toBe('Host');
+      // Single global identity: isOnboarded does NOT globally misidentify user as Host
+      expect(getUserDisplayRole({ name: 'C', email: 'c@c.com', role: 'USER', isOnboarded: true })).toBe('Attendee');
       expect(getUserDisplayRole({ name: 'D', email: 'd@d.com', role: 'USER', isOnboarded: false })).toBe('Attendee');
+      // Contextual event role evaluation
+      const eventOwner = { id: hostUser.id, name: 'Host', email: hostUser.email, role: 'USER' };
+      expect(getUserDisplayRole(eventOwner, hostOwnedEvent)).toBe('Host');
+      expect(getUserDisplayRole({ id: 'u3', name: 'Coord', email: 'coord@c.com', role: 'USER' }, { ...hostOwnedEvent, userRole: 'COORDINATOR' })).toBe('Coordinator');
+      expect(getUserDisplayRole({ id: 'u4', name: 'Judge', email: 'judge@j.com', role: 'USER' }, { ...hostOwnedEvent, userRole: 'JUDGE' })).toBe('Judge');
     });
 
     it('getNavigationCategories isolates Event Operations strictly to authorized managers', () => {

@@ -4,6 +4,7 @@ import { ticketTypeRepository, TicketTypeRepository, CreateTicketTypeInput } fro
 import { userRepository, UserRepository } from '../../auth/repositories/user.repository';
 import { mongoUserRepository, MongoUserRepository } from '../../auth/repositories/mongo-user.repository';
 import { mongoEventVerificationRepository, MongoEventVerificationRepository } from '../repositories/mongo-event-verification.repository';
+import { mongoEventMemberRepository, MongoEventMemberRepository } from '../repositories/mongo-event-member.repository';
 import { supabaseStorageService, SupabaseStorageService } from '../../tickets/services/supabase-storage.service';
 import {
   ValidationError,
@@ -42,7 +43,8 @@ export class EventService {
     private readonly mongoEventRepo: MongoEventRepository = mongoEventRepository,
     private readonly mongoUserRepo: MongoUserRepository = mongoUserRepository,
     private readonly storageService: SupabaseStorageService = supabaseStorageService,
-    private readonly eventVerificationRepo: MongoEventVerificationRepository = mongoEventVerificationRepository
+    private readonly eventVerificationRepo: MongoEventVerificationRepository = mongoEventVerificationRepository,
+    private readonly eventMemberRepo: MongoEventMemberRepository = mongoEventMemberRepository
   ) {}
 
   /**
@@ -189,8 +191,10 @@ export class EventService {
         });
       } catch (verifErr) {
         console.error('[EventService] Failed to auto-create verification record for organization event:', verifErr);
-        // Recoverable state: preserve event, but reset verification status so it does not report PENDING without a record
-        eventDoc.organizationVerificationStatus = 'REJECTED';
+        // Safe, recoverable state: preserve event as non-public DRAFT.
+        // DO NOT misrepresent infrastructure failure as an administrative rejection ('REJECTED').
+        // Keep status as PENDING verification and UNVERIFIED.
+        eventDoc.organizationVerificationStatus = 'PENDING';
         eventDoc.verificationStatus = 'UNVERIFIED';
         await eventDoc.save();
       }
@@ -218,17 +222,46 @@ export class EventService {
   }
 
   /**
-   * Retrieve event by ID with zero-trust ownership enforcement.
+   * Retrieve event by ID with zero-trust ownership and collaborator RBAC enforcement.
    * Supports both canonical MongoDB events and legacy PostgreSQL records.
    */
   async getEventById(eventId: string, userId: string): Promise<any> {
     // Try MongoDB first
     const mongoEvent = await this.mongoEventRepo.findById(eventId);
     if (mongoEvent) {
-      if (mongoEvent.ownerSupabaseId !== userId) {
-        throw new AuthorizationError('Access denied. You do not own this event.');
+      const isOwner = mongoEvent.ownerSupabaseId === userId;
+      let memberRole: string | undefined = undefined;
+      let memberPermissions: string[] | undefined = undefined;
+
+      if (!isOwner) {
+        // Check platform admin privileges
+        const callerUser = await this.mongoUserRepo.findBySupabaseId(userId);
+        const isAdmin = callerUser && (callerUser.platformRole === 'ADMIN' || callerUser.platformRole === 'SUPER_ADMIN');
+
+        if (!isAdmin) {
+          // Check event membership for authorized collaborators
+          if (!callerUser) {
+            throw new AuthorizationError('Access denied. You do not have access to this event.');
+          }
+          const membership = await this.eventMemberRepo.findByEventAndUser(eventId, callerUser._id);
+          if (!membership || membership.status !== 'ACTIVE') {
+            throw new AuthorizationError('Access denied. You do not have access to this event.');
+          }
+          memberRole = membership.role;
+          memberPermissions = membership.permissions;
+        } else {
+          memberRole = 'ADMIN';
+        }
+      } else {
+        memberRole = 'HOST';
       }
-      return this.formatCanonicalEvent(mongoEvent);
+
+      const formatted = this.formatCanonicalEvent(mongoEvent);
+      return {
+        ...formatted,
+        userRole: memberRole,
+        userPermissions: memberPermissions,
+      };
     }
 
     // Fallback to legacy PostgreSQL repository

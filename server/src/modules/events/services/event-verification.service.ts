@@ -24,6 +24,7 @@ import {
 } from '../../../db/mongo/models/event-verification.model';
 import { IEventDocument } from '../../../db/mongo/models/event.model';
 import { auditService } from './audit.service';
+import { validatePublicationReadiness } from '../utils/publication-readiness';
 
 const PUBLIC_EMAIL_DOMAINS = new Set([
   'gmail.com',
@@ -170,7 +171,31 @@ export class EventVerificationService {
       throw new AppError('Unauthorized access to event verification', 403);
     }
 
-    const verification = await this.verificationRepo.findByEventId(eventId);
+    let verification = await this.verificationRepo.findByEventId(eventId);
+    // Safe self-healing reconciliation if initial record creation failed
+    if (!verification && event.hostingType === 'ORGANIZATION' && event.organization?.name) {
+      try {
+        verification = await this.verificationRepo.createVerification({
+          eventId: event._id,
+          ownerId: event.ownerId,
+          institutionName: event.organization.name,
+          institutionType: (event.organization.institutionType as any) || 'CORPORATE',
+          officialEmail: event.organization.officialEmail || '',
+          department: event.organization.department || 'General',
+          designation: event.organization.designation || 'Event Organizer',
+          websiteUrl: event.organization.websiteUrl,
+          documentUrls: event.organization.documentUrls || [],
+          otpVerified: false,
+          riskScore: 30,
+          riskTier: 'LOW',
+          riskFactors: ['ORGANIZATION_VERIFICATION_PENDING'],
+          status: 'PENDING',
+        });
+      } catch (healErr) {
+        console.warn('[EventVerificationService] Auto-reconciliation of missing verification record warning:', healErr);
+      }
+    }
+
     const previewRisk = this.calculateRisk(event, {
       officialEmail: verification?.officialEmail,
       otpVerified: verification?.otpVerified,
@@ -178,6 +203,49 @@ export class EventVerificationService {
     });
 
     return { verification, event, previewRisk };
+  }
+
+  /**
+   * Safe retry or reconciliation of organization verification record without duplicate creation.
+   */
+  async retryVerificationInitialization(
+    eventId: string,
+    userId: string
+  ): Promise<IEventVerificationDocument> {
+    const event = await this.getAuthorizedEvent(eventId, userId);
+
+    if (event.hostingType !== 'ORGANIZATION') {
+      throw new AppError('Verification is not required for individual events.', 400);
+    }
+
+    const existing = await this.verificationRepo.findByEventId(event._id);
+    if (existing) {
+      return existing;
+    }
+
+    const org = event.organization || { name: event.name };
+    const record = await this.verificationRepo.createVerification({
+      eventId: event._id,
+      ownerId: event.ownerId,
+      institutionName: org.name || event.name,
+      institutionType: (org.institutionType as any) || 'CORPORATE',
+      officialEmail: org.officialEmail || '',
+      department: org.department || 'General',
+      designation: org.designation || 'Event Organizer',
+      websiteUrl: org.websiteUrl,
+      documentUrls: org.documentUrls || [],
+      otpVerified: false,
+      riskScore: 30,
+      riskTier: 'LOW',
+      riskFactors: ['ORGANIZATION_VERIFICATION_PENDING'],
+      status: 'PENDING',
+    });
+
+    event.organizationVerificationStatus = 'PENDING';
+    event.verificationStatus = 'UNVERIFIED';
+    await event.save();
+
+    return record;
   }
 
   /**
@@ -467,16 +535,11 @@ export class EventVerificationService {
       event.organizationVerificationStatus = 'APPROVED';
       event.verificationLevel = verification.riskTier;
 
-      // Automatic publication check:
-      // If the event was SUBMITTED and satisfies publication readiness criteria:
-      // (valid name, valid schedule start date, and endAt >= startAt),
-      // transition to PUBLISHED. Otherwise, transition to APPROVED so host can publish when ready.
-      const hasValidName = !!(event.name && event.name.trim());
-      const hasValidSchedule = !!(
-        event.schedule?.startAt &&
-        (!event.schedule?.endAt || new Date(event.schedule.endAt) >= new Date(event.schedule.startAt))
-      );
-      const isCompleteAndReady = hasValidName && hasValidSchedule;
+      // Automatic publication check using centralized publication readiness validator:
+      // If the event was SUBMITTED and satisfies all publication readiness criteria,
+      // transition to PUBLISHED. Otherwise, transition to APPROVED so host can publish once ready.
+      const readiness = validatePublicationReadiness(event);
+      const isCompleteAndReady = readiness.isReady;
 
       if (event.status === 'SUBMITTED' && isCompleteAndReady) {
         event.status = 'PUBLISHED';

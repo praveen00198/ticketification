@@ -981,3 +981,40 @@
   3. Non-competitive events (Concerts, Workshops, Conferences) are cleanly decluttered from hackathon rubrics.
   4. Both client and server pass `tsc --noEmit` and production builds with zero errors. All automated test suites passing (14/14 in new capability test suite, 27/27 in verification & mentor suites, 16/16 in lifecycle, 18/18 in attendee & dashboard suites).
 
+---
+
+## ADR-044: Architectural Alignment, Single Global Identity Decoupling, Technical Failure Recovery, Centralized Publication Readiness Gate, Collaborator Operational RBAC, and Strict Event Isolation
+- **Status**: IMPLEMENTED & VERIFIED
+- **Context**:
+  1. **Workstream 1 (Single Global Identity)**: The legacy `isOnboarded: true` profile flag was causing `getUserDisplayRole()` to globally misidentify attendees as "Host". Furthermore, legacy documentation conflated organizer onboarding with hosting permission. A user has a single global identity and is an Attendee globally; roles are strictly contextual to active events.
+  2. **Workstream 2 (Technical vs Administrative Rejection)**: When auto-creation of an organization's verification record encountered an infrastructure failure during event wizard creation, the event was mistakenly labeled `REJECTED`. An infrastructure failure must never be misrepresented as an administrative rejection, and failed initializations must be safely recoverable without orphaned duplicates.
+  3. **Workstream 3 (Universal Publication Readiness)**: Manual host publication in `event-lifecycle.service.ts` and automatic post-approval publication in `event-verification.service.ts` had drifting criteria. Approved organization events with incomplete required configuration were auto-publishing before readiness gates passed.
+  4. **Workstream 4 (Collaborator Operational RBAC)**: `canManageEventOperations()` relied solely on event creator ownership (`isEventOwner`), excluding legitimate event collaborators (coordinators and co-hosts). Conversely, scoped roles (`JUDGE`, `MENTOR`, `VOLUNTEER`) must not receive full operational management.
+  5. **Workstream 5 (Client/Server Capability Matrix Parity)**: All 13 canonical `EVENT_TYPES` and 14 capability flags required 100% synchronized key/value parity between frontend and backend.
+  6. **Workstream 6 (Workspace Routing & Event Isolation)**: `localStorage.getItem('selected_event_id')` was silently forcing global dashboard routes (`/`, `/dashboard`, `/explore`, `/wallet`) into Host Workspace mode. Exiting host workspace must cleanly restore the global attendee experience.
+- **Decision**:
+  1. **Decouple Identity from Onboarding & HostProfile**:
+     - Updated `client/src/utils/permissions.ts` `getUserDisplayRole(user, currentEvent)`. Returns `'Attendee'` by default globally. Contextual roles (`'Host'`, `'Coordinator'`, `'Judge'`, `'Mentor'`, `'Volunteer'`) are derived only within an active event context.
+     - Confirmed that normal authenticated users can create and manage individual events without `HostProfile` or onboarding requirements.
+  2. **Technical Failure Recovery & Idempotent Self-Healing**:
+     - Updated `createEventWizard()` in `server/src/modules/events/services/event.service.ts`. Caught verification creation errors preserve the event safely in `status: 'DRAFT'`, `organizationVerificationStatus: 'PENDING'`, and `verificationStatus: 'UNVERIFIED'`, completely avoiding false rejections.
+     - Added idempotent self-healing in `getVerification()` and mounted `POST /api/events/:eventId/verification/retry` to allow organizers to re-trigger verification record creation safely without duplicates.
+  3. **Centralized Publication Readiness Engine**:
+     - Implemented `server/src/modules/events/utils/publication-readiness.ts` exporting `validatePublicationReadiness(event)` and `assertPublicationReadiness(event)`.
+     - Validates: (a) Organization verification gate (only for organization-associated events; individual events bypass org verification), (b) Event name presence, (c) Valid schedule (`startAt` valid, `endAt >= startAt`), (d) Venue configuration when provided.
+     - Shared across `event-lifecycle.service.ts` (manual publish) and `event-verification.service.ts` (admin approval). Approved events with incomplete readiness remain in `APPROVED` (non-public) until completed.
+  4. **Collaborator Operational Authorization**:
+     - Updated `canManageEventOperations(user, currentEvent)` in `permissions.ts` to grant access to `isPlatformAdmin(user)`, `isEventOwner(user, currentEvent)`, or `currentEvent.userRole === 'HOST' || currentEvent.userRole === 'COORDINATOR'`.
+     - Scoped personnel (`JUDGE`, `MENTOR`, `VOLUNTEER`) fail closed and do not receive operational management access.
+     - Backend `getEventById()` in `event.service.ts` evaluates `mongoEventMemberRepository.findByEventAndUser()`, attaches `userRole` and `userPermissions`, and returns HTTP 403 Forbidden for revoked or unauthorized members.
+  5. **100% Capability Matrix Parity**:
+     - Verified exact key and value parity across all 13 canonical `EVENT_TYPES` and 14 capability flags between `client/src/utils/event-capabilities.ts` and `server/src/modules/events/utils/event-capabilities.ts`.
+  6. **Strict Workspace Separation & Route Isolation**:
+     - `EventContext.tsx` only activates `currentEvent` on explicit event routes (`/events/:id`, `/import`, `/tickets`, `/scan`, `/reports`) or when preferred by user action; global routes never auto-enter Host Workspace from `localStorage`.
+     - "Exit to Global Dashboard" button in `Sidebar.tsx` clears `currentEvent` via `setCurrentEvent(null)`.
+- **Consequences**:
+  1. Complete alignment with core Ticketification product principles: One Global User Identity, Host Independence, Zero-Trust Authorization, and Strict Event Isolation.
+  2. Full test suite verification: 18/18 tests passing in `architecturalAuditVerification.test.ts`, 14/14 in `productionRbacAndSession.test.ts`, 14/14 in `eventCapabilitiesAndPublication.test.ts`, 28/28 in `eventCreationWizard.test.ts`, 15/15 in `eventVerification.test.ts`, 16/16 in `eventLifecycle.test.ts`.
+  3. Zero build regressions: `npm run build` succeeds cleanly in both `client` and `server`.
+
+

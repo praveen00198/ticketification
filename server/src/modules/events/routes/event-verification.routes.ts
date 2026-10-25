@@ -32,6 +32,13 @@ router.post(
   (req, res, next) => eventVerificationController.saveDraft(req, res, next)
 );
 
+// 2b. Retry or reconcile verification record
+router.post(
+  '/retry',
+  authMiddleware,
+  (req, res, next) => eventVerificationController.retryVerification(req, res, next)
+);
+
 // 3. Request 6-digit OTP for official institutional email
 router.post(
   '/send-otp',
