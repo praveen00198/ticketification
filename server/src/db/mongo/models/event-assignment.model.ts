@@ -1,7 +1,7 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
-export type AssignmentRole = 'MENTOR' | 'EVALUATOR';
-export const ASSIGNMENT_ROLES: AssignmentRole[] = ['MENTOR', 'EVALUATOR'];
+export type AssignmentRole = 'MENTOR' | 'EVALUATOR' | 'JUDGE';
+export const ASSIGNMENT_ROLES: AssignmentRole[] = ['MENTOR', 'EVALUATOR', 'JUDGE'];
 
 export type AssignmentTargetType = 'TRACK' | 'TEAM' | 'GENERAL';
 export const ASSIGNMENT_TARGET_TYPES: AssignmentTargetType[] = ['TRACK', 'TEAM', 'GENERAL'];

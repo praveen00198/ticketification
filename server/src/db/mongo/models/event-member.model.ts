@@ -5,7 +5,8 @@ export type EventRole =
   | 'COORDINATOR'
   | 'VOLUNTEER'
   | 'MENTOR'
-  | 'EVALUATOR';
+  | 'EVALUATOR'
+  | 'JUDGE';
 
 export const EVENT_ROLES: EventRole[] = [
   'HOST',
@@ -13,6 +14,7 @@ export const EVENT_ROLES: EventRole[] = [
   'VOLUNTEER',
   'MENTOR',
   'EVALUATOR',
+  'JUDGE',
 ];
 
 export type EventPermission =
@@ -69,6 +71,10 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<EventRole, EventPermission[]> = {
     'MENTOR_ASSIGNED_TEAMS',
   ],
   EVALUATOR: [
+    'SCORE_ASSIGNED_TEAMS',
+    'VIEW_EVALUATION_RESULTS',
+  ],
+  JUDGE: [
     'SCORE_ASSIGNED_TEAMS',
     'VIEW_EVALUATION_RESULTS',
   ],

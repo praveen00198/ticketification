@@ -215,13 +215,18 @@ export class EventEvaluationService {
 
     const membership = await this.memberRepo.findByEventAndUser(eventId, callerUser._id);
     if (membership && membership.status === 'ACTIVE') {
+      const allowedRoles = ['HOST', 'COORDINATOR', 'EVALUATOR', 'JUDGE'];
+      const hasPermission = membership.permissions?.includes('SCORE_ASSIGNED_TEAMS');
+      if (!allowedRoles.includes(membership.role) && !hasPermission) {
+        throw new AppError('Forbidden: Only assigned judges, evaluators, or organizers can submit scorecards', 403);
+      }
       evaluatorMemberId = membership._id;
       evaluatorName = membership.userEmail;
     } else if (isOwner || isAdmin) {
       evaluatorMemberId = callerUser._id;
       evaluatorName = callerUser.email;
     } else {
-      throw new AppError('Forbidden: Only assigned evaluators or organizers can submit scorecards', 403);
+      throw new AppError('Forbidden: Only assigned judges, evaluators, or organizers can submit scorecards', 403);
     }
 
     // Verify Rubric exists and is currently OPEN

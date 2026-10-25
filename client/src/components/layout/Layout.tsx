@@ -19,7 +19,7 @@ import {
   Award,
 } from 'lucide-react';
 import { useEvent } from '../../context/EventContext';
-import { isHostOrOrganizer } from '../../utils/permissions';
+import { isHostOrOrganizer, isHostWorkspaceMode } from '../../utils/permissions';
 
 interface LayoutProps {
   user: {
@@ -285,28 +285,19 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
 
           {/* Right Header Actions (Minimal & Clean) */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            {/* Onboarding Alert Pill (Restricted to hosts who haven't completed profile) */}
-            {isHost && !user?.isOnboarded && (
+            {/* Quick Action: New Event (Available on Global Dashboard; in Host Workspace it is exclusively inside the Event Switcher) */}
+            {!isHostWorkspaceMode(location.pathname, currentEvent) && (
               <button
-                onClick={() => navigate('/onboarding')}
-                className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-amber-800 bg-amber-500/10 border border-amber-600/20 rounded-full hover:bg-amber-500/15 transition-colors cursor-pointer"
+                onClick={() => navigate('/events/create')}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-stone-900 hover:bg-black rounded-full shadow-2xs transition-all active:scale-95 cursor-pointer"
               >
-                <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                <span>Finish Setup</span>
+                <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span>New Event</span>
               </button>
             )}
 
-            {/* Quick Action: New Event (Available to all users to start hosting anytime) */}
-            <button
-              onClick={() => navigate('/events/create')}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-stone-900 hover:bg-black rounded-full shadow-2xs transition-all active:scale-95 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-              <span>New Event</span>
-            </button>
-
-            {/* Quick Action: Scan / Turnstiles (Strictly for hosts/admins with turnstile permissions) */}
-            {isHost && (
+            {/* Quick Action: Scan / Turnstiles (Only available for verified hosts with operational access) */}
+            {isHost && isHostWorkspaceMode(location.pathname, currentEvent) && (
               <button
                 onClick={() => navigate('/scan')}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-stone-700 hover:text-stone-900 hover:bg-stone-200/60 rounded-xl transition-colors cursor-pointer"

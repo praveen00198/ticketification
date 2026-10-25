@@ -44,6 +44,7 @@ export const EventDetailPage: React.FC = () => {
       setError(null);
       const data = await eventsApi.getEvent(eventId);
       setEvent(data);
+      setCurrentEvent(data);
       setTicketTypes(data.ticketTypes || []);
       setFormData({
         name: data.name,

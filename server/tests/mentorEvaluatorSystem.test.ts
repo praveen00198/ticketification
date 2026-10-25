@@ -23,20 +23,22 @@ import { mongoEventRepository } from '../src/modules/events/repositories/mongo-e
 import { mongoEventMemberRepository } from '../src/modules/events/repositories/mongo-event-member.repository';
 import { mongoEventAssignmentRepository } from '../src/modules/events/repositories/mongo-event-assignment.repository';
 
-describe('Phase 9: Mentor & Evaluator System (Restricted Workspaces & Blind Review)', () => {
-  const hostUser = { id: 'mock-host-uuid-phase9', email: 'host.phase9@hackathon.org' };
-  const coordinatorUser = { id: 'mock-coord-uuid-phase9', email: 'coord.phase9@hackathon.org' };
-  const mentorUser = { id: 'mock-mentor-uuid-phase9', email: 'mentor.phase9@hackathon.org' };
-  const evaluatorUser = { id: 'mock-eval-uuid-phase9', email: 'evaluator.phase9@hackathon.org' };
-  const volunteerUser = { id: 'mock-vol-uuid-phase9', email: 'volunteer.phase9@hackathon.org' };
-  const outsiderUser = { id: 'mock-out-uuid-phase9', email: 'outsider.phase9@other.org' };
+import { createJwtToken } from '../src/utils/local-auth';
 
-  const hostToken = 'valid-host-token-phase9';
-  const coordinatorToken = 'valid-coord-token-phase9';
-  const mentorToken = 'valid-mentor-token-phase9';
-  const evaluatorToken = 'valid-eval-token-phase9';
-  const volunteerToken = 'valid-vol-token-phase9';
-  const outsiderToken = 'valid-out-token-phase9';
+describe('Phase 9: Mentor & Evaluator System (Restricted Workspaces & Blind Review)', () => {
+  const hostUser = { id: 'mock-host-uuid-phase9', email: 'host.phase9@hackathon.org', role: 'USER' as const };
+  const coordinatorUser = { id: 'mock-coord-uuid-phase9', email: 'coord.phase9@hackathon.org', role: 'USER' as const };
+  const mentorUser = { id: 'mock-mentor-uuid-phase9', email: 'mentor.phase9@hackathon.org', role: 'USER' as const };
+  const evaluatorUser = { id: 'mock-eval-uuid-phase9', email: 'evaluator.phase9@hackathon.org', role: 'USER' as const };
+  const volunteerUser = { id: 'mock-vol-uuid-phase9', email: 'volunteer.phase9@hackathon.org', role: 'USER' as const };
+  const outsiderUser = { id: 'mock-out-uuid-phase9', email: 'outsider.phase9@other.org', role: 'USER' as const };
+
+  const hostToken = createJwtToken(hostUser);
+  const coordinatorToken = createJwtToken(coordinatorUser);
+  const mentorToken = createJwtToken(mentorUser);
+  const evaluatorToken = createJwtToken(evaluatorUser);
+  const volunteerToken = createJwtToken(volunteerUser);
+  const outsiderToken = createJwtToken(outsiderUser);
 
   const hostMongoId = new mongoose.Types.ObjectId();
   const coordinatorMongoId = new mongoose.Types.ObjectId();
@@ -139,14 +141,27 @@ describe('Phase 9: Mentor & Evaluator System (Restricted Workspaces & Blind Revi
       return null;
     });
 
+    const userMap: Record<string, any> = {
+      [hostUser.id]: { _id: hostMongoId, supabaseUserId: hostUser.id, email: hostUser.email, platformRole: 'USER', status: 'ACTIVE' },
+      [coordinatorUser.id]: { _id: coordinatorMongoId, supabaseUserId: coordinatorUser.id, email: coordinatorUser.email, platformRole: 'USER', status: 'ACTIVE' },
+      [mentorUser.id]: { _id: mentorMongoId, supabaseUserId: mentorUser.id, email: mentorUser.email, platformRole: 'USER', status: 'ACTIVE' },
+      [evaluatorUser.id]: { _id: evaluatorMongoId, supabaseUserId: evaluatorUser.id, email: evaluatorUser.email, platformRole: 'USER', status: 'ACTIVE' },
+      [volunteerUser.id]: { _id: volunteerMongoId, supabaseUserId: volunteerUser.id, email: volunteerUser.email, platformRole: 'USER', status: 'ACTIVE' },
+      [outsiderUser.id]: { _id: outsiderMongoId, supabaseUserId: outsiderUser.id, email: outsiderUser.email, platformRole: 'USER', status: 'ACTIVE' },
+      [hostMongoId.toString()]: { _id: hostMongoId, supabaseUserId: hostUser.id, email: hostUser.email, platformRole: 'USER', status: 'ACTIVE' },
+      [coordinatorMongoId.toString()]: { _id: coordinatorMongoId, supabaseUserId: coordinatorUser.id, email: coordinatorUser.email, platformRole: 'USER', status: 'ACTIVE' },
+      [mentorMongoId.toString()]: { _id: mentorMongoId, supabaseUserId: mentorUser.id, email: mentorUser.email, platformRole: 'USER', status: 'ACTIVE' },
+      [evaluatorMongoId.toString()]: { _id: evaluatorMongoId, supabaseUserId: evaluatorUser.id, email: evaluatorUser.email, platformRole: 'USER', status: 'ACTIVE' },
+      [volunteerMongoId.toString()]: { _id: volunteerMongoId, supabaseUserId: volunteerUser.id, email: volunteerUser.email, platformRole: 'USER', status: 'ACTIVE' },
+      [outsiderMongoId.toString()]: { _id: outsiderMongoId, supabaseUserId: outsiderUser.id, email: outsiderUser.email, platformRole: 'USER', status: 'ACTIVE' },
+    };
+
+    jest.spyOn(mongoUserRepository, 'findById').mockImplementation(async (id: string): Promise<any> => {
+      return userMap[id] || null;
+    });
+
     jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockImplementation(async (id: string): Promise<any> => {
-      if (id === hostUser.id) return { _id: hostMongoId, email: hostUser.email, platformRole: 'USER', status: 'ACTIVE' };
-      if (id === coordinatorUser.id) return { _id: coordinatorMongoId, email: coordinatorUser.email, platformRole: 'USER', status: 'ACTIVE' };
-      if (id === mentorUser.id) return { _id: mentorMongoId, email: mentorUser.email, platformRole: 'USER', status: 'ACTIVE' };
-      if (id === evaluatorUser.id) return { _id: evaluatorMongoId, email: evaluatorUser.email, platformRole: 'USER', status: 'ACTIVE' };
-      if (id === volunteerUser.id) return { _id: volunteerMongoId, email: volunteerUser.email, platformRole: 'USER', status: 'ACTIVE' };
-      if (id === outsiderUser.id) return { _id: outsiderMongoId, email: outsiderUser.email, platformRole: 'USER', status: 'ACTIVE' };
-      return null;
+      return userMap[id] || null;
     });
 
     jest.spyOn(mongoEventRepository, 'findById').mockImplementation(async (id: string): Promise<any> => {
@@ -288,6 +303,23 @@ describe('Phase 9: Mentor & Evaluator System (Restricted Workspaces & Blind Revi
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
       expect(res.body.data.role).toBe('EVALUATOR');
+    });
+
+    it('allows Host to assign a Judge to a problem track', async () => {
+      const res = await request(app)
+        .post(`/api/events/${testEventId.toString()}/assignments`)
+        .set('Authorization', `Bearer ${hostToken}`)
+        .send({
+          memberId: evaluatorMemberId.toString(),
+          role: 'JUDGE',
+          track: 'Web3 & Decentralization',
+          targetName: 'Track: Web3 & Decentralization',
+          assignedTargetType: 'TRACK',
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.role).toBe('JUDGE');
     });
 
     it('rejects assigning EVALUATOR role to a member with VOLUNTEER role', async () => {

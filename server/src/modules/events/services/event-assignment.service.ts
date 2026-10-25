@@ -123,7 +123,14 @@ export class EventAssignmentService {
     }
 
     // Ensure member has matching role or appropriate permission
-    if (member.role !== dto.role && member.role !== 'HOST' && member.role !== 'COORDINATOR') {
+    const isMatching =
+      member.role === dto.role ||
+      (dto.role === 'JUDGE' && member.role === 'EVALUATOR') ||
+      (dto.role === 'EVALUATOR' && member.role === 'JUDGE') ||
+      member.role === 'HOST' ||
+      member.role === 'COORDINATOR';
+
+    if (!isMatching) {
       throw new AppError(
         `Cannot assign ${dto.role} duty to a member with role '${member.role}'. Update their member role first.`,
         400

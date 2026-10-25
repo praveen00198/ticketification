@@ -943,3 +943,41 @@
   1. Unblocks all normal users to host events without prior onboarding bureaucracy.
   2. Preserves zero-trust institutional credential safety by gating public listings on verified organizations.
   3. Full test coverage achieved: 28 wizard tests, 16 lifecycle tests, and 15 verification tests passing cleanly.
+
+---
+
+## ADR-043: Dual-Mode Workspace Architecture, Centralized Event Capability Matrix, JUDGE Role Reconciliation, and Automatic Publication Lifecycle
+- **Status**: IMPLEMENTED
+- **Context**:
+  1. Previously, `EventContext.tsx` defaulted `currentEvent` to `events[0]` upon login, inadvertently merging event-operational tools (guest imports, turnstiles, issued tickets) into the global attendee dashboard.
+  2. The navigation specification required a strict boundary: regular users browse events and passes in a Global User Dashboard, while selecting an event transitions both content and sidebar into a scoped Event-Specific Host Workspace.
+  3. In the event management workspace, `Create New Event` must appear in exactly ONE place: the **Event Switcher**.
+  4. The platform supports 13 diverse event categories (`HACKATHON`, `CONFERENCE`, `WORKSHOP`, `CONCERT`, `FESTIVAL`, etc.). Previously, capabilities were scattered across components instead of governed by a single authoritative category capability matrix.
+  5. The role taxonomy lacked a dedicated `JUDGE` role, conflating judges with evaluators.
+  6. Individual events were inadvertently blocked by organization verification checks, and verification approval left submitted events in `APPROVED` rather than auto-publishing them when complete.
+- **Decision**:
+  1. **Dual-Mode Navigation Architecture**:
+     - Separated navigation into `getGlobalUserNavigationCategories` and `getHostWorkspaceNavigationCategories` in `client/src/utils/permissions.ts`.
+     - Governed by `isHostWorkspaceMode(pathname, currentEvent)`.
+     - In Host Workspace mode, the sidebar displays only tools scoped to the active event based on category capabilities, features an active Event Switcher, and provides an "Exit to Global Dashboard" action.
+     - `Create New Event` is strictly accessible from the Event Switcher inside the host workspace; topbar and sidebar duplicates are removed.
+     - `EventContext.tsx` no longer auto-forces `events[0]` on global user routes.
+  2. **Centralized Category-to-Capability Matrix**:
+     - Implemented `server/src/modules/events/utils/event-capabilities.ts` and `client/src/utils/event-capabilities.ts`.
+     - Maps all 13 canonical `EVENT_TYPES` to typed capabilities (`teams`, `submissions`, `mentors`, `evaluators`, `judges`, `results`, `schedule`, `venues`, `communications`, `analytics`, `auditLog`).
+     - Gated frontend cards and backend operations via `getEventCapabilities` and `hasCapability`.
+  3. **Role Taxonomy & JUDGE Integration**:
+     - Added `'JUDGE'` to `EventRole`, `EVENT_ROLES`, and `DEFAULT_ROLE_PERMISSIONS` with `['SCORE_ASSIGNED_TEAMS', 'VIEW_EVALUATION_RESULTS']`.
+     - Added `'JUDGE'` to `AssignmentRole` and `ASSIGNMENT_ROLES` on server and client.
+     - Updated `EventStaffCard.tsx` and `EventAssignmentCard.tsx` to support Judge invites and track assignments.
+  4. **Publication & Verification Bug Fixes**:
+     - Individual events (`hostingType === 'INDIVIDUAL'`) are unblocked from publication when readiness checks pass.
+     - Approving verification on a `SUBMITTED` event that meets readiness criteria auto-publishes it (`status = 'PUBLISHED'`) and creates status history.
+     - Secured `findPublicByHost` in `mongo-event.repository.ts` with organization verification filtering.
+     - Wizard consistency: if verification creation fails, status is safely updated to `REJECTED`, preventing inconsistent phantom pending states.
+- **Consequences**:
+  1. Ergonomic, clean separation between Attendee and Host workspaces.
+  2. No duplicate `Create New Event` buttons cluttering host navigation.
+  3. Non-competitive events (Concerts, Workshops, Conferences) are cleanly decluttered from hackathon rubrics.
+  4. Both client and server pass `tsc --noEmit` and production builds with zero errors. All automated test suites passing (14/14 in new capability test suite, 27/27 in verification & mentor suites, 16/16 in lifecycle, 18/18 in attendee & dashboard suites).
+

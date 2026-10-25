@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
-import { ShieldAlert, Sparkles, Compass, Wallet } from 'lucide-react';
+import { ShieldAlert, Sparkles, Compass, Wallet, Calendar } from 'lucide-react';
 import { useEvent } from '../context/EventContext';
 import { isHostOrOrganizer, UserIdentity } from '../utils/permissions';
 import { Button } from '../components/ui';
@@ -25,10 +25,10 @@ export const HostRoute: React.FC<HostRouteProps> = ({ user }) => {
 
         <div className="space-y-2">
           <h2 className="text-xl font-extrabold text-stone-900 tracking-tight">
-            Organizer Access Required
+            Event Management Access Required
           </h2>
           <p className="text-xs text-stone-500 leading-relaxed max-w-md mx-auto">
-            This module contains operational tools for event hosts (guest roster imports, issued ticket management, and live gate turnstiles). Complete organizer setup or explore attendee features below.
+            This module contains operational tools for managing a specific event (guest roster imports, issued ticket management, and live turnstiles). Select an event you organize from My Events, or create a new event.
           </p>
         </div>
 
@@ -36,15 +36,25 @@ export const HostRoute: React.FC<HostRouteProps> = ({ user }) => {
           <Button
             variant="primary"
             size="sm"
-            onClick={() => navigate(ROUTES.ONBOARDING)}
-            iconLeft={<Sparkles className="w-3.5 h-3.5 text-white" />}
+            onClick={() => navigate(ROUTES.EVENTS)}
+            iconLeft={<Calendar className="w-3.5 h-3.5 text-white" />}
             className="!rounded-full px-5 py-2.5 w-full sm:w-auto"
           >
-            Become an Organizer
+            My Events
           </Button>
 
           <Button
             variant="secondary"
+            size="sm"
+            onClick={() => navigate(ROUTES.CREATE_EVENT)}
+            iconLeft={<Sparkles className="w-3.5 h-3.5 text-stone-700" />}
+            className="!rounded-full px-5 py-2.5 w-full sm:w-auto"
+          >
+            Create New Event
+          </Button>
+
+          <Button
+            variant="ghost"
             size="sm"
             onClick={() => navigate(ROUTES.EXPLORE)}
             iconLeft={<Compass className="w-3.5 h-3.5 text-stone-600" />}

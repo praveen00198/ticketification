@@ -981,7 +981,7 @@ export interface UpdateEventTaskPayload {
   requiresScanning?: boolean;
 }
 
-export type EventStaffRole = 'HOST' | 'COORDINATOR' | 'VOLUNTEER' | 'MENTOR' | 'EVALUATOR';
+export type EventStaffRole = 'HOST' | 'COORDINATOR' | 'VOLUNTEER' | 'MENTOR' | 'EVALUATOR' | 'JUDGE';
 export type EventStaffStatus = 'INVITED' | 'ACTIVE' | 'REVOKED';
 
 export interface EventMemberItem {
@@ -1051,7 +1051,7 @@ export interface VerificationDraftPayload {
   websiteUrl?: string;
 }
 
-export type AssignmentRole = 'MENTOR' | 'EVALUATOR';
+export type AssignmentRole = 'MENTOR' | 'EVALUATOR' | 'JUDGE';
 export type AssignmentTargetType = 'TRACK' | 'TEAM' | 'GENERAL';
 
 export interface MentorshipLogItem {

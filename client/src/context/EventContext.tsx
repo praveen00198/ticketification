@@ -60,8 +60,9 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       }
 
-      // Default to first event if available
-      if (eventsList.length > 0) {
+      // Only default to first event if currently on an event-specific route; otherwise keep global context clean
+      const isEventRoute = window.location.pathname.startsWith('/events/') && !window.location.pathname.startsWith('/events/create');
+      if (eventsList.length > 0 && isEventRoute) {
         setCurrentEventState(eventsList[0]);
         localStorage.setItem('selected_event_id', eventsList[0].id);
       } else {

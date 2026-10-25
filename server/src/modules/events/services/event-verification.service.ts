@@ -466,11 +466,56 @@ export class EventVerificationService {
       event.verificationStatus = 'VERIFIED';
       event.organizationVerificationStatus = 'APPROVED';
       event.verificationLevel = verification.riskTier;
-      event.status = 'APPROVED';
+
+      // Automatic publication check:
+      // If the event was SUBMITTED and satisfies publication readiness criteria:
+      // (valid name, valid schedule start date, and endAt >= startAt),
+      // transition to PUBLISHED. Otherwise, transition to APPROVED so host can publish when ready.
+      const hasValidName = !!(event.name && event.name.trim());
+      const hasValidSchedule = !!(
+        event.schedule?.startAt &&
+        (!event.schedule?.endAt || new Date(event.schedule.endAt) >= new Date(event.schedule.startAt))
+      );
+      const isCompleteAndReady = hasValidName && hasValidSchedule;
+
+      if (event.status === 'SUBMITTED' && isCompleteAndReady) {
+        event.status = 'PUBLISHED';
+        event.statusHistory = event.statusHistory || [];
+        event.statusHistory.push({
+          fromStatus: 'SUBMITTED',
+          toStatus: 'PUBLISHED',
+          changedBy: adminObjectId,
+          changedBySupabaseId: adminUserId,
+          reason: reviewNotes || 'Auto-published upon organization verification approval',
+          timestamp: new Date(),
+        });
+      } else {
+        const prevStatus = event.status;
+        event.status = 'APPROVED';
+        event.statusHistory = event.statusHistory || [];
+        event.statusHistory.push({
+          fromStatus: prevStatus,
+          toStatus: 'APPROVED',
+          changedBy: adminObjectId,
+          changedBySupabaseId: adminUserId,
+          reason: reviewNotes || 'Verification approved',
+          timestamp: new Date(),
+        });
+      }
     } else {
+      const prevStatus = event.status;
       event.verificationStatus = 'REJECTED';
       event.organizationVerificationStatus = 'REJECTED';
       event.status = 'DRAFT';
+      event.statusHistory = event.statusHistory || [];
+      event.statusHistory.push({
+        fromStatus: prevStatus,
+        toStatus: 'DRAFT',
+        changedBy: adminObjectId,
+        changedBySupabaseId: adminUserId,
+        reason: reviewNotes || 'Verification rejected',
+        timestamp: new Date(),
+      });
     }
     await event.save();
 

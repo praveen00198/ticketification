@@ -272,9 +272,19 @@ export class MongoEventRepository {
       status: { $in: ['PUBLISHED', 'REGISTRATION_OPEN', 'EVENT_LIVE'] },
       organizationVerificationStatus: { $nin: ['PENDING', 'REJECTED'] },
       verificationStatus: { $nin: ['PENDING', 'REJECTED'] },
-      $or: [
-        { ownerSupabaseId: hostIdentifier },
-        ...(isObjectId ? [{ ownerId: new mongoose.Types.ObjectId(hostIdentifier) }] : []),
+      $and: [
+        {
+          $or: [
+            { ownerSupabaseId: hostIdentifier },
+            ...(isObjectId ? [{ ownerId: new mongoose.Types.ObjectId(hostIdentifier) }] : []),
+          ],
+        },
+        {
+          $or: [
+            { hostingType: { $ne: 'ORGANIZATION' } },
+            { hostingType: 'ORGANIZATION', verificationStatus: 'VERIFIED' },
+          ],
+        },
       ],
     };
 

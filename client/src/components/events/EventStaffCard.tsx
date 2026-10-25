@@ -47,8 +47,13 @@ const ROLE_DEFINITIONS: Record<
     colorClass: 'bg-zinc-800/80 text-zinc-300 border-zinc-700',
   },
   EVALUATOR: {
-    label: 'Evaluator / Judge',
+    label: 'Evaluator',
     description: 'Scoring workspace with blind evaluation rubric access.',
+    colorClass: 'bg-zinc-800/80 text-zinc-300 border-zinc-700',
+  },
+  JUDGE: {
+    label: 'Judge',
+    description: 'Independent judging and score submission for assigned teams or tracks.',
     colorClass: 'bg-zinc-800/80 text-zinc-300 border-zinc-700',
   },
 };
@@ -368,7 +373,7 @@ export const EventStaffCard: React.FC<EventStaffCardProps> = ({
                     Event Role *
                   </label>
                   <div className="grid grid-cols-2 gap-2">
-                    {(['COORDINATOR', 'VOLUNTEER', 'MENTOR', 'EVALUATOR'] as EventStaffRole[]).map(
+                    {(['COORDINATOR', 'VOLUNTEER', 'MENTOR', 'EVALUATOR', 'JUDGE'] as EventStaffRole[]).map(
                       (r) => (
                         <button
                           key={r}

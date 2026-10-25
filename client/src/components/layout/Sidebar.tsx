@@ -17,6 +17,7 @@ import { ChangePasswordModal } from "../auth/ChangePasswordModal";
 import {
   getNavigationCategories,
   getUserDisplayRole,
+  isHostWorkspaceMode,
   NavCategory,
 } from "../../utils/permissions";
 
@@ -54,10 +55,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [eventMenuOpen, setEventMenuOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
+  const isInHostMode = isHostWorkspaceMode(location.pathname, currentEvent);
+
   // Category-wise dynamic navigation configuration filtered by user platform role and host capability
   const categories: NavCategory[] = getNavigationCategories({
     user,
     currentEvent,
+    pathname: location.pathname,
   });
 
   const handleLinkClick = () => {
@@ -92,11 +96,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             {(!isCollapsed || isMobile) && (
               <div className="truncate">
-                <span className="font-extrabold text-base tracking-tight text-zinc-900">
-                  Ticketification
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-extrabold text-base tracking-tight text-zinc-900">
+                    Ticketification
+                  </span>
+                  {isInHostMode && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      Host
+                    </span>
+                  )}
+                </div>
                 <span className="block text-[10px] font-semibold text-stone-500 tracking-wider uppercase font-mono">
-                  Event OS
+                  {isInHostMode ? "Event Workspace" : "Event OS"}
                 </span>
               </div>
             )}
@@ -135,7 +146,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                   <div className="min-w-0">
                     <div className="text-[10px] font-semibold tracking-wider text-stone-400">
-                      Active Event
+                      {isInHostMode ? "Managed Event" : "Active Event"}
                     </div>
                     <div className="text-[13px] font-semibold leading-tight text-stone-900 truncate">
                       {currentEvent ? currentEvent.name : "Select Event"}
@@ -153,7 +164,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {eventMenuOpen && (
                 <div className="mt-1.5 w-full bg-white border border-stone-200 rounded-xl shadow-xs overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
                   <div className="px-3 py-2 text-[10px] font-semibold tracking-wider text-stone-400 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
-                    <span>Active Events</span>
+                    <span>Events You Manage</span>
                     <span className="text-stone-700 font-mono">
                       {events.length}
                     </span>
@@ -172,6 +183,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             onClick={() => {
                               setCurrentEvent(e);
                               setEventMenuOpen(false);
+                              navigate(`/events/${e.id}`);
                             }}
                             className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
                               isSelected
@@ -202,6 +214,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </button>
                   </div>
                 </div>
+              )}
+
+              {/* Exit to Global Dashboard button when inside event host workspace */}
+              {isInHostMode && (
+                <button
+                  onClick={() => {
+                    navigate("/dashboard");
+                  }}
+                  className="w-full mt-1.5 flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-stone-500 hover:text-stone-900 hover:bg-stone-200/50 rounded-lg transition-colors cursor-pointer"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span>Exit to Global Dashboard</span>
+                </button>
               )}
             </div>
           </div>

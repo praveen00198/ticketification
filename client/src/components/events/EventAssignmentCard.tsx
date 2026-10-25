@@ -32,7 +32,7 @@ export const EventAssignmentCard: React.FC<EventAssignmentCardProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   // Filter state
-  const [roleFilter, setRoleFilter] = useState<'ALL' | 'MENTOR' | 'EVALUATOR'>('ALL');
+  const [roleFilter, setRoleFilter] = useState<'ALL' | 'MENTOR' | 'EVALUATOR' | 'JUDGE'>('ALL');
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -114,7 +114,12 @@ export const EventAssignmentCard: React.FC<EventAssignmentCardProps> = ({
   };
 
   const eligibleMembers = members.filter(
-    (m) => m.role === role || m.role === 'HOST' || m.role === 'COORDINATOR'
+    (m) =>
+      m.role === role ||
+      (role === 'JUDGE' && m.role === 'EVALUATOR') ||
+      (role === 'EVALUATOR' && m.role === 'JUDGE') ||
+      m.role === 'HOST' ||
+      m.role === 'COORDINATOR'
   );
 
   const filteredAssignments = assignments.filter((a) => {
@@ -155,7 +160,7 @@ export const EventAssignmentCard: React.FC<EventAssignmentCardProps> = ({
 
       {/* Role Filter Tabs */}
       <div className="flex items-center gap-2 mb-5 overflow-x-auto pb-2">
-        {(['ALL', 'MENTOR', 'EVALUATOR'] as const).map((r) => (
+        {(['ALL', 'MENTOR', 'EVALUATOR', 'JUDGE'] as const).map((r) => (
           <button
             key={r}
             onClick={() => setRoleFilter(r)}
@@ -165,7 +170,13 @@ export const EventAssignmentCard: React.FC<EventAssignmentCardProps> = ({
                 : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 border border-transparent'
             }`}
           >
-            {r === 'ALL' ? 'All Roles' : r === 'MENTOR' ? 'Mentors' : 'Evaluators / Judges'}
+            {r === 'ALL'
+              ? 'All Roles'
+              : r === 'MENTOR'
+              ? 'Mentors'
+              : r === 'EVALUATOR'
+              ? 'Evaluators'
+              : 'Judges'}
           </button>
         ))}
       </div>
@@ -293,7 +304,7 @@ export const EventAssignmentCard: React.FC<EventAssignmentCardProps> = ({
             <form onSubmit={handleCreateAssignment} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-zinc-300 mb-1">Role Type *</label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => {
@@ -306,7 +317,7 @@ export const EventAssignmentCard: React.FC<EventAssignmentCardProps> = ({
                         : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700'
                     }`}
                   >
-                    Mentor / Guide
+                    Mentor
                   </button>
                   <button
                     type="button"
@@ -320,7 +331,21 @@ export const EventAssignmentCard: React.FC<EventAssignmentCardProps> = ({
                         : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700'
                     }`}
                   >
-                    Evaluator / Judge
+                    Evaluator
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRole('JUDGE');
+                      setSelectedMemberId('');
+                    }}
+                    className={`p-2.5 rounded-xl border text-xs font-semibold transition ${
+                      role === 'JUDGE'
+                        ? 'bg-emerald-500/15 border-emerald-500 text-emerald-300'
+                        : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                    }`}
+                  >
+                    Judge
                   </button>
                 </div>
               </div>

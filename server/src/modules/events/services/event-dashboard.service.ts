@@ -48,6 +48,7 @@ export interface EventDashboardSummary {
     volunteers: number;
     mentors: number;
     evaluators: number;
+    judges: number;
   };
   teams?: {
     totalTeams: number;
@@ -167,6 +168,7 @@ export class EventDashboardService {
     let volunteers = 0;
     let mentors = 0;
     let evaluators = 0;
+    let judges = 0;
 
     for (const m of members) {
       const role = (m.role || '').toUpperCase();
@@ -174,6 +176,7 @@ export class EventDashboardService {
       else if (role === 'VOLUNTEER') volunteers++;
       else if (role === 'MENTOR') mentors++;
       else if (role === 'EVALUATOR') evaluators++;
+      else if (role === 'JUDGE') judges++;
     }
 
     // Team calculations (if competition)
@@ -238,6 +241,7 @@ export class EventDashboardService {
         volunteers,
         mentors,
         evaluators,
+        judges,
       },
       teams: teamSummary,
       storage: {

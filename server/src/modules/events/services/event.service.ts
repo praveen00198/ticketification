@@ -188,7 +188,11 @@ export class EventService {
           status: 'PENDING',
         });
       } catch (verifErr) {
-        console.warn('[EventService] Auto-created verification record notice:', verifErr);
+        console.error('[EventService] Failed to auto-create verification record for organization event:', verifErr);
+        // Recoverable state: preserve event, but reset verification status so it does not report PENDING without a record
+        eventDoc.organizationVerificationStatus = 'REJECTED';
+        eventDoc.verificationStatus = 'UNVERIFIED';
+        await eventDoc.save();
       }
     }
 
