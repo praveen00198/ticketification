@@ -330,7 +330,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <div className="text-[10px] text-stone-500 truncate flex items-center gap-1">
                     <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
                     <span className="truncate">
-                      {getUserDisplayRole(user, currentEvent)}
+                      {isInHostMode ? getUserDisplayRole(user, currentEvent) : (user.role === 'ADMIN' ? 'Admin' : user.role === 'SUPER_ADMIN' ? 'Super Admin' : 'User')}
                       {user.organizationName ? ` • ${user.organizationName}` : ''}
                     </span>
                   </div>

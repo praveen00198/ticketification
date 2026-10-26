@@ -92,7 +92,8 @@ const AppContent: React.FC = () => {
     try {
       const res: any = await apiClient.get('/auth/me');
       if (res && res.success && res.data) {
-        setUser(res.data);
+        const userData = res.data.user || res.data;
+        setUser(userData);
         setToken(currentToken);
         setAuthStatus('AUTHENTICATED');
         setAuthError(null);

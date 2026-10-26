@@ -257,7 +257,13 @@ export const eventsApi = {
     const url = queryString ? `/events?${queryString}` : '/events';
 
     const res: any = await apiClient.get(url);
-    const rawList = Array.isArray(res.data) ? res.data : [];
+    const rawList = Array.isArray(res.data?.data)
+      ? res.data.data
+      : Array.isArray(res.data)
+      ? res.data
+      : Array.isArray((res.data as any)?.events)
+      ? (res.data as any).events
+      : [];
     return rawList.map(normalizeEventItem);
   },
 
@@ -279,28 +285,34 @@ export const eventsApi = {
     const url = queryString ? `/events?${queryString}` : '/events';
 
     const res: any = await apiClient.get(url);
-    const rawList = Array.isArray(res.data) ? res.data : [];
+    const rawList = Array.isArray(res.data?.data)
+      ? res.data.data
+      : Array.isArray(res.data)
+      ? res.data
+      : Array.isArray((res.data as any)?.events)
+      ? (res.data as any).events
+      : [];
     const normalized = rawList.map(normalizeEventItem);
 
     return {
       events: normalized,
-      pagination: res.pagination,
+      pagination: res.data?.pagination || res.pagination,
     };
   },
 
   async getEvent(eventId: string): Promise<EventItem> {
     const res: any = await apiClient.get(`/events/${eventId}`);
-    return normalizeEventItem(res.data);
+    return normalizeEventItem(res.data?.data || res.data);
   },
 
   async createEvent(payload: CreateEventPayload | CreateEventWizardPayload): Promise<EventItem> {
     const res: any = await apiClient.post('/events', payload);
-    return normalizeEventItem(res.data);
+    return normalizeEventItem(res.data?.data || res.data);
   },
 
   async updateEvent(eventId: string, payload: UpdateEventPayload | UpdateEventDraftPayload): Promise<EventItem> {
     const res: any = await apiClient.put(`/events/${eventId}`, payload);
-    return normalizeEventItem(res.data);
+    return normalizeEventItem(res.data?.data || res.data);
   },
 
   async deleteEvent(eventId: string): Promise<void> {
