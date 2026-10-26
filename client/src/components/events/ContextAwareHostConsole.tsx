@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { EventItem, TicketType } from '../../types';
 import { eventsApi, EventDashboardSummary, EventTypeFeatures } from '../../api/events';
+import { formatVenueLabel } from '../../utils/venue';
 import { EventVerificationCard } from './EventVerificationCard';
 import { EventLifecycleBar } from './EventLifecycleBar';
 import { EventStaffCard } from './EventStaffCard';
@@ -168,7 +169,7 @@ export const ContextAwareHostConsole: React.FC<ContextAwareHostConsoleProps> = (
               {event.venue && (
                 <span className="flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5 text-zinc-400" />
-                  <span>{event.venue}</span>
+                  <span>{formatVenueLabel(event.venue)}</span>
                 </span>
               )}
             </div>
@@ -433,7 +434,7 @@ export const ContextAwareHostConsole: React.FC<ContextAwareHostConsoleProps> = (
                       <label className="block text-xs font-bold text-zinc-700 mb-1">Venue</label>
                       <input
                         type="text"
-                        value={formData.venue || ''}
+                        value={typeof formData.venue === 'string' ? formData.venue : (formData.venue ? formatVenueLabel(formData.venue) : '')}
                         onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
                         className="w-full bg-[#FAFAF9] border border-stone-200 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
                       />

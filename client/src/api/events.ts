@@ -1,5 +1,6 @@
 import { apiClient } from './client';
 import { EventItem, TicketType } from '../types';
+import { formatVenueLabel } from '../utils/venue';
 
 export type EventType =
   | 'CONFERENCE'
@@ -164,6 +165,79 @@ export interface CreateTicketTypePayload {
   usagePolicy?: 'SINGLE_USE' | 'REUSABLE' | 'REUSABLE_WORKER';
 }
 
+/**
+ * Normalizes any backend event payload (canonical MongoDB or legacy SQL)
+ * into a strongly-typed EventItem. Guarantees that `venue` is always a display
+ * string to prevent React rendering errors, while preserving raw structured
+ * data in `venueDetails` and `scheduleDetails`.
+ */
+export function normalizeEventItem(item: any): EventItem {
+  if (!item) {
+    throw new Error('Cannot normalize null or undefined event');
+  }
+
+  const rawDate = item.schedule?.startAt || item.date || item.createdAt;
+  let dateFormatted: string;
+  if (rawDate) {
+    try {
+      const d = new Date(rawDate);
+      dateFormatted = isNaN(d.getTime()) ? String(rawDate) : d.toISOString().split('T')[0];
+    } catch {
+      dateFormatted = String(rawDate);
+    }
+  } else {
+    dateFormatted = new Date().toISOString().split('T')[0];
+  }
+
+  let timeFormatted: string | null = null;
+  if (item.time) {
+    timeFormatted = item.time;
+  } else if (item.schedule?.startAt) {
+    try {
+      const d = new Date(item.schedule.startAt);
+      if (!isNaN(d.getTime())) {
+        timeFormatted = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      }
+    } catch {
+      timeFormatted = null;
+    }
+  }
+
+  // Ensure venue is always a human-readable display string
+  const venueDisplay = formatVenueLabel(item.venue);
+
+  return {
+    id: item._id || item.id,
+    name: item.name || 'Untitled Event',
+    date: dateFormatted,
+    time: timeFormatted,
+    venue: venueDisplay,
+    description: item.description ?? null,
+    organizerName: item.organizerName ?? (item.organization?.name ?? null),
+    logoUrl: item.logoUrl ?? null,
+    ticketTemplateUrl: item.ticketTemplateUrl ?? null,
+    status: item.status || 'DRAFT',
+    eventType: item.eventType,
+    credentialTerminology: item.credentialTerminology || item.credentialType,
+    attendanceMode: item.attendanceMode,
+    hostingType: item.hostingType,
+    organization: item.organization,
+    organizationVerificationStatus: item.organizationVerificationStatus,
+    verificationLevel: item.verificationLevel,
+    verificationStatus: item.verificationStatus,
+    displayStatus: item.displayStatus,
+    bannerUrl: item.bannerUrl ?? null,
+    venueDetails: item.venueDetails || (typeof item.venue === 'object' ? item.venue : null),
+    scheduleDetails: item.scheduleDetails || item.schedule || null,
+    createdBy: item.ownerId || item.ownerSupabaseId || item.createdBy || '',
+    createdAt: item.createdAt || new Date().toISOString(),
+    updatedAt: item.updatedAt || new Date().toISOString(),
+    ticketTypes: item.ticketTypes,
+    userRole: item.userRole,
+    userPermissions: item.userPermissions,
+  };
+}
+
 export const eventsApi = {
   async getEvents(params?: {
     page?: number;
@@ -184,28 +258,7 @@ export const eventsApi = {
 
     const res: any = await apiClient.get(url);
     const rawList = Array.isArray(res.data) ? res.data : [];
-    return rawList.map((item: any) => ({
-      id: item._id || item.id,
-      name: item.name,
-      date: item.schedule?.startAt || item.date || item.createdAt || new Date().toISOString(),
-      time: item.schedule?.startAt
-        ? new Date(item.schedule.startAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        : (item.time || '09:00'),
-      venue: item.venue?.name || item.venue || (item.venue?.type === 'ONLINE' ? 'Online Virtual Event' : 'TBD'),
-      description: item.description || null,
-      organizerName: item.organizerName || null,
-      status: item.status || 'DRAFT',
-      eventType: item.eventType,
-      credentialTerminology: item.credentialTerminology || item.credentialType,
-      attendanceMode: item.attendanceMode,
-      bannerUrl: item.bannerUrl,
-      venueDetails: item.venue,
-      scheduleDetails: item.schedule,
-      createdBy: item.ownerId || item.createdBy || '',
-      createdAt: item.createdAt || new Date().toISOString(),
-      updatedAt: item.updatedAt || new Date().toISOString(),
-      ticketTypes: item.ticketTypes,
-    }));
+    return rawList.map(normalizeEventItem);
   },
 
   async getEventsPaginated(params?: {
@@ -227,33 +280,7 @@ export const eventsApi = {
 
     const res: any = await apiClient.get(url);
     const rawList = Array.isArray(res.data) ? res.data : [];
-    const normalized = rawList.map((item: any) => ({
-      id: item._id || item.id,
-      name: item.name,
-      date: item.schedule?.startAt || item.date || item.createdAt || new Date().toISOString(),
-      time: item.schedule?.startAt
-        ? new Date(item.schedule.startAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        : (item.time || '09:00'),
-      venue: typeof item.venue === 'string'
-        ? (item.venue.trim() || 'TBD')
-        : (item.venue?.name ||
-           ([item.venue?.address, item.venue?.city].filter(Boolean).join(', ') || null) ||
-           (item.venue?.type === 'ONLINE' ? 'Online Virtual Event' : item.venue?.type === 'HYBRID' ? 'Hybrid Event' : item.venue?.type === 'PHYSICAL' ? 'Physical Venue' : 'TBD')),
-
-      description: item.description || null,
-      organizerName: item.organizerName || null,
-      status: item.status || 'DRAFT',
-      eventType: item.eventType,
-      credentialTerminology: item.credentialTerminology || item.credentialType,
-      attendanceMode: item.attendanceMode,
-      bannerUrl: item.bannerUrl,
-      venueDetails: item.venue,
-      scheduleDetails: item.schedule,
-      createdBy: item.ownerId || item.createdBy || '',
-      createdAt: item.createdAt || new Date().toISOString(),
-      updatedAt: item.updatedAt || new Date().toISOString(),
-      ticketTypes: item.ticketTypes,
-    }));
+    const normalized = rawList.map(normalizeEventItem);
 
     return {
       events: normalized,
@@ -261,19 +288,19 @@ export const eventsApi = {
     };
   },
 
-  async getEvent(eventId: string): Promise<any> {
+  async getEvent(eventId: string): Promise<EventItem> {
     const res: any = await apiClient.get(`/events/${eventId}`);
-    return res.data;
+    return normalizeEventItem(res.data);
   },
 
-  async createEvent(payload: CreateEventPayload | CreateEventWizardPayload): Promise<any> {
+  async createEvent(payload: CreateEventPayload | CreateEventWizardPayload): Promise<EventItem> {
     const res: any = await apiClient.post('/events', payload);
-    return res.data;
+    return normalizeEventItem(res.data);
   },
 
-  async updateEvent(eventId: string, payload: UpdateEventPayload | UpdateEventDraftPayload): Promise<any> {
+  async updateEvent(eventId: string, payload: UpdateEventPayload | UpdateEventDraftPayload): Promise<EventItem> {
     const res: any = await apiClient.put(`/events/${eventId}`, payload);
-    return res.data;
+    return normalizeEventItem(res.data);
   },
 
   async deleteEvent(eventId: string): Promise<void> {

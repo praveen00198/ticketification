@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { EventCreationWizard } from '../components/events/EventCreationWizard';
 import { useEvent } from '../context/EventContext';
-import { EventType } from '../api/events';
+import { EventType, normalizeEventItem } from '../api/events';
 
 export const CreateEventPage: React.FC = () => {
   const navigate = useNavigate();
@@ -15,26 +15,15 @@ export const CreateEventPage: React.FC = () => {
     try {
       await refreshEvents();
       if (createdEvent) {
-        setCurrentEvent({
-          id: createdEvent._id || createdEvent.id,
-          name: createdEvent.name,
-          date: createdEvent.schedule?.startAt || createdEvent.date || new Date().toISOString(),
-          venue: createdEvent.venue?.name || createdEvent.venue || 'TBD',
-          time: createdEvent.schedule?.startAt
-            ? new Date(createdEvent.schedule.startAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            : '09:00',
-          status: createdEvent.status || 'DRAFT',
-          createdBy: createdEvent.ownerId || createdEvent.createdBy || '',
-          createdAt: createdEvent.createdAt || new Date().toISOString(),
-          updatedAt: createdEvent.updatedAt || new Date().toISOString(),
-          eventType: createdEvent.eventType,
-          credentialTerminology: createdEvent.credentialTerminology,
-        });
+        const normalized = normalizeEventItem(createdEvent);
+        setCurrentEvent(normalized);
+        navigate(`/events/${normalized.id}`);
+        return;
       }
     } catch {
       // Ignore background refresh errors
     }
-    navigate('/dashboard');
+    navigate('/events');
   };
 
   const handleCancel = () => {

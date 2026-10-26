@@ -51,6 +51,8 @@ export interface EventItem {
   createdAt: string;
   updatedAt: string;
   ticketTypes?: TicketType[];
+  userRole?: string;
+  userPermissions?: string[];
 }
 
 export type DeliveryProvider = 'WHATSAPP' | 'EMAIL';

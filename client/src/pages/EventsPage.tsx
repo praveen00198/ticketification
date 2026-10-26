@@ -174,7 +174,10 @@ export const EventsPage: React.FC = () => {
             return (
               <div
                 key={event.id}
-                onClick={() => setCurrentEvent(event)}
+                onClick={() => {
+                  setCurrentEvent(event);
+                  navigate(`/events/${event.id}`);
+                }}
                 className={`group relative bg-white border rounded-2xl p-5 transition-all cursor-pointer flex flex-col justify-between shadow-xs ${
                   isSelected
                     ? 'border-stone-900 ring-2 ring-stone-900/10 shadow-md bg-stone-50/60'
@@ -297,9 +300,10 @@ export const EventsPage: React.FC = () => {
                     <Button
                       variant={isSelected ? 'secondary' : 'primary'}
                       size="sm"
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setCurrentEvent(event);
-                        navigate('/dashboard');
+                        navigate(`/events/${event.id}`);
                       }}
                       iconRight={<ArrowRight className="w-3.5 h-3.5" />}
                     >

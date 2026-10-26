@@ -154,18 +154,7 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
 
           {/* Action Button & Admin Info */}
           <div className="flex items-center gap-3">
-            {user && !user.isOnboarded && (
-              <button
-                onClick={() => navigate('/onboarding')}
-                className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-stone-700 bg-stone-100 border border-stone-200/90 rounded-lg hover:bg-stone-200 hover:text-stone-900 transition-colors"
-                title="Initialize Organizer Workspace"
-              >
-                <Building2 className="w-3.5 h-3.5 text-stone-600" />
-                <span>Set up Organizer</span>
-              </button>
-            )}
-
-            {user && user.isOnboarded && (
+            {user && (
               <button
                 onClick={() => navigate('/events/create')}
                 className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-stone-700 bg-stone-100 border border-stone-200/90 rounded-lg hover:bg-stone-200 hover:text-stone-900 transition-colors"
