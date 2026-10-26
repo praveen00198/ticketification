@@ -19,7 +19,7 @@ import {
   Award,
 } from 'lucide-react';
 import { useEvent } from '../../context/EventContext';
-import { isHostOrOrganizer, isHostWorkspaceMode } from '../../utils/permissions';
+import { isHostOrOrganizer, isHostWorkspaceMode, isCreateEventButtonVisible } from '../../utils/permissions';
 
 interface LayoutProps {
   user: {
@@ -59,7 +59,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
       return [
         { label: 'Dashboard', path: '/dashboard' },
         { label: 'Events', path: '/events' },
-        { label: 'New Event Wizard', path: '/events/create', icon: Sparkles },
+        { label: 'Create Event', path: '/events/create', icon: Sparkles },
       ];
     }
     if (path.startsWith('/events/') && path.includes('/staff-console')) {
@@ -285,14 +285,14 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
 
           {/* Right Header Actions (Minimal & Clean) */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            {/* Quick Action: New Event (Available on Global Dashboard; in Host Workspace it is exclusively inside the Event Switcher) */}
-            {!isHostWorkspaceMode(location.pathname, currentEvent) && (
+            {/* Quick Action: Create Event (Available on Global User Dashboard; hidden on /events/create and inside Host Workspace) */}
+            {isCreateEventButtonVisible(location.pathname, currentEvent) && (
               <button
                 onClick={() => navigate('/events/create')}
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-stone-900 hover:bg-black rounded-full shadow-2xs transition-all active:scale-95 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>New Event</span>
+                <span>Create Event</span>
               </button>
             )}
 

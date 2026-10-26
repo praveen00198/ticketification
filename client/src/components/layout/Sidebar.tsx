@@ -4,7 +4,6 @@ import {
   Ticket,
   Calendar,
   ChevronDown,
-  Plus,
   KeyRound,
   LogOut,
   ChevronLeft,
@@ -18,6 +17,7 @@ import {
   getNavigationCategories,
   getUserDisplayRole,
   isHostWorkspaceMode,
+  isEventSwitcherVisible,
   NavCategory,
 } from "../../utils/permissions";
 
@@ -56,6 +56,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   const isInHostMode = isHostWorkspaceMode(location.pathname, currentEvent);
+
+  // Event Switcher is exclusively for switching between existing events.
+  // In Global User Dashboard (!isInHostMode), it is hidden if the user has created 0 events.
+  // Once the user has at least one event they are authorized to access, it is displayed.
+  // In Host Mode (isInHostMode), it is displayed to allow switching between managed events and exiting.
+  const shouldShowEventSwitcher = isEventSwitcherVisible({
+    isCollapsed,
+    isMobile,
+    isInHostMode,
+    eventsCount: events.length,
+  });
 
   // Category-wise dynamic navigation configuration filtered by user platform role and host capability
   const categories: NavCategory[] = getNavigationCategories({
@@ -131,8 +142,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
 
-        {/* ── Active Event Switcher (Seamless, No Box, No Separation Line) ── */}
-        {(!isCollapsed || isMobile) && (
+        {/* ── Active Event Switcher (Exclusively for switching between existing events; hidden in Global User Dashboard when 0 events) ── */}
+        {shouldShowEventSwitcher && (
           <div className="py-1.5 shrink-0 px-3">
             <div>
               <button
@@ -199,19 +210,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         );
                       })
                     )}
-                  </div>
-                  <div className="border-t border-stone-100 p-1">
-                    <button
-                      onClick={() => {
-                        setEventMenuOpen(false);
-                        handleLinkClick();
-                        navigate("/events/create");
-                      }}
-                      className="w-full text-left px-2 py-1.5 rounded-lg text-xs font-bold text-stone-900 hover:bg-stone-100 flex items-center gap-1.5 transition-colors cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Create New Event</span>
-                    </button>
                   </div>
                 </div>
               )}

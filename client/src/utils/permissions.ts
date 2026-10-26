@@ -164,6 +164,41 @@ export function isHostWorkspaceMode(
 }
 
 /**
+ * Evaluates whether the Event Switcher should be displayed in the sidebar.
+ * Exact Product Rules:
+ * - Hidden in Global User Dashboard (!isInHostMode) when the user has created 0 events.
+ * - Visible in Global User Dashboard once the user has >= 1 created/managed event.
+ * - Visible in Host Workspace (isInHostMode) to allow switching between managed events and exiting.
+ * - Omitted when sidebar is collapsed on desktop unless in mobile drawer.
+ */
+export function isEventSwitcherVisible({
+  isCollapsed = false,
+  isMobile = false,
+  isInHostMode = false,
+  eventsCount = 0,
+}: {
+  isCollapsed?: boolean;
+  isMobile?: boolean;
+  isInHostMode?: boolean;
+  eventsCount?: number;
+}): boolean {
+  if (isCollapsed && !isMobile) return false;
+  return isInHostMode || eventsCount > 0;
+}
+
+/**
+ * Determines whether the "Create Event" quick action button should be displayed in the topbar.
+ * Available in Global User Dashboard, but hidden when already on /events/create or in Host Workspace.
+ */
+export function isCreateEventButtonVisible(
+  pathname: string,
+  currentEvent?: { id?: string } | null
+): boolean {
+  if (pathname === '/events/create') return false;
+  return !isHostWorkspaceMode(pathname, currentEvent);
+}
+
+/**
  * Global User Navigation (Discovery, Wallet, History, Hosting, Settings)
  * Dedicated user-level modules, strictly separate from event operations.
  */
@@ -242,7 +277,7 @@ export function getGlobalUserNavigationCategories(_user?: UserIdentity | null): 
 /**
  * Event-Specific Host Workspace Navigation
  * Dynamic categories derived from selected event capabilities.
- * "Create New Event" is NEVER shown here — it lives strictly in the Event Switcher.
+ * "Create Event" is NEVER shown here — it lives strictly in Global User navigation.
  */
 export function getHostWorkspaceNavigationCategories({
   user: _user,
@@ -298,8 +333,33 @@ export function getHostWorkspaceNavigationCategories({
 }
 
 /**
+ * Event-Specific Attendee Workspace Navigation
+ * Dynamic categories for an attendee who has successfully registered for a specific event.
+ * Attendee Workspace access is event-specific and strictly separated from Global User navigation.
+ */
+export function getAttendeeWorkspaceNavigationCategories({
+  user: _user,
+  currentEvent,
+}: {
+  user?: UserIdentity | null;
+  currentEvent: { id: string; name: string; eventType?: string };
+}): NavCategory[] {
+  const eventId = currentEvent.id;
+  return [
+    {
+      title: 'Attendee Workspace',
+      items: [
+        { label: 'My Event Pass', path: `/wallet`, icon: Ticket },
+        { label: 'Event Guide', path: `/events/${eventId}/public`, icon: Compass },
+        { label: 'My Registrations', path: `/registrations`, icon: CheckCircle2 },
+      ],
+    },
+  ];
+}
+
+/**
  * Build centralized, context-aware navigation structure.
- * Automatically resolves between Global User Dashboard and Event-Specific Host Workspace.
+ * Automatically resolves between Global User Dashboard, Host Workspace, and Attendee Workspace.
  */
 export function getNavigationCategories({
   user,
@@ -307,13 +367,19 @@ export function getNavigationCategories({
   pathname,
 }: {
   user: UserIdentity | null;
-  currentEvent?: { id: string; name: string; eventType?: string; createdBy?: string; ownerId?: string; ownerSupabaseId?: string } | null;
+  currentEvent?: { id: string; name: string; eventType?: string; createdBy?: string; ownerId?: string; ownerSupabaseId?: string; userRole?: string; role?: string } | null;
   pathname?: string;
 }): NavCategory[] {
   const isHostMode = pathname ? isHostWorkspaceMode(pathname, currentEvent) : Boolean(currentEvent);
 
   if (isHostMode && currentEvent && canManageEventOperations(user, currentEvent)) {
     return getHostWorkspaceNavigationCategories({ user, currentEvent });
+  }
+
+  // Event-specific attendee workspace: active when user has registered ATTENDEE role in event scope
+  const isAttendeeRole = (currentEvent as any)?.userRole === 'ATTENDEE' || (currentEvent as any)?.role === 'ATTENDEE';
+  if (pathname && pathname.startsWith('/events/') && currentEvent && isAttendeeRole && !canManageEventOperations(user, currentEvent)) {
+    return getAttendeeWorkspaceNavigationCategories({ user, currentEvent });
   }
 
   return getGlobalUserNavigationCategories(user);
