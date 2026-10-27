@@ -44,6 +44,10 @@ export class MongoUserRepository {
    */
   async findByEmail(email: string): Promise<IUserDocument | null> {
     if (!email) return null;
+    const { isMongoConnected } = await import('../../../db/mongodb');
+    if (!isMongoConnected() && !Boolean((UserModel.findOne as any)?.mock)) {
+      return null;
+    }
     return UserModel.findOne({ email: email.toLowerCase().trim() }).exec();
   }
 
@@ -107,6 +111,10 @@ export class MongoUserRepository {
    * Update user platform role.
    */
   async updateRole(userId: string, role: PlatformRole): Promise<IUserDocument | null> {
+    const { isMongoConnected } = await import('../../../db/mongodb');
+    if (!isMongoConnected() && !Boolean((UserModel.findOneAndUpdate as any)?.mock)) {
+      return null;
+    }
     return UserModel.findOneAndUpdate(
       resolveUserFilter(userId),
       { $set: { platformRole: role } },

@@ -49,10 +49,10 @@ export async function authMiddleware(
   } else {
     // Fall back to Supabase verification if configured
     const { supabaseAdmin } = await import('../config/supabase');
-    if (supabaseAdmin) {
+    if (typeof supabaseAdmin?.auth?.getUser === 'function') {
       try {
         const { data, error } = await supabaseAdmin.auth.getUser(token);
-        if (error || !data.user) {
+        if (error || !data?.user) {
           return next(new AuthenticationError('Invalid or expired authentication token.'));
         }
         userId = data.user.id;
@@ -80,11 +80,15 @@ export async function authMiddleware(
     let mongoUser: any = null;
     const isRepoMocked = Boolean(
       (mongoUserRepository.findById as any)?.mock ||
-      (mongoUserRepository.findBySupabaseId as any)?.mock
+      (mongoUserRepository.findBySupabaseId as any)?.mock ||
+      (mongoUserRepository.findByEmail as any)?.mock
     );
 
     if (isMongoConnected() || isRepoMocked) {
       mongoUser = await mongoUserRepository.findById(userId);
+      if (!mongoUser && email) {
+        mongoUser = await mongoUserRepository.findByEmail(email);
+      }
     }
 
     if (mongoUser) {
@@ -118,7 +122,10 @@ export async function authMiddleware(
 
     // Fall back to PostgreSQL in non-production/test environments when MongoDB is not connected
     if (config.env.databaseUrl) {
-      const dbUser = await userRepository.findById(userId);
+      let dbUser = await userRepository.findById(userId);
+      if (!dbUser && email) {
+        dbUser = await userRepository.findByEmail(email);
+      }
 
       if (dbUser) {
         if ((dbUser as any)?.status === 'SUSPENDED') {

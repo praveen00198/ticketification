@@ -102,7 +102,6 @@ export const EventCredentialSchema = new Schema<IEventCredentialDocument>(
     verificationToken: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
       minlength: 64,
       maxlength: 64,

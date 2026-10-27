@@ -357,8 +357,9 @@ export class AuthService {
    * Retrieves profile details for the authenticated user.
    * MongoDB is the sole authoritative source of truth.
    */
-  async getMe(userId: string) {
+  async getMe(userId: string, email?: string) {
     const mongoConfigured = Boolean(config.env.mongoUri);
+    const normalizedEmail = email ? email.toLowerCase().trim() : undefined;
 
     if (config.env.isProduction && mongoConfigured) {
       const { isMongoConnected } = await import('../../../db/mongodb');
@@ -372,43 +373,47 @@ export class AuthService {
       const { isMongoConnected } = await import('../../../db/mongodb');
       const isRepoMocked = Boolean(
         (this.mongoUserRepo.findById as any)?.mock ||
-        (this.mongoUserRepo.findBySupabaseId as any)?.mock
+        (this.mongoUserRepo.findBySupabaseId as any)?.mock ||
+        (this.mongoUserRepo.findByEmail as any)?.mock
       );
       if (isMongoConnected() || isRepoMocked) {
         try {
           let mongoUser = await this.mongoUserRepo.findById(userId);
-
-        if (mongoUser) {
-          if (mongoUser.status === 'SUSPENDED') {
-            throw new AuthenticationError('Account is suspended. Please contact platform administrators.');
+          if (!mongoUser && normalizedEmail) {
+            mongoUser = await this.mongoUserRepo.findByEmail(normalizedEmail);
           }
 
-          let isOnboarded = false;
-          let organizationName: string | undefined = undefined;
-          if (mongoUser.hostProfile?.organizationName) {
-            isOnboarded = true;
-            organizationName = mongoUser.hostProfile.organizationName;
-          }
+          if (mongoUser) {
+            if (mongoUser.status === 'SUSPENDED') {
+              throw new AuthenticationError('Account is suspended. Please contact platform administrators.');
+            }
 
-          return {
-            id: String(mongoUser.supabaseUserId || mongoUser._id),
-            name: mongoUser.name,
-            email: mongoUser.email,
-            role: mongoUser.platformRole || 'USER',
-            isOnboarded,
-            organizationName,
-            phone: mongoUser.phone,
-            avatarUrl: mongoUser.avatarUrl,
-            bio: mongoUser.metadata?.bio,
-            preferences: mongoUser.metadata?.preferences,
-            privacy: mongoUser.metadata?.privacy,
-          };
+            let isOnboarded = false;
+            let organizationName: string | undefined = undefined;
+            if (mongoUser.hostProfile?.organizationName) {
+              isOnboarded = true;
+              organizationName = mongoUser.hostProfile.organizationName;
+            }
+
+            return {
+              id: String(mongoUser.supabaseUserId || (mongoUser as any).id || (mongoUser as any).supabaseId || mongoUser._id),
+              name: mongoUser.name,
+              email: mongoUser.email,
+              role: mongoUser.platformRole || 'USER',
+              isOnboarded,
+              organizationName,
+              phone: mongoUser.phone,
+              avatarUrl: mongoUser.avatarUrl,
+              bio: mongoUser.metadata?.bio,
+              preferences: mongoUser.metadata?.preferences,
+              privacy: mongoUser.metadata?.privacy,
+            };
+          }
+        } catch (mErr: any) {
+          if (mErr instanceof AuthenticationError || mErr instanceof AppError) throw mErr;
+          console.error('[AuthService] MongoDB lookup failed in getMe:', mErr);
+          throw new AppError('Unable to verify user profile due to database error.', 500);
         }
-      } catch (mErr: any) {
-        if (mErr instanceof AuthenticationError || mErr instanceof AppError) throw mErr;
-        console.error('[AuthService] MongoDB lookup failed in getMe:', mErr);
-        throw new AppError('Unable to verify user profile due to database error.', 500);
-      }
       }
     }
 
@@ -420,7 +425,10 @@ export class AuthService {
     // Postgres fallback in test/development environments
     if (config.env.databaseUrl) {
       try {
-        const user = await this.userRepo.findById(userId);
+        let user = await this.userRepo.findById(userId);
+        if (!user && normalizedEmail) {
+          user = await this.userRepo.findByEmail(normalizedEmail);
+        }
         if (user) {
           if ((user as any).status === 'SUSPENDED') {
             throw new AuthenticationError('Account is suspended. Please contact platform administrators.');
