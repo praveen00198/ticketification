@@ -148,6 +148,12 @@ export class TicketService {
       pendingGuests: pendingGuests.length,
     });
 
+    if (pendingGuests.length > 50) {
+      throw new ValidationError(
+        `Synchronous ticket generation is limited to 50 guests (found ${pendingGuests.length} pending). Please dispatch an asynchronous bulk render job via POST /api/events/:eventId/jobs/bulk-render.`
+      );
+    }
+
     if (!this.storageServ.isConfigured()) {
       throw new StorageError(
         'Supabase Storage is not configured. Please ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are configured in the environment.'
@@ -344,8 +350,10 @@ export class TicketService {
     ticketTypeName = 'WORKER',
     templateId: string = DEFAULT_TEMPLATE_ID
   ) {
-    if (count <= 0 || count > 500) {
-      throw new ValidationError('Quantity must be between 1 and 500.');
+    if (count <= 0 || count > 50) {
+      throw new ValidationError(
+        'Synchronous worker pass generation is limited to 50 passes to prevent server resource exhaustion. Please queue an asynchronous background job via POST /api/events/:eventId/jobs/bulk-render.'
+      );
     }
 
     const event = await this.eventRepo.findByIdAndOwner(eventId, userId);

@@ -22,15 +22,16 @@ import { mongoUserRepository } from '../src/modules/auth/repositories/mongo-user
 import { mongoEventRepository } from '../src/modules/events/repositories/mongo-event.repository';
 import { mongoEventMemberRepository } from '../src/modules/events/repositories/mongo-event-member.repository';
 import { mongoEventCredentialRepository } from '../src/modules/events/repositories/mongo-event-credential.repository';
+import { createJwtToken } from '../src/utils/local-auth';
 
 describe('Phase 12: Credential Architecture & Abstraction Engine', () => {
   const hostUser = { id: 'mock-host-uuid-phase12', email: 'host.phase12@conference.org' };
   const coordinatorUser = { id: 'mock-coord-uuid-phase12', email: 'coord.phase12@conference.org' };
   const outsiderUser = { id: 'mock-out-uuid-phase12', email: 'outsider.phase12@random.org' };
 
-  const hostToken = 'valid-host-token-phase12';
-  const coordinatorToken = 'valid-coord-token-phase12';
-  const outsiderToken = 'valid-out-token-phase12';
+  const hostToken = createJwtToken({ id: hostUser.id, email: hostUser.email, role: 'USER' });
+  const coordinatorToken = createJwtToken({ id: coordinatorUser.id, email: coordinatorUser.email, role: 'USER' });
+  const outsiderToken = createJwtToken({ id: outsiderUser.id, email: outsiderUser.email, role: 'USER' });
 
   const hostMongoId = new mongoose.Types.ObjectId();
   const coordinatorMongoId = new mongoose.Types.ObjectId();
@@ -96,6 +97,13 @@ describe('Phase 12: Credential Architecture & Abstraction Engine', () => {
       if (supaId === hostUser.id) return { _id: hostMongoId, supabaseId: supaId, email: hostUser.email, platformRole: 'USER' };
       if (supaId === coordinatorUser.id) return { _id: coordinatorMongoId, supabaseId: supaId, email: coordinatorUser.email, platformRole: 'USER' };
       if (supaId === outsiderUser.id) return { _id: outsiderMongoId, supabaseId: supaId, email: outsiderUser.email, platformRole: 'USER' };
+      return null;
+    });
+
+    jest.spyOn(mongoUserRepository, 'findById').mockImplementation(async (id: string): Promise<any> => {
+      if (id === hostUser.id || id === hostMongoId.toString()) return { _id: hostMongoId, id: hostUser.id, supabaseId: hostUser.id, email: hostUser.email, platformRole: 'USER', status: 'ACTIVE' };
+      if (id === coordinatorUser.id || id === coordinatorMongoId.toString()) return { _id: coordinatorMongoId, id: coordinatorUser.id, supabaseId: coordinatorUser.id, email: coordinatorUser.email, platformRole: 'USER', status: 'ACTIVE' };
+      if (id === outsiderUser.id || id === outsiderMongoId.toString()) return { _id: outsiderMongoId, id: outsiderUser.id, supabaseId: outsiderUser.id, email: outsiderUser.email, platformRole: 'USER', status: 'ACTIVE' };
       return null;
     });
 

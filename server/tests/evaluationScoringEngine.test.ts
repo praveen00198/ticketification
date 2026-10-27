@@ -24,6 +24,8 @@ import { mongoEventMemberRepository } from '../src/modules/events/repositories/m
 import { mongoEventTeamRepository } from '../src/modules/events/repositories/mongo-event-team.repository';
 import { mongoEventRubricRepository } from '../src/modules/events/repositories/mongo-event-rubric.repository';
 import { mongoEventEvaluationRepository } from '../src/modules/events/repositories/mongo-event-evaluation.repository';
+import { createJwtToken } from '../src/utils/local-auth';
+import { setMongoConnectedForTesting } from '../src/db/mongodb';
 
 describe('Phase 11: Evaluation & Scoring Engine Architecture', () => {
   const hostUser = { id: 'mock-host-uuid-phase11', email: 'host.phase11@hackathon.org' };
@@ -31,10 +33,10 @@ describe('Phase 11: Evaluation & Scoring Engine Architecture', () => {
   const judge2User = { id: 'mock-judge2-uuid-phase11', email: 'judge2.phase11@judges.org' };
   const hackerUser = { id: 'mock-hacker-uuid-phase11', email: 'hacker.phase11@teamalpha.io' };
 
-  const hostToken = 'valid-host-token-phase11';
-  const judge1Token = 'valid-judge1-token-phase11';
-  const judge2Token = 'valid-judge2-token-phase11';
-  const hackerToken = 'valid-hacker-token-phase11';
+  const hostToken = createJwtToken({ id: hostUser.id, email: hostUser.email, role: 'USER' });
+  const judge1Token = createJwtToken({ id: judge1User.id, email: judge1User.email, role: 'USER' });
+  const judge2Token = createJwtToken({ id: judge2User.id, email: judge2User.email, role: 'USER' });
+  const hackerToken = createJwtToken({ id: hackerUser.id, email: hackerUser.email, role: 'USER' });
 
   const hostMongoId = new mongoose.Types.ObjectId();
   const judge1MongoId = new mongoose.Types.ObjectId();
@@ -55,6 +57,7 @@ describe('Phase 11: Evaluation & Scoring Engine Architecture', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    setMongoConnectedForTesting(true);
 
     mockEvents = new Map();
     mockMembers = new Map();
@@ -130,6 +133,14 @@ describe('Phase 11: Evaluation & Scoring Engine Architecture', () => {
       if (id === judge1User.id) return { id: judge1User.id, name: 'Judge 1', email: judge1User.email, role: 'USER' };
       if (id === judge2User.id) return { id: judge2User.id, name: 'Judge 2', email: judge2User.email, role: 'USER' };
       if (id === hackerUser.id) return { id: hackerUser.id, name: 'Hacker', email: hackerUser.email, role: 'USER' };
+      return null;
+    });
+
+    jest.spyOn(mongoUserRepository, 'findById').mockImplementation(async (id: string): Promise<any> => {
+      if (id === hostUser.id) return { _id: hostMongoId, supabaseUserId: hostUser.id, email: hostUser.email, name: 'Host', platformRole: 'USER', status: 'ACTIVE' };
+      if (id === judge1User.id) return { _id: judge1MongoId, supabaseUserId: judge1User.id, email: judge1User.email, name: 'Judge 1', platformRole: 'USER', status: 'ACTIVE' };
+      if (id === judge2User.id) return { _id: judge2MongoId, supabaseUserId: judge2User.id, email: judge2User.email, name: 'Judge 2', platformRole: 'USER', status: 'ACTIVE' };
+      if (id === hackerUser.id) return { _id: hackerMongoId, supabaseUserId: hackerUser.id, email: hackerUser.email, name: 'Hacker', platformRole: 'USER', status: 'ACTIVE' };
       return null;
     });
 

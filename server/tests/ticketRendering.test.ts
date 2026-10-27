@@ -6,7 +6,7 @@ import {
 } from '../src/modules/tickets/services/ticket-image.service';
 import { qrService } from '../src/modules/tickets/services/qr.service';
 import { TicketService } from '../src/modules/tickets/services/ticket.service';
-import { NotFoundError } from '../src/middlewares/error.middleware';
+import { NotFoundError, ValidationError } from '../src/middlewares/error.middleware';
 
 describe('Phase 4: Ticket Generation & PNG Rendering Pipeline', () => {
   jest.setTimeout(15000);
@@ -292,6 +292,38 @@ describe('Phase 4: Ticket Generation & PNG Rendering Pipeline', () => {
       await expect(
         service.generateUnassignedWorkerTickets('evt_1', 'unauthorized_user', 5)
       ).rejects.toThrow(NotFoundError);
+    });
+
+    it('should reject synchronous worker ticket generation for count > 50 with ValidationError', async () => {
+      const service = new TicketService({} as any, {} as any, {} as any, {} as any, {} as any, {} as any, {} as any);
+      await expect(
+        service.generateUnassignedWorkerTickets('evt_1', 'user_1', 51)
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should reject synchronous guest ticket generation when pending guests > 50 with ValidationError', async () => {
+      const mockEventRepo: any = {
+        findByIdAndOwner: jest.fn().mockResolvedValue({ id: 'evt_1', name: 'Big Event', createdBy: 'user_1' }),
+      };
+      const guests = Array.from({ length: 55 }, (_, i) => ({ id: `g_${i}`, name: `Guest ${i}` }));
+      const mockGuestRepo: any = {
+        findByEventId: jest.fn().mockResolvedValue(guests),
+      };
+      const mockTicketRepo: any = {
+        findByEventId: jest.fn().mockResolvedValue([]),
+      };
+
+      const service = new TicketService(
+        mockTicketRepo,
+        mockGuestRepo,
+        mockEventRepo,
+        {} as any,
+        qrService,
+        ticketImageService,
+        {} as any
+      );
+
+      await expect(service.generateTicketsForEvent('evt_1', 'user_1')).rejects.toThrow(ValidationError);
     });
   });
 

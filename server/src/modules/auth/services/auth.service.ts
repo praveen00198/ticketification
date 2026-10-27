@@ -28,6 +28,14 @@ export class AuthService {
   ) {}
 
   /**
+   * Evaluates whether an email belongs to a pre-approved platform admin.
+   * By default, self-registration never grants admin privileges.
+   */
+  isApprovedAdmin(_email?: string): boolean {
+    return false;
+  }
+
+  /**
    * Registers a new user with custom backend authentication.
    * MongoDB is the sole authoritative user store.
    * Always assigns least-privilege default role 'USER'.

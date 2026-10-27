@@ -29,6 +29,9 @@ import {
 import { eventCredentialRenderingService } from '../src/modules/events/services/event-credential-rendering.service';
 import { supabaseStorageService } from '../src/modules/tickets/services/supabase-storage.service';
 
+import { createJwtToken } from '../src/utils/local-auth';
+import { setMongoConnectedForTesting } from '../src/db/mongodb';
+
 describe('Phase 13: Credential Templates & Sharp Rendering Engine', () => {
   jest.setTimeout(30000);
 
@@ -36,9 +39,21 @@ describe('Phase 13: Credential Templates & Sharp Rendering Engine', () => {
   const coordinatorUser = { id: 'mock-coord-uuid-phase13', email: 'coord.phase13@conference.org' };
   const outsiderUser = { id: 'mock-out-uuid-phase13', email: 'outsider.phase13@random.org' };
 
-  const hostToken = 'valid-host-token-phase13';
-  const coordinatorToken = 'valid-coord-token-phase13';
-  const outsiderToken = 'valid-out-token-phase13';
+  const hostToken = createJwtToken({
+    id: hostUser.id,
+    email: hostUser.email,
+    role: 'USER',
+  });
+  const coordinatorToken = createJwtToken({
+    id: coordinatorUser.id,
+    email: coordinatorUser.email,
+    role: 'USER',
+  });
+  const outsiderToken = createJwtToken({
+    id: outsiderUser.id,
+    email: outsiderUser.email,
+    role: 'USER',
+  });
 
   const hostMongoId = new mongoose.Types.ObjectId();
   const coordinatorMongoId = new mongoose.Types.ObjectId();
@@ -54,6 +69,7 @@ describe('Phase 13: Credential Templates & Sharp Rendering Engine', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    setMongoConnectedForTesting(true);
 
     mockEvents = new Map();
     mockMembers = new Map();
@@ -123,6 +139,19 @@ describe('Phase 13: Credential Templates & Sharp Rendering Engine', () => {
     });
 
     // Mock Mongo User Repository
+    jest.spyOn(mongoUserRepository, 'findById').mockImplementation(async (id: string) => {
+      if (id === hostUser.id) {
+        return { _id: hostMongoId, supabaseUserId: hostUser.id, email: hostUser.email, name: 'Host User', platformRole: 'USER', status: 'ACTIVE' } as any;
+      }
+      if (id === coordinatorUser.id) {
+        return { _id: coordinatorMongoId, supabaseUserId: coordinatorUser.id, email: coordinatorUser.email, name: 'Coordinator User', platformRole: 'USER', status: 'ACTIVE' } as any;
+      }
+      if (id === outsiderUser.id) {
+        return { _id: outsiderMongoId, supabaseUserId: outsiderUser.id, email: outsiderUser.email, name: 'Outsider User', platformRole: 'USER', status: 'ACTIVE' } as any;
+      }
+      return null;
+    });
+
     jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockImplementation(async (supabaseId: string) => {
       if (supabaseId === hostUser.id) {
         return { _id: hostMongoId, supabaseId: hostUser.id, email: hostUser.email, platformRole: 'HOST' } as any;

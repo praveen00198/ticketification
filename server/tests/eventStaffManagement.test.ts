@@ -22,6 +22,7 @@ import { mongoUserRepository } from '../src/modules/auth/repositories/mongo-user
 import { mongoEventRepository } from '../src/modules/events/repositories/mongo-event.repository';
 import { mongoEventMemberRepository } from '../src/modules/events/repositories/mongo-event-member.repository';
 import { mongoEventTaskRepository } from '../src/modules/events/repositories/mongo-event-task.repository';
+import { createJwtToken } from '../src/utils/local-auth';
 
 describe('Phase 8: Volunteer & Coordinator Management (Staff Operations & Task Engine)', () => {
   const hostUser = {
@@ -45,11 +46,11 @@ describe('Phase 8: Volunteer & Coordinator Management (Staff Operations & Task E
     email: 'outsider@other.org',
   };
 
-  const hostToken = 'valid-host-token-phase8';
-  const coordinatorToken = 'valid-coordinator-token-phase8';
-  const volunteerToken = 'valid-volunteer-token-phase8';
-  const unassignedToken = 'valid-unassigned-token-phase8';
-  const outsiderToken = 'valid-outsider-token-phase8';
+  const hostToken = createJwtToken({ id: hostUser.id, email: hostUser.email, role: 'USER' });
+  const coordinatorToken = createJwtToken({ id: coordinatorUser.id, email: coordinatorUser.email, role: 'USER' });
+  const volunteerToken = createJwtToken({ id: volunteerUser.id, email: volunteerUser.email, role: 'USER' });
+  const unassignedToken = createJwtToken({ id: unassignedVolunteer.id, email: unassignedVolunteer.email, role: 'USER' });
+  const outsiderToken = createJwtToken({ id: outsiderUser.id, email: outsiderUser.email, role: 'USER' });
 
   const hostMongoId = new mongoose.Types.ObjectId();
   const coordinatorMongoId = new mongoose.Types.ObjectId();
@@ -169,6 +170,25 @@ describe('Phase 8: Volunteer & Coordinator Management (Staff Operations & Task E
       }
       if (id === outsiderUser.id) {
         return { _id: outsiderMongoId, supabaseUserId: outsiderUser.id, email: outsiderUser.email, name: 'Outsider', platformRole: 'USER', status: 'ACTIVE' };
+      }
+      return null;
+    });
+
+    jest.spyOn(mongoUserRepository, 'findById').mockImplementation(async (id: string): Promise<any> => {
+      if (id === hostUser.id || id === hostMongoId.toString()) {
+        return { _id: hostMongoId, id: hostUser.id, supabaseUserId: hostUser.id, email: hostUser.email, name: 'Host', platformRole: 'USER', status: 'ACTIVE' };
+      }
+      if (id === coordinatorUser.id || id === coordinatorMongoId.toString()) {
+        return { _id: coordinatorMongoId, id: coordinatorUser.id, supabaseUserId: coordinatorUser.id, email: coordinatorUser.email, name: 'Coordinator', platformRole: 'USER', status: 'ACTIVE' };
+      }
+      if (id === volunteerUser.id || id === volunteerMongoId.toString()) {
+        return { _id: volunteerMongoId, id: volunteerUser.id, supabaseUserId: volunteerUser.id, email: volunteerUser.email, name: 'Volunteer', platformRole: 'USER', status: 'ACTIVE' };
+      }
+      if (id === unassignedVolunteer.id || id === unassignedMongoId.toString()) {
+        return { _id: unassignedMongoId, id: unassignedVolunteer.id, supabaseUserId: unassignedVolunteer.id, email: unassignedVolunteer.email, name: 'Unassigned', platformRole: 'USER', status: 'ACTIVE' };
+      }
+      if (id === outsiderUser.id || id === outsiderMongoId.toString()) {
+        return { _id: outsiderMongoId, id: outsiderUser.id, supabaseUserId: outsiderUser.id, email: outsiderUser.email, name: 'Outsider', platformRole: 'USER', status: 'ACTIVE' };
       }
       return null;
     });

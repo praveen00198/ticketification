@@ -20,6 +20,9 @@ import { mongoEventMemberRepository } from '../src/modules/events/repositories/m
 import { mongoEventCredentialRepository } from '../src/modules/events/repositories/mongo-event-credential.repository';
 import { mongoEventCredentialCheckinRepository } from '../src/modules/events/repositories/mongo-event-credential-checkin.repository';
 
+import { createJwtToken } from '../src/utils/local-auth';
+import { setMongoConnectedForTesting } from '../src/db/mongodb';
+
 describe('Phase 14: QR Verification + Atomic Check-in Engine', () => {
   jest.setTimeout(30000);
 
@@ -29,11 +32,11 @@ describe('Phase 14: QR Verification + Atomic Check-in Engine', () => {
   const unauthorizedVolunteerUser = { id: 'unauth-vol-14', email: 'unauthvol14@event.com', role: 'VOLUNTEER' };
   const outsiderUser = { id: 'outsider-14', email: 'outsider14@event.com', role: 'ATTENDEE' };
 
-  const hostToken = 'valid-host-token-14';
-  const coordinatorToken = 'valid-coord-token-14';
-  const authorizedVolunteerToken = 'valid-auth-vol-token-14';
-  const unauthorizedVolunteerToken = 'valid-unauth-vol-token-14';
-  const outsiderToken = 'valid-outsider-token-14';
+  const hostToken = createJwtToken({ id: hostUser.id, email: hostUser.email, role: 'USER' });
+  const coordinatorToken = createJwtToken({ id: coordinatorUser.id, email: coordinatorUser.email, role: 'USER' });
+  const authorizedVolunteerToken = createJwtToken({ id: authorizedVolunteerUser.id, email: authorizedVolunteerUser.email, role: 'USER' });
+  const unauthorizedVolunteerToken = createJwtToken({ id: unauthorizedVolunteerUser.id, email: unauthorizedVolunteerUser.email, role: 'USER' });
+  const outsiderToken = createJwtToken({ id: outsiderUser.id, email: outsiderUser.email, role: 'USER' });
 
   const testEventId = new mongoose.Types.ObjectId();
   const hostMongoId = new mongoose.Types.ObjectId();
@@ -47,6 +50,7 @@ describe('Phase 14: QR Verification + Atomic Check-in Engine', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    setMongoConnectedForTesting(true);
     mockCredentials = new Map();
     mockCheckinLogs = [];
 
@@ -82,6 +86,15 @@ describe('Phase 14: QR Verification + Atomic Check-in Engine', () => {
     });
 
     // Mongo User Repo
+    jest.spyOn(mongoUserRepository, 'findById').mockImplementation(async (id: string) => {
+      if (id === hostUser.id) return { _id: hostMongoId, supabaseUserId: hostUser.id, email: hostUser.email, name: 'Host User', platformRole: 'USER', status: 'ACTIVE' } as any;
+      if (id === coordinatorUser.id) return { _id: coordinatorMongoId, supabaseUserId: coordinatorUser.id, email: coordinatorUser.email, name: 'Coordinator User', platformRole: 'USER', status: 'ACTIVE' } as any;
+      if (id === authorizedVolunteerUser.id) return { _id: authorizedVolunteerMongoId, supabaseUserId: authorizedVolunteerUser.id, email: authorizedVolunteerUser.email, name: 'Authorized Volunteer', platformRole: 'USER', status: 'ACTIVE' } as any;
+      if (id === unauthorizedVolunteerUser.id) return { _id: unauthorizedVolunteerMongoId, supabaseUserId: unauthorizedVolunteerUser.id, email: unauthorizedVolunteerUser.email, name: 'Unauthorized Volunteer', platformRole: 'USER', status: 'ACTIVE' } as any;
+      if (id === outsiderUser.id) return { _id: outsiderMongoId, supabaseUserId: outsiderUser.id, email: outsiderUser.email, name: 'Outsider User', platformRole: 'USER', status: 'ACTIVE' } as any;
+      return null;
+    });
+
     jest.spyOn(mongoUserRepository, 'findBySupabaseId').mockImplementation(async (supabaseId: string) => {
       if (supabaseId === hostUser.id) return { _id: hostMongoId, supabaseId: hostUser.id, email: hostUser.email, platformRole: 'HOST' } as any;
       if (supabaseId === coordinatorUser.id) return { _id: coordinatorMongoId, supabaseId: coordinatorUser.id, email: coordinatorUser.email, platformRole: 'COORDINATOR' } as any;

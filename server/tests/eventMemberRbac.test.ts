@@ -22,6 +22,7 @@ import { mongoUserRepository } from '../src/modules/auth/repositories/mongo-user
 import { mongoEventRepository } from '../src/modules/events/repositories/mongo-event.repository';
 import { mongoEventMemberRepository } from '../src/modules/events/repositories/mongo-event-member.repository';
 import { DEFAULT_ROLE_PERMISSIONS } from '../src/db/mongo/models/event-member.model';
+import { createJwtToken } from '../src/utils/local-auth';
 
 describe('Phase 7: Event Membership & RBAC Engine', () => {
   const hostUser = {
@@ -41,10 +42,10 @@ describe('Phase 7: Event Membership & RBAC Engine', () => {
     email: 'outsider@other.org',
   };
 
-  const hostToken = 'valid-host-token-phase7';
-  const staffToken = 'valid-staff-token-phase7';
-  const volunteerToken = 'valid-volunteer-token-phase7';
-  const outsiderToken = 'valid-outsider-token-phase7';
+  const hostToken = createJwtToken({ id: hostUser.id, email: hostUser.email, role: 'USER' });
+  const staffToken = createJwtToken({ id: staffUser.id, email: staffUser.email, role: 'USER' });
+  const volunteerToken = createJwtToken({ id: volunteerUser.id, email: volunteerUser.email, role: 'USER' });
+  const outsiderToken = createJwtToken({ id: outsiderUser.id, email: outsiderUser.email, role: 'USER' });
 
   const hostMongoId = new mongoose.Types.ObjectId();
   const staffMongoId = new mongoose.Types.ObjectId();
@@ -118,6 +119,22 @@ describe('Phase 7: Event Membership & RBAC Engine', () => {
       }
       if (id === outsiderUser.id) {
         return { _id: outsiderMongoId, supabaseUserId: outsiderUser.id, email: outsiderUser.email, name: 'Outsider', platformRole: 'USER', status: 'ACTIVE' };
+      }
+      return null;
+    });
+
+    jest.spyOn(mongoUserRepository, 'findById').mockImplementation(async (id: string): Promise<any> => {
+      if (id === hostUser.id || id === hostMongoId.toString()) {
+        return { _id: hostMongoId, id: hostUser.id, supabaseUserId: hostUser.id, email: hostUser.email, name: 'Host Admin', platformRole: 'USER', status: 'ACTIVE' };
+      }
+      if (id === staffUser.id || id === staffMongoId.toString()) {
+        return { _id: staffMongoId, id: staffUser.id, supabaseUserId: staffUser.id, email: staffUser.email, name: 'Staff Member', platformRole: 'USER', status: 'ACTIVE' };
+      }
+      if (id === volunteerUser.id || id === volunteerMongoId.toString()) {
+        return { _id: volunteerMongoId, id: volunteerUser.id, supabaseUserId: volunteerUser.id, email: volunteerUser.email, name: 'Volunteer', platformRole: 'USER', status: 'ACTIVE' };
+      }
+      if (id === outsiderUser.id || id === outsiderMongoId.toString()) {
+        return { _id: outsiderMongoId, id: outsiderUser.id, supabaseUserId: outsiderUser.id, email: outsiderUser.email, name: 'Outsider', platformRole: 'USER', status: 'ACTIVE' };
       }
       return null;
     });

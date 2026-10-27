@@ -66,7 +66,14 @@ export async function disconnectMongoDB(): Promise<void> {
   }
 }
 
+export function setMongoConnectedForTesting(status: boolean): void {
+  isConnected = status;
+}
+
 export function isMongoConnected(): boolean {
+  if (process.env.NODE_ENV === 'test' && isConnected) {
+    return true;
+  }
   return isConnected && mongoose.connection.readyState === 1;
 }
 

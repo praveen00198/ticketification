@@ -22,6 +22,7 @@ import { mongoUserRepository } from '../src/modules/auth/repositories/mongo-user
 import { mongoEventRepository } from '../src/modules/events/repositories/mongo-event.repository';
 import { mongoEventMemberRepository } from '../src/modules/events/repositories/mongo-event-member.repository';
 import { mongoEventTeamRepository } from '../src/modules/events/repositories/mongo-event-team.repository';
+import { createJwtToken } from '../src/utils/local-auth';
 
 describe('Phase 10: Event Team Management Architecture', () => {
   const hostUser = { id: 'mock-host-uuid-phase10', email: 'host.phase10@hackathon.org' };
@@ -29,10 +30,10 @@ describe('Phase 10: Event Team Management Architecture', () => {
   const leaderUser = { id: 'mock-leader-uuid-phase10', email: 'lead.phase10@teamalpha.io' };
   const outsiderUser = { id: 'mock-out-uuid-phase10', email: 'outsider.phase10@external.com' };
 
-  const hostToken = 'valid-host-token-phase10';
-  const coordinatorToken = 'valid-coord-token-phase10';
-  const leaderToken = 'valid-leader-token-phase10';
-  const outsiderToken = 'valid-out-token-phase10';
+  const hostToken = createJwtToken({ id: hostUser.id, email: hostUser.email, role: 'USER' });
+  const coordinatorToken = createJwtToken({ id: coordinatorUser.id, email: coordinatorUser.email, role: 'USER' });
+  const leaderToken = createJwtToken({ id: leaderUser.id, email: leaderUser.email, role: 'USER' });
+  const outsiderToken = createJwtToken({ id: outsiderUser.id, email: outsiderUser.email, role: 'USER' });
 
   const hostMongoId = new mongoose.Types.ObjectId();
   const coordinatorMongoId = new mongoose.Types.ObjectId();
@@ -98,6 +99,14 @@ describe('Phase 10: Event Team Management Architecture', () => {
       if (id === coordinatorUser.id) return { _id: coordinatorMongoId, email: coordinatorUser.email, platformRole: 'USER', status: 'ACTIVE' };
       if (id === leaderUser.id) return { _id: leaderMongoId, email: leaderUser.email, platformRole: 'USER', status: 'ACTIVE' };
       if (id === outsiderUser.id) return { _id: outsiderMongoId, email: outsiderUser.email, platformRole: 'USER', status: 'ACTIVE' };
+      return null;
+    });
+
+    jest.spyOn(mongoUserRepository, 'findById').mockImplementation(async (id: string): Promise<any> => {
+      if (id === hostUser.id || id === hostMongoId.toString()) return { _id: hostMongoId, id: hostUser.id, email: hostUser.email, platformRole: 'USER', status: 'ACTIVE' };
+      if (id === coordinatorUser.id || id === coordinatorMongoId.toString()) return { _id: coordinatorMongoId, id: coordinatorUser.id, email: coordinatorUser.email, platformRole: 'USER', status: 'ACTIVE' };
+      if (id === leaderUser.id || id === leaderMongoId.toString()) return { _id: leaderMongoId, id: leaderUser.id, email: leaderUser.email, platformRole: 'USER', status: 'ACTIVE' };
+      if (id === outsiderUser.id || id === outsiderMongoId.toString()) return { _id: outsiderMongoId, id: outsiderUser.id, email: outsiderUser.email, platformRole: 'USER', status: 'ACTIVE' };
       return null;
     });
 

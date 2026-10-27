@@ -8,7 +8,12 @@ export class SupabaseStorageService {
   private bucketEnsured = false;
 
   private get client() {
-    return supabaseStorageAdmin;
+    try {
+      const storageModule = require('../../../config/supabase');
+      return storageModule.supabaseStorageAdmin || storageModule.supabaseAdmin;
+    } catch {
+      return supabaseStorageAdmin;
+    }
   }
 
   constructor() {

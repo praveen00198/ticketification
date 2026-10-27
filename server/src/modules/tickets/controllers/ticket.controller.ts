@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { ticketService } from '../services/ticket.service';
 import { AuthenticatedRequest } from '../../../middlewares/auth.middleware';
-import { AuthenticationError } from '../../../middlewares/error.middleware';
+import { AuthenticationError, ValidationError } from '../../../middlewares/error.middleware';
 import {
   validateEventIdParam,
   validateTicketIdParam,
@@ -34,6 +34,12 @@ export class TicketController {
 
       const eventId = validateEventIdParam(req.params.eventId || req.body?.eventId);
       const { count, ticketTypeName, templateId } = validateGenerateWorkerTicketsInput(req.body);
+
+      if (count > 50) {
+        throw new ValidationError(
+          'Synchronous batch ticket generation is limited to 50 passes to prevent server resource exhaustion. Please queue an asynchronous background job via POST /api/events/:eventId/jobs/bulk-render.'
+        );
+      }
 
       const result = await ticketService.generateUnassignedWorkerTickets(
         eventId,

@@ -24,6 +24,9 @@ import { supabaseStorageService } from '../src/modules/tickets/services/supabase
 import { eventExportService } from '../src/modules/events/services/event-export.service';
 import { eventJobQueueService } from '../src/modules/events/services/event-job-queue.service';
 
+import { createJwtToken } from '../src/utils/local-auth';
+import { setMongoConnectedForTesting } from '../src/db/mongodb';
+
 describe('Phase 16: Export Jobs Engine', () => {
   jest.setTimeout(30000);
 
@@ -32,10 +35,10 @@ describe('Phase 16: Export Jobs Engine', () => {
   const volunteerUser = { id: 'vol-auth-16', email: 'vol16@event.com', role: 'VOLUNTEER' };
   const outsiderUser = { id: 'outsider-16', email: 'outsider16@event.com', role: 'ATTENDEE' };
 
-  const hostToken = 'valid-host-token-16';
-  const coordinatorToken = 'valid-coord-token-16';
-  const volunteerToken = 'valid-vol-token-16';
-  const outsiderToken = 'valid-outsider-token-16';
+  const hostToken = createJwtToken({ id: hostUser.id, email: hostUser.email, role: 'USER' });
+  const coordinatorToken = createJwtToken({ id: coordinatorUser.id, email: coordinatorUser.email, role: 'USER' });
+  const volunteerToken = createJwtToken({ id: volunteerUser.id, email: volunteerUser.email, role: 'USER' });
+  const outsiderToken = createJwtToken({ id: outsiderUser.id, email: outsiderUser.email, role: 'USER' });
 
   const testEventId = new mongoose.Types.ObjectId();
   const hostMongoId = new mongoose.Types.ObjectId();
@@ -70,6 +73,16 @@ describe('Phase 16: Export Jobs Engine', () => {
       return { data: { user: null }, error: new Error('Invalid token') };
     });
 
+    setMongoConnectedForTesting(true);
+
+    jest.spyOn(mongoUserRepository, 'findById').mockImplementation(async (id: string): Promise<any> => {
+      if (id === hostUser.id || id === hostMongoId.toString()) return { _id: hostMongoId, supabaseUserId: hostUser.id, email: hostUser.email, name: 'Host', platformRole: 'USER', status: 'ACTIVE' };
+      if (id === coordinatorUser.id || id === coordinatorMongoId.toString()) return { _id: coordinatorMongoId, supabaseUserId: coordinatorUser.id, email: coordinatorUser.email, name: 'Coordinator', platformRole: 'USER', status: 'ACTIVE' };
+      if (id === volunteerUser.id || id === volunteerMongoId.toString()) return { _id: volunteerMongoId, supabaseUserId: volunteerUser.id, email: volunteerUser.email, name: 'Volunteer', platformRole: 'USER', status: 'ACTIVE' };
+      if (id === outsiderUser.id || id === outsiderMongoId.toString()) return { _id: outsiderMongoId, supabaseUserId: outsiderUser.id, email: outsiderUser.email, name: 'Outsider', platformRole: 'USER', status: 'ACTIVE' };
+      return null;
+    });
+
     jest.spyOn(userRepository, 'findById').mockImplementation(async (id: string) => {
       if (id === hostUser.id) return { id: hostUser.id, email: hostUser.email, role: 'HOST' } as any;
       if (id === coordinatorUser.id) return { id: coordinatorUser.id, email: coordinatorUser.email, role: 'COORDINATOR' } as any;
@@ -89,7 +102,7 @@ describe('Phase 16: Export Jobs Engine', () => {
     jest.spyOn(mongoEventRepository, 'findById').mockResolvedValue(baseEvent);
 
     jest.spyOn(mongoEventMemberRepository, 'findByEventAndUser').mockImplementation(async (eId: any, uId: any): Promise<any> => {
-      if (uId.toString() === coordinatorMongoId.toString()) {
+      if (uId.toString() === coordinatorMongoId.toString() || uId.toString() === coordinatorUser.id) {
         return {
           _id: new mongoose.Types.ObjectId(),
           eventId: testEventId,
@@ -98,7 +111,7 @@ describe('Phase 16: Export Jobs Engine', () => {
           status: 'ACTIVE',
         };
       }
-      if (uId.toString() === volunteerMongoId.toString()) {
+      if (uId.toString() === volunteerMongoId.toString() || uId.toString() === volunteerUser.id) {
         return {
           _id: new mongoose.Types.ObjectId(),
           eventId: testEventId,
