@@ -22,10 +22,10 @@ export const supabaseStorageAdmin =
  * @deprecated Supabase Auth has been completely removed from Ticketification.
  * Maintained as null strictly for backwards compatibility with legacy test mocks.
  */
-export const supabaseAdmin = null;
+export const supabaseAdmin: any = null;
 
 /**
  * @deprecated Supabase Auth has been completely removed from Ticketification.
  * Maintained as null strictly for backwards compatibility with legacy test mocks.
  */
-export const supabasePublic = null;
+export const supabasePublic: any = null;

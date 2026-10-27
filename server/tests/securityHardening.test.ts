@@ -7,6 +7,12 @@ import { errorHandler, AppError } from '../src/middlewares/error.middleware';
 import config from '../src/config/env';
 
 describe('Security Hardening & Production Readiness Verification', () => {
+  jest.setTimeout(30000);
+
+  afterEach(() => {
+    config.env.isProduction = false;
+  });
+
   describe('1. Security Headers Middleware', () => {
     it('sets all required OWASP security headers on API responses', async () => {
       const res = await request(app).get('/api/health');

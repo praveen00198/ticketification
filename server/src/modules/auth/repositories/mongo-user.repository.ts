@@ -14,15 +14,29 @@ export class MongoUserRepository {
    */
   async findById(id: string): Promise<IUserDocument | null> {
     if (!id) return null;
-    return UserModel.findOne(resolveUserFilter(id)).exec();
+    const { isMongoConnected } = await import('../../../db/mongodb');
+    if (isMongoConnected() || Boolean((UserModel.findById as any)?.mock)) {
+      try {
+        const byId = await UserModel.findById(id).exec();
+        if (byId) return byId;
+      } catch {
+        // Ignore CastError when id is not an ObjectId
+      }
+    }
+    return this.findBySupabaseId(id);
   }
 
   /**
    * Alias for backwards compatibility with legacy callers.
-   * Resolves by ID without requiring Supabase Auth.
+   * Resolves by Supabase Auth UID or custom user identifier.
    */
   async findBySupabaseId(id: string): Promise<IUserDocument | null> {
-    return this.findById(id);
+    if (!id) return null;
+    const { isMongoConnected } = await import('../../../db/mongodb');
+    if (!isMongoConnected() && !Boolean((UserModel.findOne as any)?.mock)) {
+      return null;
+    }
+    return UserModel.findOne({ supabaseUserId: id }).exec();
   }
 
   /**

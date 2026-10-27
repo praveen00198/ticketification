@@ -54,11 +54,11 @@ export class DashboardService {
           EventCredentialModel.countDocuments({ eventId: safeEventId }),
           EventCredentialModel.countDocuments({
             eventId: safeEventId,
-            status: { $in: ['CHECKED_IN', 'USED'] },
+            status: { $in: ['CHECKED_IN'] },
           }),
           EventRegistrationModel.countDocuments({
             eventId: safeEventId,
-            status: { $in: ['CONFIRMED', 'ATTENDED', 'REGISTERED'] },
+            status: { $in: ['CONFIRMED', 'ATTENDED'] },
           }),
           EventCredentialModel.find({ eventId: safeEventId })
             .sort({ createdAt: -1 })

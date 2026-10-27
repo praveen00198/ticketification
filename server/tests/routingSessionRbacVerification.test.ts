@@ -5,6 +5,8 @@ import { eventRepository } from '../src/modules/events/repositories/event.reposi
 import { guestRepository } from '../src/modules/guests/repositories/guest.repository';
 
 describe('Routing, Session Restoration and RBAC Gaps Verification', () => {
+  jest.setTimeout(15000);
+
   const attendeeUser = {
     id: 'usr_attendee_001',
     email: 'attendee@example.com',

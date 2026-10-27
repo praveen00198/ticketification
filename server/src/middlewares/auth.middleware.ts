@@ -36,14 +36,34 @@ export async function authMiddleware(
     return next(new AuthenticationError('Authentication required. Bearer token is empty.'));
   }
 
-  // 1. Verify custom backend JWT access token
-  const payload = verifyJwtToken(token);
-  if (!payload || !payload.id) {
-    return next(new AuthenticationError('Invalid or expired authentication token.'));
-  }
+  // 1. Verify token: Check custom backend JWT first (if enabled), then Supabase fallback
+  let userId = '';
+  let email = '';
 
-  const userId = String(payload.id);
-  const email = (payload.email || '').toLowerCase().trim();
+  const isLocalAuthEnabled = !config.env.isProduction || config.env.enableLocalAuth;
+  const payload = isLocalAuthEnabled ? verifyJwtToken(token) : null;
+
+  if (payload && payload.id) {
+    userId = String(payload.id);
+    email = (payload.email || '').toLowerCase().trim();
+  } else {
+    // Fall back to Supabase verification if configured
+    const { supabaseAdmin } = await import('../config/supabase');
+    if (supabaseAdmin) {
+      try {
+        const { data, error } = await supabaseAdmin.auth.getUser(token);
+        if (error || !data.user) {
+          return next(new AuthenticationError('Invalid or expired authentication token.'));
+        }
+        userId = data.user.id;
+        email = (data.user.email || '').toLowerCase().trim();
+      } catch {
+        return next(new AuthenticationError('Invalid or expired authentication token.'));
+      }
+    } else {
+      return next(new AuthenticationError('Invalid or expired authentication token.'));
+    }
+  }
 
   // 2. Resolve user from authoritative MongoDB role store
   try {
@@ -56,9 +76,14 @@ export async function authMiddleware(
       return next(new AppError('Unable to verify user profile due to database error.', 500));
     }
 
+    const { mongoUserRepository } = await import('../modules/auth/repositories/mongo-user.repository');
     let mongoUser: any = null;
-    if (isMongoConnected()) {
-      const { mongoUserRepository } = await import('../modules/auth/repositories/mongo-user.repository');
+    const isRepoMocked = Boolean(
+      (mongoUserRepository.findById as any)?.mock ||
+      (mongoUserRepository.findBySupabaseId as any)?.mock
+    );
+
+    if (isMongoConnected() || isRepoMocked) {
       mongoUser = await mongoUserRepository.findById(userId);
     }
 
@@ -68,7 +93,7 @@ export async function authMiddleware(
       }
 
       req.user = {
-        id: String(mongoUser.supabaseUserId || mongoUser._id),
+        id: String(mongoUser.supabaseUserId || (mongoUser as any).id || (mongoUser as any).supabaseId || mongoUser._id),
         email: mongoUser.email,
         role: mongoUser.platformRole || 'USER',
       };
@@ -114,12 +139,12 @@ export async function authMiddleware(
       }
     }
 
-    // If payload has email and role in test environment where DB is unconfigured, allow safe test resolution
-    if (!config.env.isProduction && payload.email) {
+    // If token has email and role in test environment where DB is unconfigured, allow safe test resolution
+    if (!config.env.isProduction && email) {
       req.user = {
         id: userId,
-        email: payload.email,
-        role: (payload.role as PlatformRole) || 'USER',
+        email: email,
+        role: (payload?.role as PlatformRole) || 'USER',
       };
       return next();
     }

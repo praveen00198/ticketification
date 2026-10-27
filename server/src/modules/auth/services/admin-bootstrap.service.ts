@@ -79,9 +79,31 @@ export class AdminBootstrapService {
       verifiedId = verifiedUserId;
     }
 
-    if (!verifiedId && !existingMongoUser && !existingPgUser) {
+    // If still no verified ID, attempt lookup via trusted authentication provider (Supabase Auth)
+    const { supabaseAdmin } = await import('../../../config/supabase');
+    if (!verifiedId && supabaseAdmin) {
+      try {
+        const { data: listData, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+        if (listError) {
+          throw new AppError(`Authentication provider error during admin lookup: ${listError.message}`, 500);
+        }
+        const authUser = listData?.users?.find(
+          (u: any) => u.email?.toLowerCase().trim() === normalized
+        );
+        if (authUser) {
+          verifiedId = authUser.id;
+        }
+      } catch (authErr: any) {
+        if (authErr instanceof AppError) throw authErr;
+        console.error('[AdminBootstrapService] Auth provider error during lookup:', authErr.message);
+        throw new AppError('Authentication provider unavailable. Administrator provisioning failed closed.', 500);
+      }
+    }
+
+    // If no verified identity could be established from DB, arguments, or trusted provider, FAIL CLOSED!
+    if (!verifiedId) {
       throw new NotFoundError(
-        `Cannot provision administrator profile: No registered account found for email '${normalized}'. User must register an account first before administrator privileges can be provisioned.`
+        `Cannot provision administrator profile: No verified identity found in authentication provider for email '${normalized}'. User must exist in trusted authentication provider before administrator profile can be provisioned.`
       );
     }
 

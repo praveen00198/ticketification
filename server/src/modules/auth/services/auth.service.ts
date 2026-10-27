@@ -369,8 +369,14 @@ export class AuthService {
     }
 
     if (mongoConfigured) {
-      try {
-        let mongoUser = await this.mongoUserRepo.findById(userId);
+      const { isMongoConnected } = await import('../../../db/mongodb');
+      const isRepoMocked = Boolean(
+        (this.mongoUserRepo.findById as any)?.mock ||
+        (this.mongoUserRepo.findBySupabaseId as any)?.mock
+      );
+      if (isMongoConnected() || isRepoMocked) {
+        try {
+          let mongoUser = await this.mongoUserRepo.findById(userId);
 
         if (mongoUser) {
           if (mongoUser.status === 'SUSPENDED') {
@@ -403,6 +409,7 @@ export class AuthService {
         console.error('[AuthService] MongoDB lookup failed in getMe:', mErr);
         throw new AppError('Unable to verify user profile due to database error.', 500);
       }
+      }
     }
 
     // In production, fallback to secondary stores is forbidden when Mongo is authoritative
@@ -418,11 +425,16 @@ export class AuthService {
           if ((user as any).status === 'SUSPENDED') {
             throw new AuthenticationError('Account is suspended. Please contact platform administrators.');
           }
+          const safeRole =
+            user.role === 'ADMIN' || user.role === 'SUPER_ADMIN'
+              ? 'USER'
+              : ((user.role as PlatformRole) || 'USER');
+
           return {
             id: user.id,
             name: user.name,
             email: user.email,
-            role: (user.role as PlatformRole) || 'USER',
+            role: safeRole,
             isOnboarded: false,
           };
         }

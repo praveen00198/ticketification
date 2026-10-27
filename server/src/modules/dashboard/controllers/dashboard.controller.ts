@@ -31,7 +31,7 @@ export class DashboardController {
             const isOwner =
               mongoEvent.ownerSupabaseId === callerUserId ||
               mongoEvent.ownerId?.toString() === callerUserId ||
-              mongoEvent.createdBy?.toString() === callerUserId;
+              (mongoEvent as any).createdBy?.toString() === callerUserId;
 
             const isPlatformAdmin =
               req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN';
@@ -49,7 +49,7 @@ export class DashboardController {
                 member.status === 'ACTIVE' &&
                 (member.role === 'HOST' ||
                   member.role === 'COORDINATOR' ||
-                  member.permissions.includes('VIEW_DASHBOARD') ||
+                  member.permissions.includes('MANAGE_EVENT_SETTINGS') ||
                   member.permissions.includes('MANAGE_ATTENDEES'))
               ) {
                 isAuthorized = true;
