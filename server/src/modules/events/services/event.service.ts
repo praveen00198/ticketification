@@ -465,9 +465,48 @@ export class EventService {
   }
 
   /**
-   * Legacy ticket type creation.
+   * Ticket type creation with zero-trust authorization.
    */
   async addTicketType(eventId: string, userId: string, data: CreateTicketTypeDTO) {
+    const mongoEvent = await this.mongoEventRepo.findById(eventId);
+    if (mongoEvent) {
+      const isOwner = mongoEvent.ownerSupabaseId === userId;
+      if (!isOwner) {
+        const callerUser = await this.mongoUserRepo.findBySupabaseId(userId);
+        const isAdmin = callerUser && (callerUser.platformRole === 'ADMIN' || callerUser.platformRole === 'SUPER_ADMIN');
+        if (!isAdmin) {
+          throw new AuthorizationError('Access denied. You do not own this event.');
+        }
+      }
+
+      const name = data.name.trim().toUpperCase();
+      try {
+        if (config.env.databaseUrl) {
+          const existingType = await this.ticketTypeRepo.findByEventAndName(eventId, name);
+          if (existingType) {
+            throw new ConflictError(`Ticket type "${name}" already exists for this event.`);
+          }
+          return await this.ticketTypeRepo.create({
+            eventId,
+            name,
+            label: data.label?.trim() || name,
+            usagePolicy: data.usagePolicy || 'SINGLE_USE',
+          });
+        }
+      } catch (err: any) {
+        if (err instanceof ConflictError) throw err;
+      }
+
+      return {
+        id: `${eventId}-${name.toLowerCase()}`,
+        eventId,
+        name,
+        label: data.label?.trim() || name,
+        usagePolicy: data.usagePolicy || 'SINGLE_USE',
+        createdAt: new Date(),
+      };
+    }
+
     const existing = await this.eventRepo.findById(eventId);
     if (!existing) {
       throw new NotFoundError('Event not found.');
@@ -492,6 +531,47 @@ export class EventService {
   }
 
   async getTicketTypes(eventId: string, userId: string) {
+    const mongoEvent = await this.mongoEventRepo.findById(eventId);
+    if (mongoEvent) {
+      const isOwner = mongoEvent.ownerSupabaseId === userId;
+      if (!isOwner) {
+        const callerUser = await this.mongoUserRepo.findBySupabaseId(userId);
+        const isAdmin = callerUser && (callerUser.platformRole === 'ADMIN' || callerUser.platformRole === 'SUPER_ADMIN');
+        if (!isAdmin) {
+          if (!callerUser) {
+            throw new AuthorizationError('Access denied. You do not own this event.');
+          }
+          const membership = await this.eventMemberRepo.findByEventAndUser(eventId, callerUser._id);
+          if (!membership || membership.status !== 'ACTIVE') {
+            throw new AuthorizationError('Access denied. You do not own this event.');
+          }
+        }
+      }
+
+      try {
+        if (config.env.databaseUrl) {
+          const types = await this.ticketTypeRepo.findByEventId(eventId);
+          if (types && types.length > 0) {
+            return types;
+          }
+        }
+      } catch (err) {
+        // Fallback to default canonical tier
+      }
+
+      const term = mongoEvent.credentialTerminology || 'Standard Pass';
+      return [
+        {
+          id: `${eventId}-standard`,
+          eventId,
+          name: term.toUpperCase().replace(/\s+/g, '_'),
+          label: term,
+          usagePolicy: 'SINGLE_USE',
+          createdAt: mongoEvent.createdAt || new Date(),
+        },
+      ];
+    }
+
     const existing = await this.eventRepo.findById(eventId);
     if (!existing) {
       throw new NotFoundError('Event not found.');

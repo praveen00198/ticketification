@@ -256,9 +256,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 {category.items.map((item) => {
                   const Icon = item.icon;
-                  const isActive =
-                    location.pathname === item.path ||
-                    (item.path === "/dashboard" && location.pathname === "/");
+                  const itemPathOnly = item.path.split('?')[0].split('#')[0];
+                  const itemQuery = item.path.includes('?') ? '?' + item.path.split('?')[1] : '';
+                  const isActive = itemQuery
+                    ? location.pathname === itemPathOnly && (location.search === itemQuery || (!location.search && itemQuery === '?tab=overview'))
+                    : (location.pathname === item.path && !location.search) ||
+                      (item.path === "/dashboard" && location.pathname === "/");
 
                   return (
                     <Link

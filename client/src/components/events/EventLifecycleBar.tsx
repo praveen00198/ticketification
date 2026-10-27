@@ -14,6 +14,7 @@ import {
   AlertCircle,
   X,
   FileCheck2,
+  Send,
 } from 'lucide-react';
 import { eventsApi, EventStatusHistoryItem } from '../../api/events';
 
@@ -21,6 +22,7 @@ interface EventLifecycleBarProps {
   eventId: string;
   currentStatus: string;
   isOwner?: boolean;
+  isIndividual?: boolean;
   onStatusChange: (newStatus: string) => void;
 }
 
@@ -38,6 +40,7 @@ export const EventLifecycleBar: React.FC<EventLifecycleBarProps> = ({
   eventId,
   currentStatus,
   isOwner = true,
+  isIndividual = false,
   onStatusChange,
 }) => {
   const [loading, setLoading] = useState(false);
@@ -78,6 +81,22 @@ export const EventLifecycleBar: React.FC<EventLifecycleBarProps> = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSubmitEvent = () => {
+    executeTransition(
+      () => eventsApi.transitionLifecycle(eventId, 'SUBMITTED', 'Submitted for review by host'),
+      'SUBMITTED',
+      'Event draft submitted successfully for review!'
+    );
+  };
+
+  const handleApproveEvent = () => {
+    executeTransition(
+      () => eventsApi.transitionLifecycle(eventId, 'APPROVED', 'Approved by host'),
+      'APPROVED',
+      'Event approved and ready for publishing!'
+    );
   };
 
   const handlePublish = () => {
@@ -147,7 +166,11 @@ export const EventLifecycleBar: React.FC<EventLifecycleBarProps> = ({
 
   const isCurrentOrPassed = (stepKey: string) => {
     const order = ['DRAFT', 'SUBMITTED', 'APPROVED', 'PUBLISHED', 'EVENT_LIVE', 'COMPLETED', 'ARCHIVED'];
-    const currentIdx = order.indexOf(currentStatus);
+    const effectiveStatus =
+      currentStatus === 'REGISTRATION_OPEN' || currentStatus === 'REGISTRATION_CLOSED'
+        ? 'PUBLISHED'
+        : currentStatus;
+    const currentIdx = order.indexOf(effectiveStatus);
     const stepIdx = order.indexOf(stepKey);
     return currentIdx >= 0 && stepIdx >= 0 && stepIdx <= currentIdx;
   };
@@ -264,7 +287,10 @@ export const EventLifecycleBar: React.FC<EventLifecycleBarProps> = ({
               </span>
             </div>
             <p className="text-xs text-zinc-500 mt-0.5">
-              {currentStatus === 'DRAFT' && 'Event is in preparation. Complete institutional verification to submit for review.'}
+              {currentStatus === 'DRAFT' &&
+                (isIndividual
+                  ? 'Event draft is in preparation. Configure event details and submit for review.'
+                  : 'Event is in preparation. Complete institutional verification or submit for review.')}
               {currentStatus === 'SUBMITTED' && 'Submitted for verification review. Awaiting platform administration decision.'}
               {currentStatus === 'APPROVED' && 'Event is verified and approved. Ready to be published to attendees.'}
               {currentStatus === 'PUBLISHED' && 'Event is published. Open registrations or launch live check-in gates.'}
@@ -282,6 +308,30 @@ export const EventLifecycleBar: React.FC<EventLifecycleBarProps> = ({
         {/* Dynamic Contextual Action Buttons */}
         {isOwner && currentStatus !== 'ARCHIVED' && currentStatus !== 'CANCELLED' && currentStatus !== 'SUSPENDED' && (
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            {currentStatus === 'DRAFT' && (
+              <button
+                type="button"
+                disabled={loading}
+                onClick={handleSubmitEvent}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-stone-900 hover:bg-black disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
+              >
+                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                <span>Submit Event for Review</span>
+              </button>
+            )}
+
+            {currentStatus === 'SUBMITTED' && (
+              <button
+                type="button"
+                disabled={loading}
+                onClick={handleApproveEvent}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
+              >
+                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                <span>Approve Event</span>
+              </button>
+            )}
+
             {currentStatus === 'APPROVED' && (
               <button
                 type="button"

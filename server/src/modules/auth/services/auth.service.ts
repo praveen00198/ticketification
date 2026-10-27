@@ -378,7 +378,10 @@ export class AuthService {
       );
       if (isMongoConnected() || isRepoMocked) {
         try {
-          let mongoUser = await this.mongoUserRepo.findById(userId);
+          let mongoUser = await this.mongoUserRepo.findBySupabaseId(userId);
+          if (!mongoUser) {
+            mongoUser = await this.mongoUserRepo.findById(userId);
+          }
           if (!mongoUser && normalizedEmail) {
             mongoUser = await this.mongoUserRepo.findByEmail(normalizedEmail);
           }
@@ -447,9 +450,8 @@ export class AuthService {
           };
         }
       } catch (dbErr: any) {
-        if (dbErr instanceof AuthenticationError || dbErr instanceof AppError) throw dbErr;
-        console.error('[AuthService] Postgres lookup failed in getMe:', dbErr);
-        throw new AppError('Unable to verify user profile due to database error.', 500);
+        if (dbErr instanceof AuthenticationError) throw dbErr;
+        console.warn('[AuthService] Secondary Postgres lookup failed in getMe (ignored):', dbErr);
       }
     }
 

@@ -85,19 +85,22 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
     }
     if (path === '/import') {
       return [
-        { label: 'Dashboard', path: '/dashboard' },
+        { label: 'Events', path: '/events' },
+        ...(currentEvent ? [{ label: currentEvent.name, path: `/events/${currentEvent.id}` }] : []),
         { label: 'Import Guests', path: '/import', icon: FileSpreadsheet },
       ];
     }
     if (path === '/tickets') {
       return [
-        { label: 'Dashboard', path: '/dashboard' },
+        { label: 'Events', path: '/events' },
+        ...(currentEvent ? [{ label: currentEvent.name, path: `/events/${currentEvent.id}` }] : []),
         { label: 'Issued Tickets', path: '/tickets', icon: Ticket },
       ];
     }
     if (path === '/scan') {
       return [
-        { label: 'Dashboard', path: '/dashboard' },
+        { label: 'Events', path: '/events' },
+        ...(currentEvent ? [{ label: currentEvent.name, path: `/events/${currentEvent.id}` }] : []),
         { label: 'Scan & Turnstiles', path: '/scan', icon: QrCode },
       ];
     }
@@ -133,7 +136,8 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
     }
     if (path === '/reports') {
       return [
-        { label: 'Dashboard', path: '/dashboard' },
+        { label: 'Events', path: '/events' },
+        ...(currentEvent ? [{ label: currentEvent.name, path: `/events/${currentEvent.id}` }] : []),
         { label: 'Reports & Analytics', path: '/reports', icon: Award },
       ];
     }

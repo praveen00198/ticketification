@@ -458,7 +458,7 @@ export class MongoEventRepository {
     const event = typeof sel?.exec === 'function' ? await sel.exec() : await sel;
     if (!event) return false;
 
-    const allowedStatuses = ['PUBLISHED', 'REGISTRATION_OPEN'];
+    const allowedStatuses = ['PUBLISHED', 'REGISTRATION_OPEN', 'EVENT_LIVE'];
     if (!allowedStatuses.includes(event.status)) {
       return false;
     }
@@ -472,7 +472,7 @@ export class MongoEventRepository {
 
     const query: any = {
       _id: new mongoose.Types.ObjectId(eventId),
-      status: { $in: ['PUBLISHED', 'REGISTRATION_OPEN'] },
+      status: { $in: ['PUBLISHED', 'REGISTRATION_OPEN', 'EVENT_LIVE'] },
     };
 
     if (capacity && capacity > 0) {

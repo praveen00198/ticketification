@@ -496,6 +496,66 @@ export class TicketService {
    * Get tickets for an event with pagination and filters.
    */
   async getTicketsByEvent(eventId: string, userId: string, options: TicketFilterOptions = {}) {
+    // 1. Try MongoDB canonical event first
+    if (mongoose.Types.ObjectId.isValid(eventId)) {
+      const mongoEvent = await EventModel.findById(eventId);
+      if (mongoEvent) {
+        const isOwner =
+          mongoEvent.ownerSupabaseId === userId ||
+          String(mongoEvent.ownerId) === userId ||
+          String(mongoEvent.ownerSupabaseId) === userId;
+
+        if (!isOwner) {
+          const member = await EventMemberModel.findOne({
+            eventId: mongoEvent._id,
+            status: 'ACTIVE',
+            role: { $in: ['HOST', 'COORDINATOR'] } as any,
+          } as any);
+          if (!member) {
+            throw new NotFoundError('Event not found or unauthorized');
+          }
+        }
+
+        const { credentials, total } = await mongoEventCredentialRepository.findByEvent(eventId, {
+          status: options.status,
+          search: options.search,
+          limit: options.limit || 5000,
+          offset: options.offset || 0,
+        });
+
+        return {
+          tickets: credentials.map((c) => ({
+            id: c._id.toString(),
+            sequenceNumber: c.sequenceNumber,
+            verificationToken: c.verificationToken,
+            status: c.status,
+            usagePolicy: c.usagePolicy || 'SINGLE_USE',
+            assetUrl: c.asset?.publicUrl || null,
+            createdAt: c.createdAt,
+            guest: {
+              id: c._id.toString(),
+              name: c.holder?.name || 'UNASSIGNED',
+              email: c.holder?.email,
+              phone: c.holder?.phone,
+              organization: c.holder?.organization,
+              designation: c.holder?.designation,
+              category: c.credentialType,
+            },
+            ticketType: {
+              id: (c as any).ticketTypeId?.toString() || 'default',
+              name: c.credentialType,
+              label: c.credentialType,
+              usagePolicy: c.usagePolicy || 'SINGLE_USE',
+            },
+          })),
+          total,
+          limit: options.limit || 5000,
+          offset: options.offset || 0,
+        };
+      }
+    }
+
+    // 2. Fallback to legacy PostgreSQL repository
     const event = await this.eventRepo.findByIdAndOwner(eventId, userId);
     if (!event) {
       throw new NotFoundError('Event not found or unauthorized');

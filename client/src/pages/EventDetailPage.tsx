@@ -6,12 +6,6 @@ import { useEvent } from '../context/EventContext';
 import {
   ArrowLeft,
   AlertCircle,
-  FileSpreadsheet,
-  Ticket,
-  QrCode,
-  Shield,
-  Award,
-  ExternalLink,
 } from 'lucide-react';
 import { ContextAwareHostConsole } from '../components/events/ContextAwareHostConsole';
 
@@ -132,98 +126,8 @@ export const EventDetailPage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6 w-full">
-      {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white border border-surface-border p-6 rounded-2xl shadow-sm">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/events')}
-            className="p-2 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded-xl transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-brand-600">Event Configuration</span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-zinc-100 text-zinc-700 border border-zinc-200">
-                {event.status}
-              </span>
-            </div>
-            <h1 className="text-xl font-bold text-zinc-900 tracking-tight">{event.name}</h1>
-          </div>
-        </div>
-
-        {/* Action Shortcuts */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => {
-              setCurrentEvent(event);
-              navigate(`/events/${eventId}/public`);
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-zinc-50 text-zinc-800 text-xs font-semibold rounded-xl border border-zinc-300 transition-all shadow-xs"
-          >
-            <ExternalLink className="w-3.5 h-3.5 text-stone-700" />
-            <span>Public Page</span>
-          </button>
-
-          <button
-            onClick={() => {
-              setCurrentEvent(event);
-              navigate('/import');
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-zinc-50 text-zinc-800 text-xs font-bold rounded-xl border border-zinc-300 transition-all shadow-sm"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-stone-700" />
-            <span>Import Guests</span>
-          </button>
-
-          <button
-            onClick={() => {
-              setCurrentEvent(event);
-              navigate('/tickets');
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-zinc-50 text-zinc-800 text-xs font-bold rounded-xl border border-zinc-300 transition-all shadow-sm"
-          >
-            <Ticket className="w-3.5 h-3.5 text-stone-700" />
-            <span>View Tickets</span>
-          </button>
-
-          <button
-            onClick={() => {
-              setCurrentEvent(event);
-              navigate(`/events/${eventId}/staff-console`);
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-zinc-50 text-zinc-800 text-xs font-bold rounded-xl border border-zinc-300 transition-all shadow-sm"
-          >
-            <Shield className="w-3.5 h-3.5 text-stone-700" />
-            <span>Staff Console</span>
-          </button>
-
-          <button
-            onClick={() => {
-              setCurrentEvent(event);
-              navigate(`/events/${eventId}/review-workspace`);
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-zinc-50 text-zinc-800 text-xs font-bold rounded-xl border border-zinc-300 transition-all shadow-sm"
-          >
-            <Award className="w-3.5 h-3.5 text-amber-600" />
-            <span>Review Workspace</span>
-          </button>
-
-          <button
-            onClick={() => {
-              setCurrentEvent(event);
-              navigate('/scan');
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
-          >
-            <QrCode className="w-3.5 h-3.5" />
-            <span>Launch Scanner</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Phase 19: Context-Aware Adaptive Host Console */}
+    <div className="w-full">
+      {/* 6-Pillar Context-Aware Adaptive Host Console */}
       <ContextAwareHostConsole
         event={event}
         ticketTypes={ticketTypes}

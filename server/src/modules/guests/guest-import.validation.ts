@@ -2,6 +2,7 @@ import { ValidationError } from '../../middlewares/error.middleware';
 import { ValidateImportDTO, ConfirmImportDTO, TargetField } from './guest-import.types';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const EVENT_ID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$|^[0-9a-fA-F]{24}$/i;
 
 const VALID_TARGET_FIELDS = new Set<TargetField>([
   'name',
@@ -19,8 +20,8 @@ export function validateEventIdParam(eventId: unknown): string {
     throw new ValidationError('Event ID is required', [{ field: 'eventId', message: 'Event ID must be a non-empty string' }]);
   }
   const cleanId = eventId.trim();
-  if (!UUID_REGEX.test(cleanId)) {
-    throw new ValidationError('Invalid Event ID format', [{ field: 'eventId', message: 'Event ID must be a valid UUID' }]);
+  if (!EVENT_ID_REGEX.test(cleanId)) {
+    throw new ValidationError('Invalid Event ID format', [{ field: 'eventId', message: 'Event ID must be a valid UUID or MongoDB ObjectId' }]);
   }
   return cleanId;
 }

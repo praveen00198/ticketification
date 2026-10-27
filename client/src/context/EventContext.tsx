@@ -22,10 +22,15 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [error, setError] = useState<string | null>(null);
 
   const setCurrentEvent = (event: EventItem | null) => {
-    setCurrentEventState(event);
     if (event) {
+      const normalized = {
+        ...event,
+        userRole: (event as any).userRole || 'HOST',
+      };
+      setCurrentEventState(normalized);
       localStorage.setItem('selected_event_id', event.id);
     } else {
+      setCurrentEventState(null);
       localStorage.removeItem('selected_event_id');
     }
   };
@@ -60,7 +65,7 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (preferredId) {
         const matched = eventsList.find((e) => e.id === preferredId);
         if (matched) {
-          setCurrentEventState(matched);
+          setCurrentEventState({ ...matched, userRole: (matched as any).userRole || 'HOST' });
           localStorage.setItem('selected_event_id', matched.id);
           return;
         }
@@ -73,7 +78,7 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (targetId) {
           const matched = eventsList.find((e) => e.id === targetId);
           if (matched) {
-            setCurrentEventState(matched);
+            setCurrentEventState({ ...matched, userRole: (matched as any).userRole || 'HOST' });
             localStorage.setItem('selected_event_id', matched.id);
             return;
           }
@@ -84,7 +89,7 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           try {
             const directEvent = await eventsApi.getEvent(urlEventId);
             if (directEvent) {
-              setCurrentEventState(directEvent);
+              setCurrentEventState({ ...directEvent, userRole: (directEvent as any).userRole || 'HOST' });
               localStorage.setItem('selected_event_id', directEvent.id);
               return;
             }
@@ -94,6 +99,14 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             localStorage.removeItem('selected_event_id');
             return;
           }
+        }
+
+        // If on operational routes and no specific targetId matched, use the first owned event
+        if (eventsList.length > 0) {
+          const fallbackEvent = eventsList[0];
+          setCurrentEventState({ ...fallbackEvent, userRole: (fallbackEvent as any).userRole || 'HOST' });
+          localStorage.setItem('selected_event_id', fallbackEvent.id);
+          return;
         }
       }
 

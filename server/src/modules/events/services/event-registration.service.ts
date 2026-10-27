@@ -83,8 +83,8 @@ export class EventRegistrationService {
       throw new NotFoundError('Event not found');
     }
 
-    // 1. Explicit allowed lifecycle states: only PUBLISHED and REGISTRATION_OPEN
-    const allowedStatuses = ['PUBLISHED', 'REGISTRATION_OPEN'];
+    // 1. Explicit allowed lifecycle states: PUBLISHED, REGISTRATION_OPEN, and EVENT_LIVE (walk-in/day-of-event)
+    const allowedStatuses = ['PUBLISHED', 'REGISTRATION_OPEN', 'EVENT_LIVE'];
     if (!allowedStatuses.includes(event.status)) {
       if (event.status === 'REGISTRATION_CLOSED') {
         throw new ValidationError('Registration is closed for this event');
@@ -141,7 +141,10 @@ export class EventRegistrationService {
     // Explicit lifecycle verification
     this.validateRegistrationEligibility(event);
 
-    const callerUser = await this.userRepo.findBySupabaseId(userSupabaseId);
+    let callerUser = await this.userRepo.findBySupabaseId(userSupabaseId);
+    if (!callerUser && mongoose.Types.ObjectId.isValid(userSupabaseId)) {
+      callerUser = await this.userRepo.findById(userSupabaseId);
+    }
     if (!callerUser) {
       throw new AuthorizationError('Authenticated user profile not found');
     }

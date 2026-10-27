@@ -24,12 +24,16 @@ import {
 interface EventVerificationCardProps {
   eventId: string;
   isOwner?: boolean;
+  isIndividual?: boolean;
+  organizationVerificationStatus?: string;
   onStatusChange?: (newStatus: string) => void;
 }
 
 export const EventVerificationCard: React.FC<EventVerificationCardProps> = ({
   eventId,
   isOwner = true,
+  isIndividual = false,
+  organizationVerificationStatus,
   onStatusChange,
 }) => {
   const [loading, setLoading] = useState(true);
@@ -54,6 +58,7 @@ export const EventVerificationCard: React.FC<EventVerificationCardProps> = ({
   const [sendingOtp, setSendingOtp] = useState(false);
   const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [devOtpHint, setDevOtpHint] = useState<string | null>(null);
+  const [showInstitutionalForm, setShowInstitutionalForm] = useState(false);
 
   const fetchVerification = async () => {
     try {
@@ -227,6 +232,7 @@ export const EventVerificationCard: React.FC<EventVerificationCardProps> = ({
   const isVerified = verification?.status === 'VERIFIED';
   const isPending = verification?.status === 'PENDING';
   const isRejected = verification?.status === 'REJECTED';
+  const isIndividualHost = isIndividual || organizationVerificationStatus === 'NOT_REQUIRED' || (verification?.status as string) === 'NOT_REQUIRED';
 
   return (
     <div className="bg-white border border-surface-border rounded-2xl shadow-sm overflow-hidden">
@@ -235,7 +241,7 @@ export const EventVerificationCard: React.FC<EventVerificationCardProps> = ({
         <div className="flex items-center gap-3.5">
           <div
             className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-              isVerified
+              isVerified || (isIndividualHost && !isPending && !isRejected)
                 ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
                 : isPending
                 ? 'bg-amber-50 text-amber-600 border border-amber-200'
@@ -244,7 +250,7 @@ export const EventVerificationCard: React.FC<EventVerificationCardProps> = ({
                 : 'bg-zinc-100 text-zinc-600 border border-zinc-200'
             }`}
           >
-            {isVerified ? (
+            {isVerified || (isIndividualHost && !isPending && !isRejected) ? (
               <ShieldCheck className="w-5 h-5" />
             ) : isPending ? (
               <Clock className="w-5 h-5" />
@@ -256,10 +262,14 @@ export const EventVerificationCard: React.FC<EventVerificationCardProps> = ({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-bold text-zinc-900">Institutional Verification</h3>
+              <h3 className="text-sm font-bold text-zinc-900">
+                {isIndividualHost ? 'Host Verification & Trust Tier' : 'Institutional Verification'}
+              </h3>
               <span
                 className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
                   isVerified
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    : isIndividualHost && !isPending && !isRejected
                     ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                     : isPending
                     ? 'bg-amber-100 text-amber-800 border border-amber-300'
@@ -268,11 +278,17 @@ export const EventVerificationCard: React.FC<EventVerificationCardProps> = ({
                     : 'bg-zinc-200 text-zinc-700 border border-zinc-300'
                 }`}
               >
-                {verification?.status || 'UNVERIFIED'}
+                {isVerified
+                  ? 'VERIFIED'
+                  : isIndividualHost && !isPending && !isRejected
+                  ? 'STANDARD VERIFIED (INDIVIDUAL)'
+                  : verification?.status || 'UNVERIFIED'}
               </span>
             </div>
             <p className="text-xs text-zinc-500 mt-0.5">
-              Verify university or corporate affiliation to unlock public registrations and credentials.
+              {isIndividualHost
+                ? 'Individual host tier active. Full operational access to registration, credentials, and check-in turnstiles.'
+                : 'Verify university or corporate affiliation to unlock public registrations and credentials.'}
             </p>
           </div>
         </div>
@@ -309,6 +325,34 @@ export const EventVerificationCard: React.FC<EventVerificationCardProps> = ({
           <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-3 text-xs text-emerald-800">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
             <span>{successMsg}</span>
+          </div>
+        )}
+
+        {/* Individual Host Trust Tier Panel */}
+        {isIndividualHost && !isVerified && !isPending && (
+          <div className="bg-emerald-50/50 border border-emerald-200/80 rounded-xl p-5 text-xs text-emerald-950 space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2 font-bold text-emerald-800">
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                <span>Standard Host Trust Tier Active</span>
+              </div>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-white text-emerald-800 border border-emerald-200 shadow-2xs">
+                All Operations Unlocked
+              </span>
+            </div>
+            <p className="text-emerald-800/90 leading-relaxed">
+              This event is organized under <strong>Individual Host</strong> status. You have complete access to public registrations, custom credentials, visual pass generation, staff coordination, and high-throughput day-of-event turnstiles without mandatory institutional approval.
+            </p>
+            <div className="pt-2 border-t border-emerald-200/70 flex items-center justify-between flex-wrap gap-2 text-zinc-600">
+              <span className="text-zinc-500">University, enterprise, or institutional co-sponsorship is optional.</span>
+              <button
+                type="button"
+                onClick={() => setShowInstitutionalForm(!showInstitutionalForm)}
+                className="text-xs font-bold text-emerald-800 hover:text-emerald-950 underline cursor-pointer"
+              >
+                {showInstitutionalForm ? 'Hide Institutional Upgrade' : 'Link Accredited Institution (Optional) →'}
+              </button>
+            </div>
           </div>
         )}
 
@@ -372,7 +416,7 @@ export const EventVerificationCard: React.FC<EventVerificationCardProps> = ({
         )}
 
         {/* Verification Form (Editable if UNVERIFIED, DRAFT, or REJECTED) */}
-        {(!isVerified && !isPending && isOwner) && (
+        {(!isVerified && !isPending && isOwner && (!isIndividualHost || showInstitutionalForm)) && (
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>

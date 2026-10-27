@@ -3,6 +3,7 @@ import { GenerateWorkerTicketsDTO, TicketFilterQuery } from './ticket.types';
 import { isValidTemplateId, DEFAULT_TEMPLATE_ID } from './ticket-templates';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const EVENT_ID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$|^[0-9a-fA-F]{24}$/i;
 
 export function validateEventIdParam(eventId: unknown): string {
   if (typeof eventId !== 'string' || !eventId.trim()) {
@@ -11,9 +12,9 @@ export function validateEventIdParam(eventId: unknown): string {
     ]);
   }
   const cleanId = eventId.trim();
-  if (!UUID_REGEX.test(cleanId)) {
+  if (!EVENT_ID_REGEX.test(cleanId)) {
     throw new ValidationError('Invalid Event ID format', [
-      { field: 'eventId', message: 'Event ID must be a valid UUID' },
+      { field: 'eventId', message: 'Event ID must be a valid UUID or MongoDB ObjectId' },
     ]);
   }
   return cleanId;

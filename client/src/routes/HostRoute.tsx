@@ -11,8 +11,19 @@ interface HostRouteProps {
 }
 
 export const HostRoute: React.FC<HostRouteProps> = ({ user }) => {
-  const { currentEvent } = useEvent();
+  const { currentEvent, loading } = useEvent();
   const navigate = useNavigate();
+
+  if (loading) {
+    return (
+      <div className="min-h-[50vh] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-stone-300 border-t-stone-900 animate-spin" />
+          <span className="text-xs font-semibold text-zinc-500 tracking-wider uppercase">Loading Workspace...</span>
+        </div>
+      </div>
+    );
+  }
 
   const isAuthorized = isHostOrOrganizer(user, currentEvent);
 

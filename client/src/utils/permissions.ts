@@ -71,14 +71,37 @@ export function hasOrganizerProfile(user?: UserIdentity | null): boolean {
  */
 export function isEventOwner(
   user?: UserIdentity | null,
-  event?: { createdBy?: string; ownerId?: string; ownerSupabaseId?: string } | null
+  event?: { createdBy?: string; ownerId?: string; ownerSupabaseId?: string; organizerEmail?: string; userRole?: string; role?: string } | null
 ): boolean {
-  if (!user || !user.id || !event) return false;
-  return (
-    event.createdBy === user.id ||
-    (event as any).ownerSupabaseId === user.id ||
-    (event as any).ownerId === user.id
-  );
+  if (!user || !event) return false;
+
+  const userIdStr = user.id ? String(user.id) : '';
+  const createdByStr = event.createdBy ? String(event.createdBy) : '';
+  const ownerSupabaseIdStr = (event as any).ownerSupabaseId ? String((event as any).ownerSupabaseId) : '';
+  const ownerIdStr = (event as any).ownerId ? String((event as any).ownerId) : '';
+
+  if (userIdStr) {
+    if (
+      (createdByStr && createdByStr === userIdStr) ||
+      (ownerSupabaseIdStr && ownerSupabaseIdStr === userIdStr) ||
+      (ownerIdStr && ownerIdStr === userIdStr)
+    ) {
+      return true;
+    }
+  }
+
+  const userEmail = user.email ? user.email.toLowerCase().trim() : '';
+  const eventEmail = (event as any).organizerEmail ? String((event as any).organizerEmail).toLowerCase().trim() : '';
+  if (userEmail && eventEmail && userEmail === eventEmail) {
+    return true;
+  }
+
+  const role = (event as any).userRole || (event as any).role;
+  if (role === 'HOST' || role === 'COORDINATOR') {
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -291,43 +314,46 @@ export function getHostWorkspaceNavigationCategories({
 
   const categories: NavCategory[] = [
     {
-      title: 'Core Event Management',
+      title: 'Core Management',
       items: [
-        { label: 'Event Console', path: `/events/${eventId}`, icon: LayoutDashboard },
-        { label: 'Verification & Org', path: `/events/${eventId}#verification`, icon: ShieldCheck },
-        { label: 'Operations & Settings', path: `/events/${eventId}#settings`, icon: Settings },
+        { label: 'Event Overview', path: `/events/${eventId}?tab=overview`, icon: LayoutDashboard },
+        { label: 'Event Configuration', path: `/events/${eventId}?tab=configuration`, icon: Settings },
+        { label: 'Verification & Org', path: `/events/${eventId}?tab=verification`, icon: ShieldCheck },
+      ],
+    },
+    {
+      title: 'Attendees & Credentials',
+      items: [
+        { label: 'Pass Management', path: `/events/${eventId}?tab=attendees`, icon: Ticket },
+        { label: 'Guest Roster', path: `/import`, icon: FileSpreadsheet, requiresEvent: true, requiresHost: true },
+        { label: 'Issued Tickets', path: `/tickets`, icon: Ticket, requiresEvent: true, requiresHost: true },
       ],
     },
     {
       title: 'Event Operations',
       items: [
-        { label: 'Guest Roster', path: `/import`, icon: FileSpreadsheet, requiresEvent: true, requiresHost: true },
-        { label: 'Issued Tickets', path: `/tickets`, icon: Ticket, requiresEvent: true, requiresHost: true },
-        { label: 'Scan & Turnstiles', path: `/scan`, icon: QrCode, requiresEvent: true, requiresHost: true },
+        { label: 'Operations Console', path: `/events/${eventId}?tab=operations`, icon: QrCode },
+        { label: 'Turnstile Scanner', path: `/scan`, icon: QrCode, requiresEvent: true, requiresHost: true },
         ...(caps.analytics ? [{ label: 'Reports & Analytics', path: `/reports`, icon: BarChart3, requiresEvent: true, requiresHost: true }] : []),
       ],
     },
+    {
+      title: 'Team & Evaluation',
+      items: [
+        { label: 'Team Console', path: `/events/${eventId}?tab=team`, icon: Users },
+        { label: 'Staff Console', path: `/events/${eventId}/staff-console`, icon: Users },
+        ...((caps.mentors || caps.evaluators || caps.judges)
+          ? [
+              {
+                label: 'Judging & Evaluation',
+                path: `/events/${eventId}/review-workspace`,
+                icon: Award,
+              },
+            ]
+          : []),
+      ],
+    },
   ];
-
-  // Personnel & Scoring capabilities (Hackathons, Competitions, Workshops, etc.)
-  const personnelItems: NavItem[] = [
-    { label: 'Staff Console', path: `/events/${eventId}/staff-console`, icon: Users },
-  ];
-
-  if (caps.mentors || caps.evaluators || caps.judges) {
-    personnelItems.push({
-      label: 'Judging & Evaluation',
-      path: `/events/${eventId}/review-workspace`,
-      icon: Award,
-    });
-  }
-
-  if (personnelItems.length > 0) {
-    categories.push({
-      title: 'Personnel & Evaluation',
-      items: personnelItems,
-    });
-  }
 
   return categories;
 }

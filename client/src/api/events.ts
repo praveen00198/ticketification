@@ -414,6 +414,18 @@ export const eventsApi = {
   // ---------------------------------------------------------------------------
   // Phase 6: Event Lifecycle Engine API Endpoints
   // ---------------------------------------------------------------------------
+  async transitionLifecycle(
+    eventId: string,
+    targetStatus: string,
+    reason?: string
+  ): Promise<any> {
+    const res: any = await apiClient.post(`/events/${eventId}/lifecycle/transition`, {
+      targetStatus,
+      reason,
+    });
+    return res.data;
+  },
+
   async publishEvent(eventId: string): Promise<any> {
     const res: any = await apiClient.post(`/events/${eventId}/publish`);
     return res.data;
@@ -446,18 +458,6 @@ export const eventsApi = {
 
   async cancelEvent(eventId: string, reason: string): Promise<any> {
     const res: any = await apiClient.post(`/events/${eventId}/cancel`, { reason });
-    return res.data;
-  },
-
-  async transitionLifecycle(
-    eventId: string,
-    targetStatus: string,
-    reason?: string
-  ): Promise<any> {
-    const res: any = await apiClient.post(`/events/${eventId}/lifecycle/transition`, {
-      targetStatus,
-      reason,
-    });
     return res.data;
   },
 
