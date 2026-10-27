@@ -72,44 +72,60 @@ export class VerificationService {
     if ((mongoose.connection.readyState === 1 || isMongoConnected() || Boolean((EventModel.findById as any)?.mock)) && mongoose.Types.ObjectId.isValid(eventId)) {
       const eventDoc = await EventModel.findById(eventId).exec();
       if (eventDoc) {
-        let isOwner = eventDoc.ownerSupabaseId === callerUserId || (eventDoc as any).createdBy === callerUserId;
-        if (!isOwner && eventDoc.ownerId) {
-          const userDoc = await UserModel.findOne({
-            $or: [
-              ...(mongoose.Types.ObjectId.isValid(callerUserId) ? [{ _id: new mongoose.Types.ObjectId(callerUserId) }] : []),
-              { supabaseId: callerUserId },
-            ],
-          }).exec();
-          if (userDoc && eventDoc.ownerId.toString() === userDoc._id.toString()) {
-            isOwner = true;
-          }
-        }
-
+        const isOwner = eventDoc.ownerSupabaseId === callerUserId || (eventDoc as any).createdBy === callerUserId;
         if (isOwner) {
           return;
         }
 
+        let userDoc: any = null;
+        if (isMongoConnected() || Boolean((UserModel.findOne as any)?.mock)) {
+          try {
+            userDoc = await UserModel.findOne({
+              $or: [
+                ...(mongoose.Types.ObjectId.isValid(callerUserId) ? [{ _id: new mongoose.Types.ObjectId(callerUserId) }] : []),
+                { supabaseUserId: callerUserId },
+              ],
+            }).exec();
+          } catch {
+            // Ignore lookup errors
+          }
+        }
+
+        if (eventDoc.ownerId && userDoc) {
+          if (eventDoc.ownerId.toString() === userDoc._id.toString()) {
+            return;
+          }
+        }
+
         // Check active staff membership
-        const memberOr: any[] = [{ userSupabaseId: callerUserId }];
+        const memberOr: any[] = [];
         if (mongoose.Types.ObjectId.isValid(callerUserId)) {
           memberOr.push({ userId: new mongoose.Types.ObjectId(callerUserId) });
         }
-
-        const member = await EventMemberModel.findOne({
-          eventId: new mongoose.Types.ObjectId(eventId),
-          $or: memberOr,
-          status: 'ACTIVE',
-        }).exec();
-
-        if (member) {
-          if (member.role === 'HOST' || member.role === 'COORDINATOR') {
-            return;
+        if (userDoc) {
+          memberOr.push({ userId: userDoc._id });
+          if (userDoc.email) {
+            memberOr.push({ userEmail: userDoc.email.toLowerCase().trim() });
           }
-          if (
-            member.role === 'VOLUNTEER' &&
-            (member.permissions?.includes('SCAN_CREDENTIALS') || member.permissions?.includes('MANAGE_ATTENDEES'))
-          ) {
-            return;
+        }
+
+        if (memberOr.length > 0 && (isMongoConnected() || Boolean((EventMemberModel.findOne as any)?.mock))) {
+          const member = await EventMemberModel.findOne({
+            eventId: new mongoose.Types.ObjectId(eventId),
+            $or: memberOr,
+            status: 'ACTIVE',
+          }).exec();
+
+          if (member) {
+            if (member.role === 'HOST' || member.role === 'COORDINATOR') {
+              return;
+            }
+            if (
+              member.role === 'VOLUNTEER' &&
+              (member.permissions?.includes('SCAN_CREDENTIALS') || member.permissions?.includes('MANAGE_ATTENDEES'))
+            ) {
+              return;
+            }
           }
         }
 

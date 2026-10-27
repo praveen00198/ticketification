@@ -1,5 +1,9 @@
+import mongoose from 'mongoose';
 import { qrService } from '../src/modules/tickets/services/qr.service';
 import { VerificationService } from '../src/modules/verification/services/verification.service';
+import { EventModel } from '../src/db/mongo/models/event.model';
+import { UserModel } from '../src/db/mongo/models/user.model';
+import { EventMemberModel } from '../src/db/mongo/models/event-member.model';
 
 describe('VerificationService & QrService Engine', () => {
   it('should generate cryptographically strong 64-character hex tokens', () => {
@@ -151,6 +155,161 @@ describe('VerificationService & QrService Engine', () => {
       expect(result.status).toBe('ALREADY_USED');
       expect(mockCheckinRepo.create).not.toHaveBeenCalled();
       expect(result.message).toContain('already been checked in');
+    });
+  });
+
+  describe('authorizeScanner RBAC & Staff Scoping', () => {
+    const validEventId = new mongoose.Types.ObjectId().toString();
+    const service = new VerificationService({} as any, {} as any, {} as any);
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('allows SUPER_ADMIN and ADMIN callers regardless of event membership', async () => {
+      await expect(service.authorizeScanner(validEventId, 'usr_admin', 'ADMIN')).resolves.toBeUndefined();
+      await expect(service.authorizeScanner(validEventId, 'usr_super', 'SUPER_ADMIN')).resolves.toBeUndefined();
+    });
+
+    it('allows event owner via ownerSupabaseId', async () => {
+      jest.spyOn(EventModel, 'findById').mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          _id: new mongoose.Types.ObjectId(validEventId),
+          ownerSupabaseId: 'usr_host_123',
+        }),
+      } as any);
+
+      await expect(service.authorizeScanner(validEventId, 'usr_host_123', 'USER')).resolves.toBeUndefined();
+    });
+
+    it('allows event owner via ownerId matching UserModel._id resolved by supabaseUserId', async () => {
+      const ownerMongoId = new mongoose.Types.ObjectId();
+      jest.spyOn(EventModel, 'findById').mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          _id: new mongoose.Types.ObjectId(validEventId),
+          ownerId: ownerMongoId,
+        }),
+      } as any);
+
+      jest.spyOn(UserModel, 'findOne').mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          _id: ownerMongoId,
+          supabaseUserId: 'sb_host_custom_id',
+          email: 'host@test.com',
+        }),
+      } as any);
+
+      await expect(service.authorizeScanner(validEventId, 'sb_host_custom_id', 'USER')).resolves.toBeUndefined();
+    });
+
+    it('allows coordinator member with role COORDINATOR', async () => {
+      const coordMongoId = new mongoose.Types.ObjectId();
+      jest.spyOn(EventModel, 'findById').mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          _id: new mongoose.Types.ObjectId(validEventId),
+          ownerId: new mongoose.Types.ObjectId(),
+        }),
+      } as any);
+
+      jest.spyOn(UserModel, 'findOne').mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          _id: coordMongoId,
+          supabaseUserId: 'sb_coord_id',
+          email: 'coordinator@test.com',
+        }),
+      } as any);
+
+      jest.spyOn(EventMemberModel, 'findOne').mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          role: 'COORDINATOR',
+          status: 'ACTIVE',
+        }),
+      } as any);
+
+      await expect(service.authorizeScanner(validEventId, 'sb_coord_id', 'USER')).resolves.toBeUndefined();
+    });
+
+    it('allows volunteer with SCAN_CREDENTIALS permission', async () => {
+      const volMongoId = new mongoose.Types.ObjectId();
+      jest.spyOn(EventModel, 'findById').mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          _id: new mongoose.Types.ObjectId(validEventId),
+          ownerId: new mongoose.Types.ObjectId(),
+        }),
+      } as any);
+
+      jest.spyOn(UserModel, 'findOne').mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          _id: volMongoId,
+          supabaseUserId: 'sb_vol_id',
+          email: 'vol@test.com',
+        }),
+      } as any);
+
+      jest.spyOn(EventMemberModel, 'findOne').mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          role: 'VOLUNTEER',
+          permissions: ['SCAN_CREDENTIALS'],
+          status: 'ACTIVE',
+        }),
+      } as any);
+
+      await expect(service.authorizeScanner(validEventId, 'sb_vol_id', 'USER')).resolves.toBeUndefined();
+    });
+
+    it('rejects volunteer without SCAN_CREDENTIALS permission', async () => {
+      const volMongoId = new mongoose.Types.ObjectId();
+      jest.spyOn(EventModel, 'findById').mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          _id: new mongoose.Types.ObjectId(validEventId),
+          ownerId: new mongoose.Types.ObjectId(),
+        }),
+      } as any);
+
+      jest.spyOn(UserModel, 'findOne').mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          _id: volMongoId,
+          supabaseUserId: 'sb_vol_noperms',
+          email: 'vol_noperms@test.com',
+        }),
+      } as any);
+
+      jest.spyOn(EventMemberModel, 'findOne').mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          role: 'VOLUNTEER',
+          permissions: ['VIEW_ASSIGNED_TASKS'],
+          status: 'ACTIVE',
+        }),
+      } as any);
+
+      await expect(service.authorizeScanner(validEventId, 'sb_vol_noperms', 'USER')).rejects.toThrow(
+        'You are not authorized to scan tickets for this event.'
+      );
+    });
+
+    it('rejects unassigned attendee caller with 403 AuthorizationError', async () => {
+      jest.spyOn(EventModel, 'findById').mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          _id: new mongoose.Types.ObjectId(validEventId),
+          ownerId: new mongoose.Types.ObjectId(),
+        }),
+      } as any);
+
+      jest.spyOn(UserModel, 'findOne').mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          _id: new mongoose.Types.ObjectId(),
+          supabaseUserId: 'sb_attendee_random',
+          email: 'attendee@test.com',
+        }),
+      } as any);
+
+      jest.spyOn(EventMemberModel, 'findOne').mockReturnValue({
+        exec: jest.fn().mockResolvedValue(null),
+      } as any);
+
+      await expect(service.authorizeScanner(validEventId, 'sb_attendee_random', 'USER')).rejects.toThrow(
+        'You are not authorized to scan tickets for this event.'
+      );
     });
   });
 

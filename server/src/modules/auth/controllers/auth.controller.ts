@@ -52,7 +52,7 @@ export class AuthController {
       if (!req.user) {
         throw new AuthenticationError('Unauthorized. Please authenticate first.');
       }
-      const result = await authService.getMe(req.user.id);
+      const result = await authService.getMe(req.user.id, req.user.email);
       res.status(200).json({ success: true, data: result });
     } catch (error) {
       next(error);
