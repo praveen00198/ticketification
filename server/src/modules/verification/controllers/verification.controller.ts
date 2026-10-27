@@ -31,12 +31,16 @@ export class VerificationController {
       const eventId = validateOptionalEventId(req.body.eventId);
       const workerName = validateOptionalWorkerName(req.body.workerName);
       const verifiedBy = req.user ? req.user.email : 'Admin Scanner';
+      const callerUserId = req.user?.id || (req.user as any)?._id?.toString();
+      const callerPlatformRole = req.user?.role;
 
       const result = await verificationService.checkInTicket({
         token,
         eventId,
         workerName,
         verifiedBy,
+        callerUserId,
+        callerPlatformRole,
       });
 
       res.status(200).json({
@@ -55,12 +59,16 @@ export class VerificationController {
       const eventId = validateOptionalEventId(req.body.eventId || req.query.eventId);
       const workerName = validateOptionalWorkerName(req.body.workerName);
       const verifiedBy = req.user ? req.user.email : 'Admin Scanner';
+      const callerUserId = req.user?.id || (req.user as any)?._id?.toString();
+      const callerPlatformRole = req.user?.role;
 
       const result = await verificationService.scanAndCheckIn({
         token,
         eventId,
         workerName,
         verifiedBy,
+        callerUserId,
+        callerPlatformRole,
       });
 
       res.status(200).json({
@@ -85,7 +93,15 @@ export class VerificationController {
         throw new AppError('Event ID is required', 400);
       }
 
-      const checkins = await verificationService.getRecentCheckins(eventId, req.user.id, limit);
+      const callerUserId = req.user.id || (req.user as any)?._id?.toString();
+      const callerPlatformRole = req.user.role;
+
+      const checkins = await verificationService.getRecentCheckins(
+        eventId,
+        callerUserId,
+        limit,
+        callerPlatformRole
+      );
       res.json({
         success: true,
         data: checkins,

@@ -242,7 +242,10 @@ export class MongoEventRepository {
 
   /**
    * Find a single publicly accessible event by ID.
-   * Strictly verifies status is PUBLISHED, REGISTRATION_OPEN, or EVENT_LIVE.
+   * Strictly verifies event has reached a public lifecycle state.
+   * Allows direct microsite navigation to events that are PUBLISHED, REGISTRATION_OPEN,
+   * REGISTRATION_CLOSED, EVENT_LIVE, COMPLETED, or CANCELLED.
+   * Strictly excludes private/unpublished drafts (DRAFT, SUBMITTED, UNDER_REVIEW, REJECTED, SUSPENDED).
    */
   async findPublicById(id: string): Promise<IEventDocument | null> {
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -252,7 +255,16 @@ export class MongoEventRepository {
     return await this.model
       .findOne({
         _id: id,
-        status: { $in: ['PUBLISHED', 'REGISTRATION_OPEN', 'EVENT_LIVE'] },
+        status: {
+          $in: [
+            'PUBLISHED',
+            'REGISTRATION_OPEN',
+            'REGISTRATION_CLOSED',
+            'EVENT_LIVE',
+            'COMPLETED',
+            'CANCELLED',
+          ],
+        },
         organizationVerificationStatus: { $nin: ['PENDING', 'REJECTED'] },
         verificationStatus: { $nin: ['PENDING', 'REJECTED'] },
         $or: [

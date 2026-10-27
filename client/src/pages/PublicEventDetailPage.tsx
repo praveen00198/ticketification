@@ -16,6 +16,8 @@ import {
   Share2,
 } from 'lucide-react';
 import { publicApi, PublicEventDetailResponse } from '../api/public';
+import { attendeeApi } from '../api/attendee';
+import { getStoredAuthToken } from '../api/client';
 import { EventRegistrationModal } from '../components/events/EventRegistrationModal';
 import { ReportEventModal } from '../components/events/ReportEventModal';
 
@@ -26,6 +28,10 @@ export const PublicEventDetailPage: React.FC = () => {
   const [data, setData] = useState<PublicEventDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [myRegistration, setMyRegistration] = useState<{
+    registration: any;
+    credential: any;
+  } | null>(null);
 
   // Modals
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
@@ -57,8 +63,26 @@ export const PublicEventDetailPage: React.FC = () => {
     }
   };
 
+  const loadMyRegistration = async () => {
+    if (!eventId || !getStoredAuthToken()) {
+      setMyRegistration(null);
+      return;
+    }
+    try {
+      const res = await attendeeApi.getMyRegistration(eventId);
+      if (res?.success && res.data?.registration && res.data.registration.status !== 'CANCELLED') {
+        setMyRegistration(res.data);
+      } else {
+        setMyRegistration(null);
+      }
+    } catch {
+      setMyRegistration(null);
+    }
+  };
+
   useEffect(() => {
     loadEvent();
+    loadMyRegistration();
   }, [eventId]);
 
   // Update countdown
@@ -192,9 +216,23 @@ export const PublicEventDetailPage: React.FC = () => {
 
               {/* Status Pill */}
               <div className="shrink-0">
-                {timeLeft.isPast ? (
+                {event.status === 'CANCELLED' ? (
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1.5">
+                    <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
+                    Event Cancelled
+                  </span>
+                ) : event.status === 'COMPLETED' || timeLeft.isPast ? (
                   <span className="px-3 py-1 rounded-full text-xs font-semibold bg-stone-100 text-stone-600 border border-stone-200">
                     Event Concluded
+                  </span>
+                ) : event.status === 'REGISTRATION_CLOSED' ? (
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                    Registration Closed
+                  </span>
+                ) : event.status === 'EVENT_LIVE' ? (
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Event Live
                   </span>
                 ) : (
                   <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
@@ -205,8 +243,17 @@ export const PublicEventDetailPage: React.FC = () => {
               </div>
             </div>
 
+            {event.status === 'CANCELLED' && (
+              <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>
+                  <strong>Notice:</strong> This event has been cancelled by the host. Registrations and access are currently unavailable.
+                </span>
+              </div>
+            )}
+
             {/* Live Countdown Clock */}
-            {!timeLeft.isPast && (
+            {!timeLeft.isPast && event.status !== 'CANCELLED' && event.status !== 'COMPLETED' && (
               <div className="p-4 rounded-xl bg-stone-50 border border-stone-200 max-w-xl">
                 <div className="text-[11px] font-bold text-stone-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5 text-stone-600" />
@@ -374,19 +421,50 @@ export const PublicEventDetailPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Claim Pass CTA */}
-              <button
-                disabled={metrics.isSoldOut || timeLeft.isPast}
-                onClick={() => setIsRegisterOpen(true)}
-                className="w-full py-3.5 rounded-xl bg-stone-900 hover:bg-black disabled:bg-stone-200 disabled:text-stone-400 text-white font-semibold text-sm transition-all flex items-center justify-center gap-2 shadow-xs border border-stone-800"
-              >
-                <Ticket className="w-4 h-4" />
-                {timeLeft.isPast
-                  ? 'Event Concluded'
-                  : metrics.isSoldOut
-                  ? 'Event Sold Out'
-                  : `Claim Your ${event.credentialTerminology || 'Pass'}`}
-              </button>
+              {/* Claim Pass CTA or Registered State */}
+              {myRegistration ? (
+                <div className="space-y-3">
+                  <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200/90 text-xs text-emerald-800 space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold text-emerald-900">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      You Are Registered
+                    </div>
+                    <p className="text-[11px] text-emerald-700">
+                      Pass ID: <span className="font-mono font-semibold">{myRegistration.credential?.formattedId || 'CONFIRMED'}</span>
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => navigate('/wallet')}
+                    className="w-full py-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-sm transition-all flex items-center justify-center gap-2 shadow-xs border border-emerald-800"
+                  >
+                    <Sparkles className="w-4 h-4 text-emerald-200" />
+                    View Your Pass in Wallet
+                  </button>
+                </div>
+              ) : (
+                <button
+                  disabled={
+                    event.status === 'CANCELLED' ||
+                    event.status === 'REGISTRATION_CLOSED' ||
+                    event.status === 'COMPLETED' ||
+                    timeLeft.isPast ||
+                    metrics.isSoldOut
+                  }
+                  onClick={() => setIsRegisterOpen(true)}
+                  className="w-full py-3.5 rounded-xl bg-stone-900 hover:bg-black disabled:bg-stone-200 disabled:text-stone-400 text-white font-semibold text-sm transition-all flex items-center justify-center gap-2 shadow-xs border border-stone-800"
+                >
+                  <Ticket className="w-4 h-4" />
+                  {event.status === 'CANCELLED'
+                    ? 'Event Cancelled'
+                    : event.status === 'REGISTRATION_CLOSED'
+                    ? 'Registration Closed'
+                    : event.status === 'COMPLETED' || timeLeft.isPast
+                    ? 'Event Concluded'
+                    : metrics.isSoldOut
+                    ? 'Event Sold Out'
+                    : `Claim Your ${event.credentialTerminology || 'Pass'}`}
+                </button>
+              )}
 
               <div className="space-y-2 text-xs text-stone-600">
                 <div className="flex items-center gap-2">
@@ -425,7 +503,10 @@ export const PublicEventDetailPage: React.FC = () => {
           eventName={event.name}
           eventType={event.eventType}
           credentialTerminology={event.credentialTerminology}
-          onSuccess={() => loadEvent()}
+          onSuccess={() => {
+            loadEvent();
+            loadMyRegistration();
+          }}
         />
 
         <ReportEventModal
