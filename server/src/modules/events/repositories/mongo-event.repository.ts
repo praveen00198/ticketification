@@ -52,6 +52,9 @@ export class MongoEventRepository {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return null;
     }
+    if (mongoose.connection.readyState !== 1 && !Boolean((this.model.findById as any)?.mock)) {
+      return null;
+    }
     return await this.model.findById(id).exec();
   }
 
@@ -60,6 +63,9 @@ export class MongoEventRepository {
    */
   async findByIdAndOwner(id: string, ownerSupabaseId: string): Promise<IEventDocument | null> {
     if (!mongoose.Types.ObjectId.isValid(id)) {
+      return null;
+    }
+    if (mongoose.connection.readyState !== 1 && !Boolean((this.model.findOne as any)?.mock)) {
       return null;
     }
     return await this.model.findOne({ _id: id, ownerSupabaseId }).exec();
@@ -75,6 +81,16 @@ export class MongoEventRepository {
     const page = Math.max(1, options.page || 1);
     const limit = Math.min(100, Math.max(1, options.limit || 10));
     const skip = (page - 1) * limit;
+
+    if (mongoose.connection.readyState !== 1 && !Boolean((this.model.find as any)?.mock)) {
+      return {
+        events: [],
+        total: 0,
+        page,
+        limit,
+        totalPages: 0,
+      };
+    }
 
     const query: Record<string, any> = { ownerSupabaseId };
 

@@ -6,6 +6,7 @@ import { mongoUserRepository, MongoUserRepository } from '../../auth/repositorie
 import { mongoEventVerificationRepository, MongoEventVerificationRepository } from '../repositories/mongo-event-verification.repository';
 import { mongoEventMemberRepository, MongoEventMemberRepository } from '../repositories/mongo-event-member.repository';
 import { supabaseStorageService, SupabaseStorageService } from '../../tickets/services/supabase-storage.service';
+import config from '../../../config/env';
 import {
   ValidationError,
   NotFoundError,
@@ -336,8 +337,17 @@ export class EventService {
       // Continue to legacy fallback
     }
 
-    const events = await this.eventRepo.findByOwner(userId);
-    return events as EventResponse[];
+    if (config.env.databaseUrl) {
+      try {
+        const events = await this.eventRepo.findByOwner(userId);
+        return events as EventResponse[];
+      } catch (err: any) {
+        console.warn('[EventService] Postgres findByOwner fallback failed:', err.message);
+        return [];
+      }
+    }
+
+    return [];
   }
 
   /**

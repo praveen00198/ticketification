@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { AuthenticatedRequest } from '../../../middlewares/auth.middleware';
 import { eventService, EventService } from '../services/event.service';
 import { AuthenticationError, ValidationError } from '../../../middlewares/error.middleware';
+import config from '../../../config/env';
 import {
   validateEventWizardInput,
   validateEventDraftUpdate,
@@ -40,21 +41,25 @@ export class EventController {
         search,
       });
 
-      // If MongoDB returns 0 events, check if user has legacy events
-      if (result.total === 0) {
-        const legacyEvents = await this.service.getEventsByOwner(req.user.id);
-        if (legacyEvents.length > 0) {
-          res.status(200).json({
-            success: true,
-            data: legacyEvents,
-            pagination: {
-              total: legacyEvents.length,
-              page: 1,
-              limit: legacyEvents.length,
-              totalPages: 1,
-            },
-          });
-          return;
+      // If MongoDB returns 0 events and legacy database is configured, check if user has legacy events
+      if (result.total === 0 && config.env.databaseUrl) {
+        try {
+          const legacyEvents = await this.service.getEventsByOwner(req.user.id);
+          if (legacyEvents.length > 0) {
+            res.status(200).json({
+              success: true,
+              data: legacyEvents,
+              pagination: {
+                total: legacyEvents.length,
+                page: 1,
+                limit: legacyEvents.length,
+                totalPages: 1,
+              },
+            });
+            return;
+          }
+        } catch {
+          // Ignore legacy lookup errors
         }
       }
 

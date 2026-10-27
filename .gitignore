@@ -32,6 +32,7 @@ server/uploads/mock-emails/
 coverage/
 .nyc_output/
 *.playwright-mcp/
+.playwright/
 
 
 # OS
