@@ -498,6 +498,12 @@ sequenceDiagram
     API-->>Host: 202 Accepted { status: "PENDING" }
 ```
 
+### 5.2 On-Demand Rendering Fallback & Local Storage Emulation
+- **On-Demand PNG Fallback**: If a requested credential does not yet have a pre-rendered binary asset in storage, `TicketService` detects the missing asset and dynamically rasterizes a genuine PNG (`0x89504E47`) via Sharp (`eventCredentialRenderingService.renderCredentialBuffer`). The generated binary is cached to storage, the credential record is updated, and the file is streamed immediately with `Content-Type: image/png` and `Content-Disposition: attachment`.
+- **Local Filesystem Fallback**: If cloud Supabase credentials are not configured, `SupabaseStorageService` seamlessly emulates storage using local filesystem directory `uploads/tickets/` served statically at `/uploads/`, ensuring uninterrupted local and dev operation.
+- **Selective & Streaming Keyset ZIP Exports**: Bulk exports support both full event downloads and selective multi-ticket exports based on array query `ticketIds`. Archives are streamed in memory-bounded batches of up to 50 passes at a time.
+
+
 ---
 
 ## 7. High-Performance QR Verification & Atomic Check-In
@@ -537,7 +543,13 @@ sequenceDiagram
     end
 ```
 
+### 7.3 Audit-Preserving Ticket Revocation & Scanner Gate Rejection
+- **Revocation Over Physical Deletion**: Tickets are never permanently purged from the database. Deleting tickets would eliminate audit trails and cause scanners to report "Ticket Not Found" instead of recognizing an invalid entry attempt.
+- **State Transition**: Deleting or revoking a pass transitions status to `'REVOKED'`, recording `revokedAt` and `revocationReason`.
+- **Turnstile Rejection**: When a revoked ticket's QR code is scanned at a check-in turnstile (`POST /api/verification/scan`), the scanner engine evaluates ticket status and rejects the scan with HTTP 400: *"This ticket has been cancelled and is no longer valid for entry"*.
+
 ---
+
 
 ## 8. Asynchronous Background Job & Worker Architecture
 

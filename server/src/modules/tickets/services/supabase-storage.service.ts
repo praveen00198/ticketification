@@ -1,4 +1,5 @@
 import fs from 'fs';
+import path from 'path';
 import config from '../../../config/env';
 import { supabaseStorageAdmin } from '../../../config/supabase';
 import { StorageError } from '../../../middlewares/error.middleware';
@@ -82,14 +83,6 @@ export class SupabaseStorageService {
     fileData: Buffer | string,
     contentType: string = 'image/png'
   ): Promise<{ publicUrl: string; storagePath: string }> {
-    if (!this.client) {
-      throw new StorageError(
-        'Supabase Storage is not configured. SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be provided in environment variables.'
-      );
-    }
-
-    await this.ensureBucket();
-
     let buffer: Buffer;
     let mimeType = contentType;
 
@@ -114,6 +107,14 @@ export class SupabaseStorageService {
     }
 
     const cleanPath = storagePath.replace(/^\/+/, '');
+
+    if (!this.client) {
+      throw new StorageError(
+        'Supabase Storage is not configured. SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be provided in environment variables.'
+      );
+    }
+
+    await this.ensureBucket();
 
     let uploadData: any = null;
     let lastError: any = null;
@@ -169,10 +170,6 @@ export class SupabaseStorageService {
    * Download a ticket asset buffer from Supabase Storage.
    */
   async downloadTicketImage(storagePath: string): Promise<Buffer> {
-    if (!this.client) {
-      throw new StorageError('Supabase Storage is not configured.');
-    }
-
     let cleanPath = storagePath.replace(/^\/+/, '');
     if (cleanPath.startsWith('http://') || cleanPath.startsWith('https://')) {
       const marker = `/storage/v1/object/public/${this.bucket}/`;
@@ -183,6 +180,10 @@ export class SupabaseStorageService {
     }
     if (cleanPath.startsWith(`${this.bucket}/`)) {
       cleanPath = cleanPath.substring(this.bucket.length + 1);
+    }
+
+    if (!this.client) {
+      throw new StorageError('Supabase Storage is not configured.');
     }
 
     const { data, error } = await this.client.storage.from(this.bucket).download(cleanPath);
@@ -200,11 +201,12 @@ export class SupabaseStorageService {
    * Delete a single ticket asset from Supabase Storage.
    */
   async deleteTicketImage(storagePath: string): Promise<boolean> {
+    const cleanPath = storagePath.replace(/^\/+/, '');
+
     if (!this.client) {
       throw new StorageError('Supabase Storage is not configured.');
     }
 
-    const cleanPath = storagePath.replace(/^\/+/, '');
     const { error } = await this.client.storage.from(this.bucket).remove([cleanPath]);
 
     if (error) {
@@ -526,10 +528,11 @@ export class SupabaseStorageService {
     expiresInSeconds: number = 900,
     options?: { download?: string | boolean }
   ): Promise<string> {
+    const cleanPath = storagePath.replace(/^\/+/, '');
+
     if (!this.client) {
       throw new StorageError('Supabase Storage is not configured.');
     }
-    const cleanPath = storagePath.replace(/^\/+/, '');
 
     const signedOptions: any = {};
     if (options?.download) {

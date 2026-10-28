@@ -1,4 +1,5 @@
 import express from 'express';
+import path from 'path';
 import cors from 'cors';
 import authRoutes from './modules/auth/routes/auth.routes';
 import guestRoutes from './modules/guests/routes/guest.routes';
@@ -95,6 +96,9 @@ app.get('/verify/:token', (req, res) => {
     'https://ticketification.vercel.app';
   return res.redirect(302, `${frontendUrl.replace(/\/+$/, '')}/verify/${token}`);
 });
+
+// Serve local uploads statically for development / local storage mode
+app.use('/uploads', express.static(path.resolve(process.cwd(), config.env.uploadDir || 'uploads')));
 
 // Legacy backward-compatible redirect: if any legacy URL is accessed, redirect to canonical Supabase Storage URL
 app.get('/uploads/tickets/:filename', async (req, res) => {

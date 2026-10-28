@@ -3,6 +3,7 @@ import { ValidateImportDTO, ConfirmImportDTO, TargetField } from './guest-import
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EVENT_ID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$|^[0-9a-fA-F]{24}$/i;
+const IMPORT_ID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$|^imp-[a-zA-Z0-9_-]+$/i;
 
 const VALID_TARGET_FIELDS = new Set<TargetField>([
   'name',
@@ -37,8 +38,8 @@ export function validateImportConfig(input: unknown): ValidateImportDTO {
   // Validate importId
   if (!payload.importId || typeof payload.importId !== 'string' || !payload.importId.trim()) {
     errors.push({ field: 'importId', message: 'Import ID is required' });
-  } else if (!UUID_REGEX.test(payload.importId.trim())) {
-    errors.push({ field: 'importId', message: 'Import ID must be a valid UUID' });
+  } else if (!IMPORT_ID_REGEX.test(payload.importId.trim())) {
+    errors.push({ field: 'importId', message: 'Import ID must be a valid UUID or import token' });
   }
 
   // Validate columnMapping
@@ -121,8 +122,8 @@ export function validateConfirmConfig(input: unknown): ConfirmImportDTO {
   // Validate importId
   if (!payload.importId || typeof payload.importId !== 'string' || !payload.importId.trim()) {
     errors.push({ field: 'importId', message: 'Import ID is required' });
-  } else if (!UUID_REGEX.test(payload.importId.trim())) {
-    errors.push({ field: 'importId', message: 'Import ID must be a valid UUID' });
+  } else if (!IMPORT_ID_REGEX.test(payload.importId.trim())) {
+    errors.push({ field: 'importId', message: 'Import ID must be a valid UUID or import token' });
   }
 
   // Validate skipDuplicates (optional boolean)

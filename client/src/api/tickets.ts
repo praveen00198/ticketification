@@ -4,7 +4,7 @@ export interface TicketListItem {
   id: string;
   sequenceNumber: number;
   verificationToken: string;
-  status: 'ACTIVE' | 'USED' | 'CANCELLED';
+  status: 'ACTIVE' | 'USED' | 'CANCELLED' | 'REVOKED' | string;
   usagePolicy: 'SINGLE_USE' | 'REUSABLE' | 'REUSABLE_WORKER' | string;
   assetUrl?: string | null;
   createdAt: string;
@@ -69,9 +69,10 @@ export const ticketsApi = {
     return res.data;
   },
 
-  async downloadTicketsZip(eventId: string): Promise<Blob> {
+  async downloadTicketsZip(eventId: string, ticketIds?: string[]): Promise<Blob> {
     const token = getStoredAuthToken();
-    const url = `${API_BASE_URL}/tickets/events/${eventId}/export-zip`;
+    const query = ticketIds && ticketIds.length > 0 ? `?ticketIds=${encodeURIComponent(ticketIds.join(','))}` : '';
+    const url = `${API_BASE_URL}/tickets/events/${eventId}/export-zip${query}`;
     const res = await fetch(url, {
       method: 'GET',
       headers: {
@@ -124,6 +125,13 @@ export const ticketsApi = {
 
     const blob = await res.blob();
     return { blob, fileName };
+  },
+
+  async revokeTicket(ticketId: string, eventId: string, reason?: string): Promise<{ id: string; status: string; message: string }> {
+    const res: any = await apiClient.delete(`/tickets/events/${eventId}/tickets/${ticketId}`, {
+      data: { reason: reason || 'Revoked by host' },
+    });
+    return res.data?.data || res.data;
   },
 };
 

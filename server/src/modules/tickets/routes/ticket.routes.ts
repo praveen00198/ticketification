@@ -27,6 +27,10 @@ router.get('/events/:eventId/tickets/:ticketId/download', (req, res, next) =>
   ticketController.downloadTicket(req, res, next)
 );
 
+router.delete('/events/:eventId/tickets/:ticketId', (req, res, next) =>
+  ticketController.deleteOrRevokeTicket(req, res, next)
+);
+
 // Fallback direct routes
 router.get('/export-zip', (req, res, next) =>
   ticketController.exportTicketsZip(req, res, next)

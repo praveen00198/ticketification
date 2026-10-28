@@ -18,6 +18,8 @@ import {
   Plus,
   ArrowRight,
   Eye,
+  Trash2,
+  ShieldAlert,
 } from 'lucide-react';
 import { TICKET_TEMPLATES, DEFAULT_TEMPLATE_ID } from '../utils/ticketTemplates';
 import { EmptyEventsState } from '../components/ui';
@@ -42,6 +44,12 @@ export const TicketList: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Selection and Revocation State
+  const [selectedTicketIds, setSelectedTicketIds] = useState<Set<string>>(new Set());
+  const [downloadingSelectedZip, setDownloadingSelectedZip] = useState(false);
+  const [ticketToRevoke, setTicketToRevoke] = useState<TicketListItem | null>(null);
+  const [revoking, setRevoking] = useState(false);
 
   // Preview Modal
   const [selectedTicket, setSelectedTicket] = useState<TicketListItem | null>(null);
@@ -123,6 +131,55 @@ export const TicketList: React.FC = () => {
       }
     } finally {
       setDownloadingTicketId(null);
+    }
+  };
+
+  const toggleSelectTicket = (id: string) => {
+    setSelectedTicketIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedTicketIds.size === tickets.length && tickets.length > 0) {
+      setSelectedTicketIds(new Set());
+    } else {
+      setSelectedTicketIds(new Set(tickets.map((t) => t.id)));
+    }
+  };
+
+  const handleDownloadSelected = async () => {
+    if (!currentEvent || selectedTicketIds.size === 0) return;
+    try {
+      setDownloadingSelectedZip(true);
+      const blob = await ticketsApi.downloadTicketsZip(currentEvent.id, Array.from(selectedTicketIds));
+      const prefix = (currentEvent.name || 'TKT').substring(0, 3).toUpperCase();
+      triggerBlobDownload(blob, `${prefix}-selected-tickets.zip`);
+      setMessage(`Successfully downloaded ${selectedTicketIds.size} selected ticket(s) as ZIP archive`);
+    } catch (err: any) {
+      setError(err.message || 'Failed to download selected tickets');
+    } finally {
+      setDownloadingSelectedZip(false);
+    }
+  };
+
+  const handleRevokeConfirm = async () => {
+    if (!currentEvent || !ticketToRevoke) return;
+    try {
+      setRevoking(true);
+      await ticketsApi.revokeTicket(ticketToRevoke.id, currentEvent.id, 'Revoked by event host');
+      setTickets((prev) =>
+        prev.map((t) => (t.id === ticketToRevoke.id ? { ...t, status: 'REVOKED' } : t))
+      );
+      setMessage(`Ticket #${ticketToRevoke.sequenceNumber.toString().padStart(5, '0')} revoked successfully`);
+      setTicketToRevoke(null);
+    } catch (err: any) {
+      setError(err.message || 'Failed to revoke ticket');
+    } finally {
+      setRevoking(false);
     }
   };
 
@@ -432,6 +489,43 @@ export const TicketList: React.FC = () => {
         </div>
       </div>
 
+      {/* Selection Action Bar */}
+      {selectedTicketIds.size > 0 && (
+        <div className="flex items-center justify-between p-3.5 bg-brand-50/80 border border-brand-200 rounded-2xl text-xs shadow-sm">
+          <div className="flex items-center gap-2 text-brand-900 font-semibold">
+            <CheckCircle2 className="w-4 h-4 text-brand-600" />
+            <span>
+              <strong className="font-bold">{selectedTicketIds.size}</strong> of {tickets.length} ticket(s) selected
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleDownloadSelected}
+              disabled={downloadingSelectedZip}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl shadow-sm transition-colors disabled:opacity-50"
+            >
+              {downloadingSelectedZip ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Packaging Selected...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download Selected (ZIP)</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={() => setSelectedTicketIds(new Set())}
+              className="px-2.5 py-1.5 bg-white hover:bg-zinc-100 text-zinc-600 font-medium rounded-xl border border-zinc-200 transition-colors"
+            >
+              Clear Selection
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Tickets Data Grid */}
       <div className="bg-white border border-surface-border rounded-2xl overflow-hidden shadow-sm">
         {loading ? (
@@ -456,6 +550,15 @@ export const TicketList: React.FC = () => {
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-zinc-200 bg-zinc-50 text-zinc-500 uppercase font-mono text-[10px]">
+                  <th className="py-3 px-4 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all tickets"
+                      checked={tickets.length > 0 && selectedTicketIds.size === tickets.length}
+                      onChange={toggleSelectAll}
+                      className="rounded border-zinc-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
+                    />
+                  </th>
                   <th className="py-3 px-4"># Seq</th>
                   <th className="py-3 px-4">Guest Name</th>
                   <th className="py-3 px-4">Category</th>
@@ -468,6 +571,15 @@ export const TicketList: React.FC = () => {
               <tbody className="divide-y divide-zinc-100">
                 {tickets.map((t) => (
                   <tr key={t.id} className="hover:bg-zinc-50/80 transition-colors">
+                    <td className="py-3 px-4 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ticket #${t.sequenceNumber}`}
+                        checked={selectedTicketIds.has(t.id)}
+                        onChange={() => toggleSelectTicket(t.id)}
+                        className="rounded border-zinc-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
+                      />
+                    </td>
                     <td className="py-3 px-4 font-mono font-bold text-brand-600">
                       #{t.sequenceNumber.toString().padStart(5, '0')}
                     </td>
@@ -526,20 +638,26 @@ export const TicketList: React.FC = () => {
                           <Eye className="w-3.5 h-3.5 text-brand-600" />
                           <span>Preview</span>
                         </button>
-                        {t.assetUrl && (
-                          <button
-                            onClick={() => handleDownloadSingleTicket(t)}
-                            disabled={downloadingTicketId === t.id}
-                            className="p-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-900 rounded-lg border border-zinc-200 transition-colors shadow-sm disabled:opacity-50"
-                            title="Download PNG"
-                          >
-                            {downloadingTicketId === t.id ? (
-                              <RefreshCw className="w-3.5 h-3.5 animate-spin text-brand-600" />
-                            ) : (
-                              <Download className="w-3.5 h-3.5" />
-                            )}
-                          </button>
-                        )}
+                        <button
+                          onClick={() => handleDownloadSingleTicket(t)}
+                          disabled={downloadingTicketId === t.id}
+                          className="p-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-900 rounded-lg border border-zinc-200 transition-colors shadow-sm disabled:opacity-50"
+                          title="Download PNG"
+                        >
+                          {downloadingTicketId === t.id ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin text-brand-600" />
+                          ) : (
+                            <Download className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                        <button
+                          onClick={() => setTicketToRevoke(t)}
+                          disabled={t.status === 'REVOKED'}
+                          className="p-1.5 bg-zinc-100 hover:bg-rose-50 text-zinc-500 hover:text-rose-600 rounded-lg border border-zinc-200 hover:border-rose-300 transition-colors shadow-sm disabled:opacity-40 disabled:hover:bg-zinc-100 disabled:hover:text-zinc-400 disabled:hover:border-zinc-200"
+                          title={t.status === 'REVOKED' ? 'Ticket already revoked' : 'Revoke ticket'}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -597,20 +715,18 @@ export const TicketList: React.FC = () => {
               </a>
 
               <div className="flex items-center gap-2">
-                {selectedTicket.assetUrl && (
-                  <button
-                    onClick={() => handleDownloadSingleTicket(selectedTicket)}
-                    disabled={downloadingTicketId === selectedTicket.id}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all disabled:opacity-50"
-                  >
-                    {downloadingTicketId === selectedTicket.id ? (
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <Download className="w-3.5 h-3.5" />
-                    )}
-                    <span>Download PNG</span>
-                  </button>
-                )}
+                <button
+                  onClick={() => handleDownloadSingleTicket(selectedTicket)}
+                  disabled={downloadingTicketId === selectedTicket.id}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all disabled:opacity-50"
+                >
+                  {downloadingTicketId === selectedTicket.id ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Download className="w-3.5 h-3.5" />
+                  )}
+                  <span>Download PNG</span>
+                </button>
 
                 <button
                   onClick={() => setSelectedTicket(null)}
@@ -619,6 +735,56 @@ export const TicketList: React.FC = () => {
                   Close
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Revocation Confirmation Modal */}
+      {ticketToRevoke && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white border border-rose-200 w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-2.5 bg-rose-50 rounded-xl border border-rose-200">
+                <ShieldAlert className="w-6 h-6 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-zinc-900">Revoke Ticket Admission</h3>
+                <p className="text-xs text-zinc-500">
+                  Ticket #{ticketToRevoke.sequenceNumber.toString().padStart(5, '0')} • {ticketToRevoke.guest?.name || 'Valued Guest'}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-zinc-50 rounded-xl border border-zinc-200 text-xs text-zinc-600 leading-relaxed">
+              Are you sure you want to revoke this pass? Once revoked, the attendee will be barred from check-in, and scanner stations will reject this cryptographic token.
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                onClick={() => setTicketToRevoke(null)}
+                disabled={revoking}
+                className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold rounded-xl transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRevokeConfirm}
+                disabled={revoking}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-md shadow-rose-600/20 transition-all disabled:opacity-50"
+              >
+                {revoking ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Revoking...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Confirm Revocation</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

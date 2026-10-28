@@ -227,3 +227,13 @@ This file serves as the permanent institutional memory for Ticketification. All 
   5. Error logs are deduplicated across chunk iterations and retries to avoid duplicate error entries for the same row.
   6. Distributed worker lease ownership (`lockedBy: workerId` and valid lease expiry) is strictly enforced on all progress updates and completion calls.
 
+### 2.25 On-Demand Credential Rendering Fallback, Local Storage Emulation, and Audit-Preserving Revocation
+- **Lesson**: Newly created credentials lack pre-rendered binary PNGs in storage until requested or asynchronously rendered. Relying strictly on pre-existing storage files caused immediate HTTP 404s for attendee wallet pass downloads. Furthermore, in development environments without cloud object storage credentials, storage downloads threw unhandled connection errors. Physically deleting ticket records destroys the audit log and prevents turnstiles from properly recognizing cancelled passes.
+- **Invariant**:
+  1. On-Demand Rendering: If `asset.storagePath` is missing or object storage download fails, `downloadTicket` and `getTicketWithAsset` dynamically rasterize the genuine PNG (`0x89504E47`) on the fly via `EventCredentialRenderingService`, cache the output to storage, and update the credential document.
+  2. Local Storage Fallback: When Supabase credentials are absent, `SupabaseStorageService` writes and streams files from local disk (`uploads/tickets/`) with static serving via Express (`/uploads/`), ensuring zero environment blocking.
+  3. UI Action Visibility: Frontend ticket lists must NOT guard single-ticket downloads behind `t.assetUrl`. Download actions must be unconditionally available, triggering on-demand server rendering when needed.
+  4. Ticket Revocation vs Deletion: Tickets must NEVER be physically deleted from the database. Deletion endpoints transition status to `'REVOKED'`, recording `revokedAt` and `revocationReason`. The turnstile scanner engine explicitly evaluates `'REVOKED'` status and returns HTTP 400: *"This ticket has been cancelled and is no longer valid for entry"*.
+  5. Multi-Engine Guest Import Authorization: Guest import services must support both MongoDB (`ownerId` / `ownerSupabaseId`) and PostgreSQL event records, permitting custom import identifiers (`imp-...`). Monotonic sequences must be allocated atomically via `mongoEventCredentialRepository.getNextSequenceNumber(eventId)`.
+
+

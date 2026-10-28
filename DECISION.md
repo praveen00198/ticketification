@@ -1017,4 +1017,39 @@
   2. Full test suite verification: 18/18 tests passing in `architecturalAuditVerification.test.ts`, 14/14 in `productionRbacAndSession.test.ts`, 14/14 in `eventCapabilitiesAndPublication.test.ts`, 28/28 in `eventCreationWizard.test.ts`, 15/15 in `eventVerification.test.ts`, 16/16 in `eventLifecycle.test.ts`.
   3. Zero build regressions: `npm run build` succeeds cleanly in both `client` and `server`.
 
+---
+
+## ADR-045: On-Demand Credential PNG Rendering Fallback, Multi-Engine Guest Import Pipeline, and Audit-Preserving Ticket Revocation
+- **Status**: IMPLEMENTED & VERIFIED
+- **Context**:
+  1. **Attendee Pass Download (`/wallet`)**: Authenticated attendees encountered `NotFoundError` when downloading passes for newly created credentials because the pass lacked a pre-rendered binary PNG asset in cloud storage. In development environments without active Supabase credentials, storage downloads threw unhandled connection errors. On the frontend, single pass downloads were guarded by `{t.assetUrl && (`, hiding download buttons from attendees before rendering.
+  2. **Host Bulk & Selective Downloads**: The host console needed to support both full event ZIP exports and selective multi-ticket exports based on UI row checkboxes, with memory-bounded streaming and proper PK ZIP headers.
+  3. **Ticket Deletion vs Revocation Invariant**: Event hosts required an accessible revocation/deletion control. Deleting physical records from the database violates audit trails and would cause scanners to fail to identify previously valid tickets. Revoked tickets must be explicitly tracked and blocked at check-in turnstiles.
+  4. **Guest Import Pipeline**: Uploading spreadsheets failed on canonical MongoDB events because `GuestImportService` previously only validated PostgreSQL event records and strictly enforced standard UUIDs on `importId`.
+- **Decision**:
+  1. **High-Performance On-Demand Credential Rendering & Storage Fallback**:
+     - Updated `ticket.service.ts` (`downloadTicket`, `getTicketWithAsset`): If a ticket has no pre-rendered binary asset or storage lookup fails, the server dynamically renders the genuine PNG binary (`0x89504E47`) on the fly via `eventCredentialRenderingService.renderCredentialBuffer` using Sharp, caches it to storage, updates the credential document, and streams it with `Content-Type: image/png` and `Content-Disposition: attachment`.
+     - Added local filesystem fallback (`uploads/tickets/`) in `supabase-storage.service.ts` when Supabase credentials are not configured, with static route serving (`/uploads`) in `app.ts`.
+     - Dual-engine identity resolution supporting both `ownerId` (MongoDB ObjectId) and `ownerSupabaseId` (`usr_...`).
+     - Removed `{t.assetUrl && (` guard in `TicketList.tsx` so single ticket download is unconditionally available.
+  2. **Selective & Streaming Keyset ZIP Export**:
+     - Extended `streamTicketsZip` and `exportTicketsZip` in `ticket.service.ts` / `ticket.controller.ts` to accept optional `ticketIds` query parameter.
+     - Streams bounded batches of up to 50 tickets at a time into `archiver`, resolving missing assets on-demand and preventing memory spikes.
+     - Added multi-select checkbox column and dynamic selection action bar ("N of M ticket(s) selected", "Download Selected (ZIP)") in `TicketList.tsx`.
+  3. **Audit-Preserving Ticket Revocation**:
+     - Added `DELETE /api/events/:eventId/tickets/:ticketId` mapped to `ticketController.deleteOrRevokeTicket`.
+     - Preserves physical documents for audit and anti-fraud integrity; transitions status to `'REVOKED'`, records `revokedAt` and `revocationReason`.
+     - Check-in scanner engine (`/api/verification/scan`) verifies ticket status and rejects revoked passes with HTTP 400: *"This ticket has been cancelled and is no longer valid for entry"*.
+     - Added accessible Revoke action button with tooltip and confirmation modal in `TicketList.tsx`.
+  4. **Multi-Engine Guest Import Pipeline**:
+     - Updated `guest-import.service.ts` to authorize events across both MongoDB (`mongoEventRepository`) and PostgreSQL (`eventRepository`), supporting dual-identity lookup (`ownerId` / `ownerSupabaseId`).
+     - Added support for Mongo-friendly import IDs (`imp-...`) validated by `IMPORT_ID_REGEX` in `guest-import.validation.ts`.
+     - Atomic sequence allocation using `mongoEventCredentialRepository.getNextSequenceNumber(eventId)` during import confirmation, persisting attendee details and generating valid credentials.
+- **Consequences**:
+  1. Attendee wallet pass download is 100% reliable with verified PNG binaries (`0x89504E47`).
+  2. Host console supports both full event and selective multi-ticket exports in valid PK ZIPs (`0x504B`).
+  3. Revoked tickets are permanently blocked from check-in while maintaining complete audit trails.
+  4. Guest imports successfully parse, validate, and persist attendee rosters into canonical MongoDB event credentials.
+  5. Verified across automated backend test scripts (`verify_api_workflows.js`) and Playwright browser tests (`run_playwright_scenarios.js`).
+
 

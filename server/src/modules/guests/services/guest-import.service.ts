@@ -12,6 +12,12 @@ import {
   NotFoundError,
   ConflictError,
 } from '../../../middlewares/error.middleware';
+import crypto from 'crypto';
+import mongoose from 'mongoose';
+import { EventModel } from '../../../db/mongo/models/event.model';
+import { EventMemberModel } from '../../../db/mongo/models/event-member.model';
+import { EventCredentialModel } from '../../../db/mongo/models/event-credential.model';
+import { mongoEventCredentialRepository } from '../../events/repositories/mongo-event-credential.repository';
 import {
   HeaderAnalysisResult,
   ValidateImportDTO,
@@ -38,7 +44,21 @@ function moveFile(src: string, dest: string): void {
 
 export class GuestImportService {
   // In-memory cache of parsed file buffers/paths keyed by importId for sub-millisecond hot access
-  private activeUploads = new Map<string, { filePath: string; rawRows: Record<string, any>[] }>();
+  private activeUploads = new Map<
+    string,
+    {
+      filePath: string;
+      rawRows: Record<string, any>[];
+      eventId?: string;
+      userId?: string;
+      isMongo?: boolean;
+      fileName?: string;
+      columnMapping?: Record<string, string>;
+      requiredFields?: string[];
+      categoryMapping?: Record<string, string>;
+      defaultCategory?: string;
+    }
+  >();
 
   constructor(
     private guestRepo: GuestRepository = guestRepository,
@@ -46,6 +66,42 @@ export class GuestImportService {
     private eventRepo: EventRepository = eventRepository,
     private ticketTypeRepo: TicketTypeRepository = ticketTypeRepository
   ) {}
+
+  /**
+   * Universal Event Authorization helper defending against IDOR across MongoDB & PostgreSQL.
+   */
+  private async checkEventAuthorization(
+    eventId: string,
+    userId: string
+  ): Promise<{ isMongo: boolean; event: any }> {
+    if (mongoose.connection.readyState === 1 && mongoose.Types.ObjectId.isValid(eventId)) {
+      const mongoEvent = await EventModel.findById(eventId);
+      if (mongoEvent) {
+        const isOwner =
+          mongoEvent.ownerSupabaseId === userId ||
+          String(mongoEvent.ownerId) === userId ||
+          String(mongoEvent.ownerSupabaseId) === userId;
+
+        if (!isOwner) {
+          const member = await EventMemberModel.findOne({
+            eventId: mongoEvent._id,
+            status: 'ACTIVE',
+            role: { $in: ['HOST', 'COORDINATOR'] } as any,
+          } as any);
+          if (!member) {
+            throw new NotFoundError('Event not found or unauthorized');
+          }
+        }
+        return { isMongo: true, event: mongoEvent };
+      }
+    }
+
+    const event = await this.eventRepo.findByIdAndOwner(eventId, userId);
+    if (!event) {
+      throw new NotFoundError('Event not found or unauthorized');
+    }
+    return { isMongo: false, event };
+  }
 
   private getUploadDir(): string {
     const dir = path.resolve(process.cwd(), config.env.uploadDir);
@@ -170,10 +226,7 @@ export class GuestImportService {
     tempFilePath: string,
     originalName: string
   ): Promise<HeaderAnalysisResult> {
-    const event = await this.eventRepo.findByIdAndOwner(eventId, userId);
-    if (!event) {
-      throw new NotFoundError('Event not found or unauthorized');
-    }
+    const { isMongo } = await this.checkEventAuthorization(eventId, userId);
 
     const rawJson = this.parseSpreadsheet(tempFilePath);
     const headers = Object.keys(rawJson[0]);
@@ -203,19 +256,24 @@ export class GuestImportService {
       });
     }
 
-    // Create a guest_imports record in PostgreSQL
-    const importRecord = await this.importRepo.create({
-      eventId,
-      fileName: originalName,
-      totalRows: rawJson.length,
-      status: 'ANALYZING',
-      columnMapping: detectedMappings,
-      createdBy: userId,
-    });
+    let importId: string;
+    if (isMongo) {
+      importId = `imp-${new mongoose.Types.ObjectId().toString()}`;
+    } else {
+      const importRecord = await this.importRepo.create({
+        eventId,
+        fileName: originalName,
+        totalRows: rawJson.length,
+        status: 'ANALYZING',
+        columnMapping: detectedMappings,
+        createdBy: userId,
+      });
+      importId = importRecord.id;
+    }
 
     // Move uploaded file to persistent staging location named after import ID
     const ext = path.extname(originalName).toLowerCase() || '.xlsx';
-    const stagingPath = this.getStagingPath(importRecord.id, ext);
+    const stagingPath = this.getStagingPath(importId, ext);
     try {
       moveFile(tempFilePath, stagingPath);
     } catch {
@@ -223,10 +281,18 @@ export class GuestImportService {
     }
 
     // Cache in memory for fast retrieval
-    this.activeUploads.set(importRecord.id, { filePath: stagingPath, rawRows: rawJson });
+    this.activeUploads.set(importId, {
+      filePath: stagingPath,
+      rawRows: rawJson,
+      eventId,
+      userId,
+      isMongo,
+      fileName: originalName,
+      columnMapping: detectedMappings,
+    });
 
     return {
-      importId: importRecord.id,
+      importId,
       fileName: originalName,
       headers,
       rowCount: rawJson.length,
@@ -245,27 +311,27 @@ export class GuestImportService {
     userId: string,
     config: ValidateImportDTO
   ): Promise<ValidationResult> {
-    const event = await this.eventRepo.findByIdAndOwner(eventId, userId);
-    if (!event) {
-      throw new NotFoundError('Event not found or unauthorized');
-    }
+    const { isMongo } = await this.checkEventAuthorization(eventId, userId);
 
-    const importRecord =
-      typeof this.importRepo.findByIdAndEventId === 'function'
-        ? await this.importRepo.findByIdAndEventId(config.importId, eventId)
-        : await this.importRepo.findById(config.importId);
+    const cached = this.activeUploads.get(config.importId);
 
-    if (!importRecord || (importRecord.eventId && importRecord.eventId !== eventId)) {
-      throw new NotFoundError('Import session not found for this event');
-    }
+    if (!isMongo) {
+      const importRecord =
+        typeof this.importRepo.findByIdAndEventId === 'function'
+          ? await this.importRepo.findByIdAndEventId(config.importId, eventId)
+          : await this.importRepo.findById(config.importId);
 
-    if (importRecord.status === 'COMPLETED') {
-      throw new ConflictError('This import session has already been completed and committed');
+      if (!importRecord || (importRecord.eventId && importRecord.eventId !== eventId)) {
+        throw new NotFoundError('Import session not found for this event');
+      }
+
+      if (importRecord.status === 'COMPLETED') {
+        throw new ConflictError('This import session has already been completed and committed');
+      }
     }
 
     // Retrieve raw rows from in-memory cache or fallback to persistent staging file
     let rawRows: Record<string, any>[] | null = null;
-    const cached = this.activeUploads.get(config.importId);
 
     if (cached?.rawRows && cached.rawRows.length > 0) {
       rawRows = cached.rawRows;
@@ -274,7 +340,7 @@ export class GuestImportService {
       if (stagingPath && fs.existsSync(stagingPath)) {
         try {
           rawRows = this.parseSpreadsheet(stagingPath);
-          this.activeUploads.set(config.importId, { filePath: stagingPath, rawRows });
+          this.activeUploads.set(config.importId, { filePath: stagingPath, rawRows, eventId, isMongo });
         } catch {
           rawRows = null;
         }
@@ -453,16 +519,25 @@ export class GuestImportService {
 
     const invalidCount = rawRows.length - validCount;
 
-    // Update guest_imports audit record in PostgreSQL
-    await this.importRepo.update(config.importId, {
-      columnMapping: config.columnMapping,
-      requiredFields: Array.from(requiredFields),
-      categoryMapping: config.categoryMapping || {},
-      validRows: validCount,
-      invalidRows: invalidCount,
-      status: 'READY',
-      errorReport: errors.slice(0, 100),
-    });
+    if (cached) {
+      cached.columnMapping = config.columnMapping;
+      cached.requiredFields = Array.from(requiredFields);
+      cached.categoryMapping = config.categoryMapping || {};
+      cached.defaultCategory = defaultCategory;
+    }
+
+    if (!isMongo) {
+      // Update guest_imports audit record in PostgreSQL
+      await this.importRepo.update(config.importId, {
+        columnMapping: config.columnMapping,
+        requiredFields: Array.from(requiredFields),
+        categoryMapping: config.categoryMapping || {},
+        validRows: validCount,
+        invalidRows: invalidCount,
+        status: 'READY',
+        errorReport: errors.slice(0, 100),
+      });
+    }
 
     return {
       importId: config.importId,
@@ -484,28 +559,36 @@ export class GuestImportService {
     userId: string,
     dto: ConfirmImportDTO
   ): Promise<ConfirmImportResult> {
-    const event = await this.eventRepo.findByIdAndOwner(eventId, userId);
-    if (!event) {
-      throw new NotFoundError('Event not found or unauthorized');
+    const { isMongo, event } = await this.checkEventAuthorization(eventId, userId);
+
+    let columnMapping: Record<string, string> = {};
+    let requiredFields = new Set<string>(['name']);
+    let categoryMapping: Record<string, string> = {};
+
+    if (!isMongo) {
+      const importRecord =
+        typeof this.importRepo.findByIdAndEventId === 'function'
+          ? await this.importRepo.findByIdAndEventId(dto.importId, eventId)
+          : await this.importRepo.findById(dto.importId);
+
+      if (!importRecord || (importRecord.eventId && importRecord.eventId !== eventId)) {
+        throw new NotFoundError('Import record not found for this event');
+      }
+
+      if (importRecord.status === 'COMPLETED') {
+        throw new ConflictError('This import session has already been completed');
+      }
+
+      columnMapping = (importRecord.columnMapping as Record<string, string>) || {};
+      requiredFields = new Set<string>(
+        ((importRecord.requiredFields as string[]) || ['name']).map((f) => f.toLowerCase())
+      );
+      categoryMapping = (importRecord.categoryMapping as Record<string, string>) || {};
     }
 
-    const importRecord =
-      typeof this.importRepo.findByIdAndEventId === 'function'
-        ? await this.importRepo.findByIdAndEventId(dto.importId, eventId)
-        : await this.importRepo.findById(dto.importId);
-
-    if (!importRecord || (importRecord.eventId && importRecord.eventId !== eventId)) {
-      throw new NotFoundError('Import record not found for this event');
-    }
-
-    if (importRecord.status === 'COMPLETED') {
-      throw new ConflictError('This import session has already been completed');
-    }
-
-    // Retrieve raw rows from cache or persistent staging file
-    let rawRows: Record<string, any>[] | null = null;
     const cached = this.activeUploads.get(dto.importId);
 
+    let rawRows: Record<string, any>[] | null = null;
     if (cached?.rawRows && cached.rawRows.length > 0) {
       rawRows = cached.rawRows;
     } else {
@@ -513,7 +596,7 @@ export class GuestImportService {
       if (stagingPath && fs.existsSync(stagingPath)) {
         try {
           rawRows = this.parseSpreadsheet(stagingPath);
-          this.activeUploads.set(dto.importId, { filePath: stagingPath, rawRows });
+          this.activeUploads.set(dto.importId, { filePath: stagingPath, rawRows, eventId, isMongo });
         } catch {
           rawRows = null;
         }
@@ -524,11 +607,11 @@ export class GuestImportService {
       throw new ValidationError('Import session data expired. Please start a new import.');
     }
 
-    const columnMapping = (importRecord.columnMapping as Record<string, string>) || {};
-    const requiredFields = new Set<string>(
-      ((importRecord.requiredFields as string[]) || ['name']).map((f) => f.toLowerCase())
-    );
-    const categoryMapping = (importRecord.categoryMapping as Record<string, string>) || {};
+    if (isMongo) {
+      columnMapping = cached?.columnMapping || {};
+      requiredFields = new Set<string>((cached?.requiredFields || ['name']).map((f) => f.toLowerCase()));
+      categoryMapping = cached?.categoryMapping || {};
+    }
 
     const guestsToInsert: CreateGuestInput[] = [];
     const seenEmails = new Set<string>();
@@ -613,7 +696,76 @@ export class GuestImportService {
       }
     });
 
-    // Batch insert into database via repository
+    if (isMongo) {
+      const terminology = event.credentialTerminology || 'Pass';
+      const safePrefix =
+        (event.name || 'EVT').trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase() || 'EVT';
+
+      const creatorObjectId = mongoose.Types.ObjectId.isValid(userId)
+        ? new mongoose.Types.ObjectId(userId)
+        : (event.ownerId && mongoose.Types.ObjectId.isValid(event.ownerId)
+            ? new mongoose.Types.ObjectId(event.ownerId)
+            : new mongoose.Types.ObjectId());
+
+      let insertedCount = 0;
+      for (const row of guestsToInsert) {
+        const seq = await mongoEventCredentialRepository.getNextSequenceNumber(eventId);
+        const seqStr = seq.toString().padStart(5, '0');
+        const formattedId = `${safePrefix}-${seqStr}`;
+        const verificationToken = crypto.randomBytes(32).toString('hex');
+        const slug = (row.name || 'attendee').toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
+        const storagePath = `events/${eventId}/credentials/${slug}-${formattedId}.png`;
+
+        await EventCredentialModel.create({
+          eventId: new mongoose.Types.ObjectId(eventId),
+          sequenceNumber: seq,
+          formattedId,
+          verificationToken,
+          credentialType: row.category || 'GENERAL',
+          terminology,
+          usagePolicy: 'SINGLE_USE',
+          status: 'ACTIVE',
+          holder: {
+            name: row.name,
+            email: row.email || undefined,
+            phone: row.phone || undefined,
+            organization: row.organization || undefined,
+            designation: row.designation || undefined,
+            category: row.category || 'GENERAL',
+            isAssigned: true,
+          },
+          asset: {
+            storagePath,
+            publicUrl: null,
+            renderedAt: null,
+            mimeType: 'image/png',
+          },
+          metadata: row.metadata || {},
+          createdBy: creatorObjectId,
+        } as any);
+        insertedCount++;
+      }
+
+      // Clean up temporary disk staging file and in-memory cache
+      const stagingPath = cached?.filePath || this.findStagingPath(dto.importId);
+      if (stagingPath && fs.existsSync(stagingPath)) {
+        try {
+          fs.unlinkSync(stagingPath);
+        } catch {
+          // ignore
+        }
+      }
+      this.activeUploads.delete(dto.importId);
+
+      return {
+        success: true,
+        importedCount: insertedCount,
+        skippedCount,
+        importId: dto.importId,
+      };
+    }
+
+    // Batch insert into PostgreSQL via repository
     const inserted = await this.guestRepo.insertMany(guestsToInsert);
 
     // Transition import status to COMPLETED
@@ -646,11 +798,10 @@ export class GuestImportService {
    * List past import sessions for an event.
    */
   async listImports(eventId: string, userId: string) {
-    const event = await this.eventRepo.findByIdAndOwner(eventId, userId);
-    if (!event) {
-      throw new NotFoundError('Event not found or unauthorized');
+    const { isMongo } = await this.checkEventAuthorization(eventId, userId);
+    if (isMongo) {
+      return [];
     }
-
     return await this.importRepo.findByEventId(eventId);
   }
 }

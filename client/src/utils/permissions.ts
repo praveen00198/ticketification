@@ -97,7 +97,7 @@ export function isEventOwner(
   }
 
   const role = (event as any).userRole || (event as any).role;
-  if (role === 'HOST' || role === 'COORDINATOR') {
+  if (role === 'HOST') {
     return true;
   }
 
@@ -314,31 +314,26 @@ export function getHostWorkspaceNavigationCategories({
 
   const categories: NavCategory[] = [
     {
-      title: 'Core Management',
+      title: 'Core Event Management',
       items: [
-        { label: 'Event Overview', path: `/events/${eventId}?tab=overview`, icon: LayoutDashboard },
+        { label: 'Event Overview', path: `/events/${eventId}`, icon: LayoutDashboard },
         { label: 'Event Configuration', path: `/events/${eventId}?tab=configuration`, icon: Settings },
         { label: 'Verification & Org', path: `/events/${eventId}?tab=verification`, icon: ShieldCheck },
-      ],
-    },
-    {
-      title: 'Attendees & Credentials',
-      items: [
         { label: 'Pass Management', path: `/events/${eventId}?tab=attendees`, icon: Ticket },
-        { label: 'Guest Roster', path: `/import`, icon: FileSpreadsheet, requiresEvent: true, requiresHost: true },
-        { label: 'Issued Tickets', path: `/tickets`, icon: Ticket, requiresEvent: true, requiresHost: true },
       ],
     },
     {
       title: 'Event Operations',
       items: [
         { label: 'Operations Console', path: `/events/${eventId}?tab=operations`, icon: QrCode },
+        { label: 'Guest Roster', path: `/import`, icon: FileSpreadsheet, requiresEvent: true, requiresHost: true },
+        { label: 'Issued Tickets', path: `/tickets`, icon: Ticket, requiresEvent: true, requiresHost: true },
         { label: 'Turnstile Scanner', path: `/scan`, icon: QrCode, requiresEvent: true, requiresHost: true },
         ...(caps.analytics ? [{ label: 'Reports & Analytics', path: `/reports`, icon: BarChart3, requiresEvent: true, requiresHost: true }] : []),
       ],
     },
     {
-      title: 'Team & Evaluation',
+      title: 'Personnel & Evaluation',
       items: [
         { label: 'Team Console', path: `/events/${eventId}?tab=team`, icon: Users },
         { label: 'Staff Console', path: `/events/${eventId}/staff-console`, icon: Users },

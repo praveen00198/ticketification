@@ -451,6 +451,9 @@ export class AuthService {
         }
       } catch (dbErr: any) {
         if (dbErr instanceof AuthenticationError) throw dbErr;
+        if (!mongoConfigured) {
+          throw new AppError('Unable to verify user profile due to database error.', 500);
+        }
         console.warn('[AuthService] Secondary Postgres lookup failed in getMe (ignored):', dbErr);
       }
     }

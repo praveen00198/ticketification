@@ -140,7 +140,33 @@ export class TicketController {
       res.setHeader('Content-Type', 'application/zip');
       res.setHeader('Content-Disposition', `attachment; filename="tickets-export.zip"`);
 
-      await ticketService.streamTicketsZip(eventId, req.user.id, res);
+      const rawTicketIds = req.query.ticketIds as string | undefined;
+      const ticketIds = rawTicketIds ? rawTicketIds.split(',').map(s => s.trim()).filter(Boolean) : undefined;
+
+      await ticketService.streamTicketsZip(eventId, req.user.id, res, ticketIds);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async deleteOrRevokeTicket(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) throw new AuthenticationError();
+
+      const ticketId = validateTicketIdParam(req.params.ticketId || req.params.id);
+      const rawEventId = req.params.eventId || req.query.eventId || req.body?.eventId;
+      if (!rawEventId) {
+        throw new ValidationError('Event ID is required to revoke or delete a ticket');
+      }
+      const eventId = validateEventIdParam(rawEventId);
+      const reason = req.body?.reason || 'Revoked by host';
+
+      const result = await ticketService.revokeTicket(ticketId, eventId, req.user.id, reason);
+
+      res.status(200).json({
+        success: true,
+        data: result,
+      });
     } catch (err) {
       next(err);
     }

@@ -25,7 +25,13 @@ import { EventCredentialModel } from '../../../db/mongo/models/event-credential.
 import { EventMemberModel } from '../../../db/mongo/models/event-member.model';
 import { EventRegistrationModel } from '../../../db/mongo/models/event-registration.model';
 import { EventModel } from '../../../db/mongo/models/event.model';
+import { EventCredentialTemplateModel } from '../../../db/mongo/models/event-credential-template.model';
 import { mongoEventCredentialRepository } from '../../events/repositories/mongo-event-credential.repository';
+import { mongoEventCredentialTemplateRepository } from '../../events/repositories/mongo-event-credential-template.repository';
+import {
+  eventCredentialRenderingService,
+  CredentialRenderData,
+} from '../../events/services/event-credential-rendering.service';
 import { GenerateTicketsResult } from '../ticket.types';
 import { logMemory, MemoryTracker } from '../../../utils/memory-logger';
 import { getTemplateById, DEFAULT_TEMPLATE_ID } from '../ticket-templates';
@@ -656,6 +662,7 @@ export class TicketService {
     let guestEmail: string | null = null;
     let holderUserId: string | null = null;
     let eventOwnerId: string | null = null;
+    let eventOwnerSupabaseId: string | null = null;
     let eventName: string | null = null;
     let usagePolicy: string = 'SINGLE_USE';
 
@@ -741,7 +748,8 @@ export class TicketService {
             const ev = await EventModel.findById(eventId).exec();
             if (ev) {
               eventName = ev.name || null;
-              eventOwnerId = ev.ownerId ? ev.ownerId.toString() : (ev.ownerSupabaseId || null);
+              eventOwnerId = ev.ownerId ? ev.ownerId.toString() : null;
+              eventOwnerSupabaseId = ev.ownerSupabaseId || null;
             }
           }
         }
@@ -767,8 +775,12 @@ export class TicketService {
       isAuthorized = true;
     }
 
-    // B. Event Creator / Owner
-    if (!isAuthorized && eventOwnerId && eventOwnerId.toString() === auth.userId) {
+    // B. Event Creator / Owner (check both Mongo ObjectId and Supabase ID)
+    if (
+      !isAuthorized &&
+      ((eventOwnerId && eventOwnerId === auth.userId) ||
+        (eventOwnerSupabaseId && eventOwnerSupabaseId === auth.userId))
+    ) {
       isAuthorized = true;
     }
 
@@ -896,6 +908,117 @@ export class TicketService {
     }
 
     if (!fileBuffer || !isPngBuffer(fileBuffer)) {
+      // High-performance on-demand rendering fallback
+      // 1. Check MongoDB EventCredential
+      if (mongoose.connection.readyState === 1 && mongoose.Types.ObjectId.isValid(resolved.ticketId)) {
+        try {
+          const cred = await EventCredentialModel.findById(resolved.ticketId).exec();
+          if (cred) {
+            const mongoEvent = await EventModel.findById(resolved.eventId).exec();
+            let template: any = await EventCredentialTemplateModel.findOne({
+              eventId: resolved.eventId,
+              isDefault: true,
+            }).exec();
+            if (!template) {
+              template = await EventCredentialTemplateModel.findOne({
+                eventId: resolved.eventId,
+              }).exec();
+            }
+            if (!template) {
+              await mongoEventCredentialTemplateRepository.seedGlobalPresetsIfEmpty();
+              template = await mongoEventCredentialTemplateRepository.findDefaultByEventId(resolved.eventId);
+            }
+            if (!template) {
+              template = new EventCredentialTemplateModel({
+                name: 'Standard Pass Template',
+                presetId: 'HACKATHON_PASS',
+                dimensions: { width: 1620, height: 2025 },
+                fields: [
+                  { key: 'name', label: 'Attendee Name', x: 810, y: 1490, textAlign: 'center', visible: true, fontSize: 76 },
+                  { key: 'sequence', label: 'Pass Sequence', x: 810, y: 1600, textAlign: 'center', visible: true, fontSize: 42 },
+                  { key: 'role', label: 'Badge Role', x: 810, y: 1680, textAlign: 'center', visible: true, fontSize: 48 },
+                  { key: 'eventName', label: 'Event Name', x: 810, y: 400, textAlign: 'center', visible: true, fontSize: 64 },
+                  { key: 'date', label: 'Event Date', x: 810, y: 480, textAlign: 'center', visible: true, fontSize: 36 },
+                  { key: 'venue', label: 'Event Venue', x: 810, y: 540, textAlign: 'center', visible: true, fontSize: 36 },
+                  { key: 'qr', label: 'QR Code', x: 604, y: 960, width: 412, height: 412, visible: true },
+                ],
+              });
+            }
+
+            const renderData: CredentialRenderData = {
+              name: cred.holder?.name || 'Valued Guest',
+              sequence: cred.formattedId || resolved.displayId,
+              verificationToken: cred.verificationToken,
+              qrPayload: `https://ticketification.app/verify/${cred.verificationToken}`,
+              role: (cred.holder?.category || cred.credentialType || 'PARTICIPANT').toUpperCase(),
+              eventName: mongoEvent?.name || 'Event',
+              date: mongoEvent?.schedule?.startAt
+                ? new Date(mongoEvent.schedule.startAt).toLocaleDateString()
+                : 'Date TBA',
+              venue: mongoEvent?.venue?.name || mongoEvent?.venue?.city || 'Main Arena',
+            };
+
+            const renderedBuffer = await eventCredentialRenderingService.renderCredentialBuffer(template, renderData);
+            if (isPngBuffer(renderedBuffer)) {
+              fileBuffer = renderedBuffer;
+              try {
+                const storagePath = resolved.candidatePaths[0] || `events/${resolved.eventId}/credentials/${cred._id}.png`;
+                const uploadRes = await this.storageServ.uploadTicketImage(storagePath, renderedBuffer);
+                cred.asset = {
+                  storagePath: uploadRes.storagePath,
+                  publicUrl: uploadRes.publicUrl,
+                  renderedAt: new Date(),
+                  mimeType: 'image/png',
+                };
+                await cred.save();
+              } catch (saveErr) {
+                console.warn('[TicketService] Could not cache rendered credential to storage:', saveErr);
+              }
+            }
+          }
+        } catch (mongoRenderErr) {
+          console.error('[TicketService] Mongo on-demand rendering error:', mongoRenderErr);
+        }
+      }
+
+      // 2. Check PostgreSQL Ticket
+      if (!fileBuffer && typeof this.ticketRepo?.findById === 'function') {
+        try {
+          const pgRecord = await this.ticketRepo.findById(resolved.ticketId);
+          if (pgRecord) {
+            const t = pgRecord.ticket || pgRecord;
+            const ev = pgRecord.event || (await this.eventRepo.findById(resolved.eventId));
+            const guest = pgRecord.guest || (t.guestId ? await this.guestRepo.findById(t.guestId) : null);
+            if (this.qrServ && typeof this.qrServ.generateQrDataUrl === 'function' && this.imageServ && typeof this.imageServ.generateTicketImage === 'function') {
+              const qrDataUrl = await this.qrServ.generateQrDataUrl(t.verificationToken);
+              const workerData: TicketImageData = {
+                ticketId: resolved.displayId,
+                guestName: guest?.name || 'Valued Guest',
+                eventName: ev?.name || 'Event',
+                eventDate: ((ev as any)?.date && (ev as any).date !== '2026-10-10')
+                  ? (ev as any).date
+                  : ((ev as any)?.schedule?.startAt ? new Date((ev as any).schedule.startAt).toLocaleDateString() : 'Date TBA'),
+                ticketType: pgRecord.ticketType?.label || pgRecord.ticketType?.name || 'General',
+                qrCodeDataUrl: qrDataUrl,
+              };
+              const renderRes = await this.imageServ.generateTicketImage(workerData);
+              const renderedBuffer = renderRes?.pngBuffer;
+              if (renderedBuffer && isPngBuffer(renderedBuffer)) {
+                fileBuffer = renderedBuffer;
+                try {
+                  const storagePath = resolved.candidatePaths[0] || `events/${resolved.eventId}/tickets/ticket-${resolved.displayId}.png`;
+                  await this.storageServ.uploadTicketImage(storagePath, renderedBuffer);
+                } catch {}
+              }
+            }
+          }
+        } catch (pgRenderErr) {
+          console.error('[TicketService] Postgres on-demand rendering error:', pgRenderErr);
+        }
+      }
+    }
+
+    if (!fileBuffer || !isPngBuffer(fileBuffer)) {
       throw new NotFoundError('Stored ticket PNG asset could not be located in storage');
     }
 
@@ -939,10 +1062,39 @@ export class TicketService {
    * Uses keyset pagination / Mongo cursor; zero whole-dataset in-memory buffering.
    * Respects stream backpressure and releases buffers immediately.
    */
-  async streamTicketsZip(eventId: string, userId: string, streamOut: NodeJS.WritableStream): Promise<void> {
-    const event = await this.eventRepo.findByIdAndOwner(eventId, userId);
-    if (!event) {
-      throw new NotFoundError('Event not found or unauthorized');
+  async streamTicketsZip(eventId: string, userId: string, streamOut: NodeJS.WritableStream, ticketIds?: string[]): Promise<void> {
+    let eventName = 'EVT';
+    let isMongoEvent = false;
+
+    if (mongoose.Types.ObjectId.isValid(eventId)) {
+      const mongoEvent = await EventModel.findById(eventId);
+      if (mongoEvent) {
+        isMongoEvent = true;
+        const isOwner =
+          mongoEvent.ownerSupabaseId === userId ||
+          String(mongoEvent.ownerId) === userId ||
+          String(mongoEvent.ownerSupabaseId) === userId;
+
+        if (!isOwner) {
+          const member = await EventMemberModel.findOne({
+            eventId: mongoEvent._id,
+            status: 'ACTIVE',
+            role: { $in: ['HOST', 'COORDINATOR'] } as any,
+          } as any);
+          if (!member) {
+            throw new NotFoundError('Event not found or unauthorized');
+          }
+        }
+        eventName = mongoEvent.name || 'EVT';
+      }
+    }
+
+    if (!isMongoEvent) {
+      const event = await this.eventRepo.findByIdAndOwner(eventId, userId);
+      if (!event) {
+        throw new NotFoundError('Event not found or unauthorized');
+      }
+      eventName = event.name || 'EVT';
     }
 
     const archive = await createZipArchive({ zlib: { level: 6 } });
@@ -954,7 +1106,7 @@ export class TicketService {
     });
 
     const safePrefix =
-      (event.name || 'EVT').trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase() || 'EVT';
+      eventName.trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase() || 'EVT';
 
     archive.pipe(streamOut);
 
@@ -978,82 +1130,100 @@ export class TicketService {
     let totalDiscovered = 0;
     let packagedCount = 0;
     let cursor: any = null;
+    const BATCH_SIZE = 50;
 
     try {
-      // 1. Try Keyset Pagination on PostgreSQL ticketRepo
-      const BATCH_SIZE = 50;
-      let lastSeq = 0;
-      let offset = 0;
-      let hasMorePg = true;
+      // 1. If not a Mongo event, try Keyset Pagination on PostgreSQL ticketRepo
+      if (!isMongoEvent) {
+        try {
+          let lastSeq = 0;
+          let offset = 0;
+          let hasMorePg = true;
 
-      while (hasMorePg && !streamClosed) {
-        let batch: any[] = [];
-        if (typeof (this.ticketRepo as any)?.findExportBatchKeyset === 'function') {
-          batch = await (this.ticketRepo as any).findExportBatchKeyset(eventId, lastSeq, BATCH_SIZE);
-        } else if (typeof this.ticketRepo?.findByEventId === 'function') {
-          batch = await this.ticketRepo.findByEventId(eventId, { limit: BATCH_SIZE, offset });
-        }
+          while (hasMorePg && !streamClosed) {
+            let batch: any[] = [];
+            if (typeof (this.ticketRepo as any)?.findExportBatchKeyset === 'function') {
+              batch = await (this.ticketRepo as any).findExportBatchKeyset(eventId, lastSeq, BATCH_SIZE);
+            } else if (typeof this.ticketRepo?.findByEventId === 'function') {
+              batch = await this.ticketRepo.findByEventId(eventId, { limit: BATCH_SIZE, offset });
+            }
 
-        if (!batch || batch.length === 0) {
-          hasMorePg = false;
-          break;
-        }
+            if (!batch || batch.length === 0) {
+              hasMorePg = false;
+              break;
+            }
 
-        totalDiscovered += batch.length;
-        let highestSeqInBatch = lastSeq;
+            totalDiscovered += batch.length;
+            let highestSeqInBatch = lastSeq;
 
-        for (const t of batch) {
-          if (streamClosed) break;
+            for (const t of batch) {
+              if (streamClosed) break;
 
-          const rawSeq = t.ticket?.sequenceNumber ?? t.sequenceNumber ?? 0;
-          const seqNum = Number(rawSeq);
-          if (seqNum > highestSeqInBatch) {
-            highestSeqInBatch = seqNum;
-          }
-
-          const seqStr = seqNum.toString().padStart(5, '0');
-          const isWorker = (!t.ticket?.guestId && !t.guestId) || (t.ticketType?.usagePolicy === 'REUSABLE');
-          const displayId = isWorker ? `WRK-${seqStr}` : `${safePrefix}-${seqStr}`;
-          const guestName = t.guest?.name ?? t.guestName;
-          const fileName = formatTicketFileName(guestName, displayId);
-
-          const candidatePaths = [
-            t.ticket?.assetPath ?? t.assetPath,
-            `events/${eventId}/tickets/ticket-${displayId}.png`,
-          ].filter(Boolean) as string[];
-
-          let fileBuffer: Buffer | null = null;
-          for (const p of candidatePaths) {
-            try {
-              const buf = await this.storageServ.downloadTicketImage(p);
-              if (isPngBuffer(buf)) {
-                fileBuffer = buf;
-                break;
+              const rawSeq = t.ticket?.sequenceNumber ?? t.sequenceNumber ?? 0;
+              const seqNum = Number(rawSeq);
+              if (seqNum > highestSeqInBatch) {
+                highestSeqInBatch = seqNum;
               }
-            } catch {
-              // try next path
+
+              const seqStr = seqNum.toString().padStart(5, '0');
+              const isWorker = (!t.ticket?.guestId && !t.guestId) || (t.ticketType?.usagePolicy === 'REUSABLE');
+              const displayId = isWorker ? `WRK-${seqStr}` : `${safePrefix}-${seqStr}`;
+              const guestName = t.guest?.name ?? t.guestName;
+              const fileName = formatTicketFileName(guestName, displayId);
+
+              const candidatePaths = [
+                t.ticket?.assetPath ?? t.assetPath,
+                `events/${eventId}/tickets/ticket-${displayId}.png`,
+              ].filter(Boolean) as string[];
+
+              let fileBuffer: Buffer | null = null;
+              for (const p of candidatePaths) {
+                try {
+                  const buf = await this.storageServ.downloadTicketImage(p);
+                  if (isPngBuffer(buf)) {
+                    fileBuffer = buf;
+                    break;
+                  }
+                } catch {
+                  // try next path
+                }
+              }
+
+              if (fileBuffer && isPngBuffer(fileBuffer)) {
+                archive.append(fileBuffer, { name: fileName });
+                packagedCount++;
+                await waitForDrain();
+              }
+            }
+
+            if (batch.length < BATCH_SIZE || (highestSeqInBatch === lastSeq && offset > 0)) {
+              hasMorePg = false;
+            } else {
+              lastSeq = highestSeqInBatch;
+              offset += batch.length;
             }
           }
-
-          if (fileBuffer && isPngBuffer(fileBuffer)) {
-            archive.append(fileBuffer, { name: fileName });
-            packagedCount++;
-            await waitForDrain();
-          }
-        }
-
-        if (batch.length < BATCH_SIZE || (highestSeqInBatch === lastSeq && offset > 0)) {
-          hasMorePg = false;
-        } else {
-          lastSeq = highestSeqInBatch;
-          offset += batch.length;
+        } catch (pgErr) {
+          console.warn('[TicketService] PostgreSQL export failed or unconfigured, falling back to Mongo:', pgErr);
         }
       }
 
-      // 2. If no tickets were found in PostgreSQL, check MongoDB credentials cursor
+      // 2. Check MongoDB credentials cursor (primary for Mongo events, fallback for dual-engine)
       if (totalDiscovered === 0 && mongoose.connection.readyState === 1) {
         try {
-          cursor = mongoEventCredentialRepository.findExportCursor(eventId, {}, BATCH_SIZE);
+          const mongoQuery: any = { eventId: new mongoose.Types.ObjectId(eventId) };
+          if (ticketIds && ticketIds.length > 0) {
+            const validObjectIds = ticketIds
+              .filter((id) => mongoose.Types.ObjectId.isValid(id))
+              .map((id) => new mongoose.Types.ObjectId(id));
+            mongoQuery.$or = [
+              { _id: { $in: validObjectIds } },
+              { formattedId: { $in: ticketIds } },
+            ];
+          }
+          cursor = EventCredentialModel.find(mongoQuery)
+            .sort({ sequenceNumber: 1 })
+            .cursor({ batchSize: BATCH_SIZE });
           for await (const cred of cursor) {
             if (streamClosed) break;
             totalDiscovered++;
@@ -1064,6 +1234,54 @@ export class TicketService {
                 const buf = await this.storageServ.downloadTicketImage(cred.asset.storagePath);
                 if (isPngBuffer(buf)) {
                   fileBuffer = buf;
+                }
+              } catch {}
+            }
+
+            if (!fileBuffer && mongoose.connection.readyState === 1) {
+              try {
+                let template: any = await EventCredentialTemplateModel.findOne({
+                  eventId,
+                  isDefault: true,
+                }).exec();
+                if (!template) {
+                  template = await EventCredentialTemplateModel.findOne({ eventId }).exec();
+                }
+                if (!template) {
+                  await mongoEventCredentialTemplateRepository.seedGlobalPresetsIfEmpty();
+                  template = await mongoEventCredentialTemplateRepository.findDefaultByEventId(eventId);
+                }
+                if (!template) {
+                  template = new EventCredentialTemplateModel({
+                    name: 'Standard Pass Template',
+                    presetId: 'HACKATHON_PASS',
+                    dimensions: { width: 1620, height: 2025 },
+                    fields: [
+                      { key: 'name', label: 'Attendee Name', x: 810, y: 1490, textAlign: 'center', visible: true, fontSize: 76 },
+                      { key: 'sequence', label: 'Pass Sequence', x: 810, y: 1600, textAlign: 'center', visible: true, fontSize: 42 },
+                      { key: 'role', label: 'Badge Role', x: 810, y: 1680, textAlign: 'center', visible: true, fontSize: 48 },
+                      { key: 'eventName', label: 'Event Name', x: 810, y: 400, textAlign: 'center', visible: true, fontSize: 64 },
+                      { key: 'date', label: 'Event Date', x: 810, y: 480, textAlign: 'center', visible: true, fontSize: 36 },
+                      { key: 'venue', label: 'Event Venue', x: 810, y: 540, textAlign: 'center', visible: true, fontSize: 36 },
+                      { key: 'qr', label: 'QR Code', x: 604, y: 960, width: 412, height: 412, visible: true },
+                    ],
+                  });
+                }
+
+                const renderData: CredentialRenderData = {
+                  name: cred.holder?.name || 'Valued Guest',
+                  sequence: cred.formattedId || 'PASS-00001',
+                  verificationToken: cred.verificationToken,
+                  qrPayload: `https://ticketification.app/verify/${cred.verificationToken}`,
+                  role: (cred.holder?.category || cred.credentialType || 'PARTICIPANT').toUpperCase(),
+                  eventName,
+                  date: 'Date TBA',
+                  venue: 'Main Arena',
+                };
+
+                const rendered = await eventCredentialRenderingService.renderCredentialBuffer(template, renderData);
+                if (isPngBuffer(rendered)) {
+                  fileBuffer = rendered;
                 }
               } catch {}
             }
@@ -1125,6 +1343,74 @@ export class TicketService {
         } catch {}
       }
     }
+  }
+
+  /**
+   * Revoke an issued ticket or credential, enforcing event isolation and RBAC.
+   */
+  async revokeTicket(
+    ticketId: string,
+    eventId: string,
+    userId: string,
+    reason?: string
+  ): Promise<{ id: string; status: string; message: string }> {
+    // 1. Check MongoDB credentials first
+    if (mongoose.connection.readyState === 1 && mongoose.Types.ObjectId.isValid(eventId)) {
+      const mongoEvent = await EventModel.findById(eventId);
+      if (mongoEvent) {
+        const isOwner =
+          mongoEvent.ownerSupabaseId === userId ||
+          String(mongoEvent.ownerId) === userId ||
+          String(mongoEvent.ownerSupabaseId) === userId;
+
+        if (!isOwner) {
+          const member = await EventMemberModel.findOne({
+            eventId: mongoEvent._id,
+            status: 'ACTIVE',
+            role: { $in: ['HOST', 'COORDINATOR'] } as any,
+          } as any);
+          if (!member) {
+            throw new NotFoundError('Event not found or unauthorized');
+          }
+        }
+
+        const updated = await mongoEventCredentialRepository.updateStatus(
+          eventId,
+          ticketId,
+          'REVOKED',
+          reason || 'Revoked by host'
+        );
+
+        if (!updated) {
+          throw new NotFoundError('Ticket/Credential not found in this event');
+        }
+
+        return {
+          id: updated._id.toString(),
+          status: 'REVOKED',
+          message: 'Credential revoked successfully',
+        };
+      }
+    }
+
+    // 2. Check PostgreSQL repository
+    const event = await this.eventRepo.findByIdAndOwner(eventId, userId);
+    if (!event) {
+      throw new NotFoundError('Event not found or unauthorized');
+    }
+
+    const ticketRecord = await this.ticketRepo.findById(ticketId);
+    const t = (ticketRecord as any)?.ticket || ticketRecord;
+    if (!t || t.eventId !== eventId) {
+      throw new NotFoundError('Ticket not found in this event');
+    }
+
+    await this.ticketRepo.update(ticketId, { status: 'REVOKED' });
+    return {
+      id: ticketId,
+      status: 'REVOKED',
+      message: 'Ticket revoked successfully',
+    };
   }
 }
 

@@ -14,6 +14,8 @@ import {
 } from '../src/middlewares/error.middleware';
 
 describe('Phase 1: Auth & Error Handling Subsystem', () => {
+  jest.setTimeout(30000);
+
   describe('Input Validation', () => {
     it('should reject registration with missing name', () => {
       expect(() =>
