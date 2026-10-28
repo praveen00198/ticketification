@@ -54,55 +54,7 @@ export const TicketList: React.FC = () => {
   // Preview Modal
   const [selectedTicket, setSelectedTicket] = useState<TicketListItem | null>(null);
 
-  const convertSvgUrlToPngBlob = async (url: string, width = 1620, height = 2025): Promise<Blob> => {
-    const res = await fetch(url);
-    const text = await res.text();
 
-    // If the fetched asset is already a genuine binary PNG, return it as blob directly
-    if (text.charCodeAt(0) === 0x89 && text.charCodeAt(1) === 0x50 && text.charCodeAt(2) === 0x4e && text.charCodeAt(3) === 0x47) {
-      const rawRes = await fetch(url);
-      return await rawRes.blob();
-    }
-
-    return new Promise((resolve, reject) => {
-      const svgBlob = new Blob([text], { type: 'image/svg+xml;charset=utf-8' });
-      const blobUrl = URL.createObjectURL(svgBlob);
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-
-      img.onload = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) {
-            URL.revokeObjectURL(blobUrl);
-            return resolve(svgBlob);
-          }
-          ctx.drawImage(img, 0, 0, width, height);
-          URL.revokeObjectURL(blobUrl);
-          canvas.toBlob((pngBlob) => {
-            if (pngBlob) {
-              resolve(pngBlob);
-            } else {
-              resolve(svgBlob);
-            }
-          }, 'image/png');
-        } catch (e) {
-          URL.revokeObjectURL(blobUrl);
-          reject(e);
-        }
-      };
-
-      img.onerror = (e) => {
-        URL.revokeObjectURL(blobUrl);
-        reject(e);
-      };
-
-      img.src = blobUrl;
-    });
-  };
 
   const handleDownloadSingleTicket = async (t: TicketListItem) => {
     if (!currentEvent) return;
@@ -222,72 +174,8 @@ export const TicketList: React.FC = () => {
         .replace(/_+/g, '_');
       const filename = `${safeEventName}-Tickets.zip`;
 
-      // 1. Try server-side export first
-      try {
-        const blob = await ticketsApi.downloadTicketsZip(currentEvent.id);
-        if (blob && blob.size > 100) {
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = filename;
-          document.body.appendChild(a);
-          a.click();
-          window.URL.revokeObjectURL(url);
-          document.body.removeChild(a);
-          return;
-        }
-      } catch (serverErr) {
-        console.warn('Server-side export unavailable, executing direct client-side ZIP packaging:', serverErr);
-      }
-
-      // 2. High-speed client-side ZIP packaging using JSZip (bundled in client)
-      const JSZipModule = await import('jszip');
-      const JSZip = JSZipModule.default || (JSZipModule as any);
-      const zip = new JSZip();
-
-      const allTicketsData = await ticketsApi.getTickets(currentEvent.id, { limit: 50000 });
-      const ticketList = allTicketsData.tickets || [];
-
-      if (ticketList.length === 0) {
-        throw new Error('No tickets found to download for this event.');
-      }
-
-      for (const t of ticketList) {
-        if (!t.assetUrl) continue;
-        const seqStr = t.sequenceNumber.toString().padStart(5, '0');
-        const prefix = (currentEvent.name || 'TKT').substring(0, 3).toUpperCase();
-        const displayId = `${prefix}-${seqStr}`;
-        const cleanGuestName =
-          t.guest?.name && t.guest.name !== 'UNASSIGNED'
-            ? t.guest.name
-                .replace(/[/\\?%*:|"<>.]+/g, ' ')
-                .trim()
-                .replace(/[^a-zA-Z0-9\s_-]/g, '')
-                .replace(/[\s_]+/g, '-')
-                .replace(/-+/g, '-')
-                .replace(/^-+|-+$/g, '')
-            : null;
-        const ticketFileName = cleanGuestName ? `${cleanGuestName}-${displayId}.png` : `${displayId}.png`;
-
-        try {
-          const pngBlob = await convertSvgUrlToPngBlob(t.assetUrl);
-          zip.file(ticketFileName, pngBlob);
-        } catch (_) {
-          const directRes = await fetch(t.assetUrl);
-          const rawBlob = await directRes.blob();
-          zip.file(ticketFileName, rawBlob);
-        }
-      }
-
-      const zipBlob = await zip.generateAsync({ type: 'blob' });
-      const url = window.URL.createObjectURL(zipBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      const blob = await ticketsApi.downloadTicketsZip(currentEvent.id);
+      triggerBlobDownload(blob, filename);
     } catch (err: any) {
       setError(err.message || 'Failed to download ZIP archive');
     } finally {

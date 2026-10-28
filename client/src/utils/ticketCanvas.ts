@@ -1,5 +1,4 @@
 import QRCode from 'qrcode';
-import JSZip from 'jszip';
 import templateImgSrc from '../../assets/ticket_template.png';
 import { Ticket } from '../types';
 import { getTicketPreviewUrl } from '../api/client';
@@ -208,56 +207,6 @@ export async function downloadTicketPng(ticket: Ticket): Promise<void> {
   triggerBrowserDownload(dataUrl, fileName);
 }
 
-/**
- * Bundles all tickets into a single ZIP archive in the browser and downloads it
- */
-export async function downloadAllTicketsZipClient(
-  tickets: Ticket[],
-  onProgress?: (current: number, total: number) => void
-): Promise<void> {
-  if (!tickets || tickets.length === 0) return;
 
-  const zip = new JSZip();
-  const folder = zip.folder('tickets') || zip;
-
-  for (let i = 0; i < tickets.length; i++) {
-    const t = tickets[i];
-    if (onProgress) {
-      onProgress(i + 1, tickets.length);
-    }
-
-    const guestName = (t.name || t.guestName || 'Guest').trim().replace(/[/\\?%*:|"<>]/g, '_');
-    const fileName = `${guestName}_${t.ticketId}.png`;
-
-    try {
-      let pngDataUrl = '';
-      if (t.imageBase64 && t.imageBase64.startsWith('data:image/png;base64,')) {
-        pngDataUrl = t.imageBase64;
-      } else if (t.imageBase64 && t.imageBase64.startsWith('data:image/svg')) {
-        pngDataUrl = await convertToRasterPngDataUrl(t.imageBase64);
-      } else if (t.ticketImageUrl) {
-        const resolvedUrl = getTicketPreviewUrl(t.ticketImageUrl);
-        pngDataUrl = await convertToRasterPngDataUrl(resolvedUrl);
-      } else {
-        pngDataUrl = await renderTicketToDataUrl(t);
-      }
-
-      const base64Data = pngDataUrl.replace(/^data:image\/\w+;base64,/, '');
-      folder.file(fileName, base64Data, { base64: true });
-    } catch (err) {
-      console.warn(`[downloadAllTicketsZipClient] Could not process ticket ${t.ticketId}:`, err);
-    }
-  }
-
-  const content = await zip.generateAsync({ type: 'blob' });
-  const url = window.URL.createObjectURL(content);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `ticketification-tickets-${new Date().toISOString().split('T')[0]}.zip`;
-  document.body.appendChild(a);
-  a.click();
-  window.URL.revokeObjectURL(url);
-  document.body.removeChild(a);
-}
 
 

@@ -59,6 +59,7 @@ export class EventStorageGovernanceService {
    * Standard event storage allowance: 1024 MB (1 GB).
    */
   private readonly defaultQuotaBytes = 1024 * 1024 * 1024;
+  private metricsCache = new Map<string, { metrics: EventStorageMetrics; expiresAt: number }>();
 
   constructor(
     private storageService: SupabaseStorageService = supabaseStorageService,
@@ -66,9 +67,21 @@ export class EventStorageGovernanceService {
   ) {}
 
   /**
+   * Invalidates cached storage metrics for an event.
+   */
+  public invalidateCache(eventId: string): void {
+    this.metricsCache.delete(eventId);
+  }
+
+  /**
    * Calculates comprehensive storage telemetry and quota status for an event.
    */
   public async getEventStorageMetrics(eventId: string): Promise<EventStorageMetrics> {
+    const cached = this.metricsCache.get(eventId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.metrics;
+    }
+
     const quotaBytes = this.defaultQuotaBytes;
 
     if (!this.storageService.isConfigured()) {
@@ -124,7 +137,7 @@ export class EventStorageGovernanceService {
       };
     });
 
-    return {
+    const metricsResult: EventStorageMetrics = {
       eventId,
       totalBytes,
       totalBytesFormatted: formatBytes(totalBytes),
@@ -152,6 +165,14 @@ export class EventStorageGovernanceService {
       },
       recentExports,
     };
+
+    // Store in cache for 30 seconds
+    this.metricsCache.set(eventId, {
+      metrics: metricsResult,
+      expiresAt: Date.now() + 30000,
+    });
+
+    return metricsResult;
   }
 
   /**
@@ -186,6 +207,7 @@ export class EventStorageGovernanceService {
     const reclaimedBytes = staleFiles.reduce((acc, f) => acc + (f.sizeBytes || 0), 0);
 
     const deleteResult = await this.storageService.deleteFiles(pathsToDelete);
+    this.invalidateCache(eventId);
 
     // Invalidate expired download URLs in event_jobs
     try {

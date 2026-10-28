@@ -35,10 +35,6 @@ export default defineConfig({
           if (id.includes('node_modules/lucide-react')) {
             return 'vendor-lucide';
           }
-          // jszip — only needed for bulk-export pages
-          if (id.includes('node_modules/jszip')) {
-            return 'vendor-jszip';
-          }
           // QR scanner / html5-qrcode
           if (
             id.includes('node_modules/html5-qrcode') ||
