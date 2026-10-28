@@ -30,11 +30,11 @@ router.post('/live', (req, res, next) =>
   eventLifecycleController.startLive(req, res, next)
 );
 
-router.post('/complete', (req, res, next) =>
+router.post('/complete', requireAdmin, (req, res, next) =>
   eventLifecycleController.complete(req, res, next)
 );
 
-router.post('/archive', (req, res, next) =>
+router.post('/archive', requireAdmin, (req, res, next) =>
   eventLifecycleController.archive(req, res, next)
 );
 
@@ -64,4 +64,12 @@ adminLifecycleRouter.post('/:eventId/suspend', (req, res, next) =>
 
 adminLifecycleRouter.post('/:eventId/reinstate', (req, res, next) =>
   eventLifecycleController.adminReinstate(req, res, next)
+);
+
+adminLifecycleRouter.post('/:eventId/complete', (req, res, next) =>
+  eventLifecycleController.complete(req, res, next)
+);
+
+adminLifecycleRouter.post('/:eventId/archive', (req, res, next) =>
+  eventLifecycleController.archive(req, res, next)
 );

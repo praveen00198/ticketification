@@ -146,15 +146,22 @@ export class PublicEventService {
     ].join(':');
   }
 
+  private publicEventDetailCache = new Map<string, { data: any; expiresAt: number }>();
+  private inflightDetailRequests = new Map<string, Promise<any>>();
+  private inflightCatalogRequests = new Map<string, Promise<any>>();
+
   /**
-   * Explicitly invalidate cached public catalog entries (e.g. on event status transition).
+   * Explicitly invalidate cached public catalog and event detail entries.
    */
   public clearCache(): void {
     this.publicEventsCache.clear();
+    this.publicEventDetailCache.clear();
+    this.inflightDetailRequests.clear();
+    this.inflightCatalogRequests.clear();
   }
 
   /**
-   * Search and filter public catalog events with 15s in-memory TTL cache.
+   * Search and filter public catalog events with 15s in-memory TTL cache and single-flight coalescing.
    */
   async getPublicEvents(options: PublicEventQueryOptions = {}): Promise<{
     events: SanitizedPublicEvent[];
@@ -171,36 +178,51 @@ export class PublicEventService {
       return cached.data;
     }
 
-    const result = await this.eventRepo.findPublicEvents(options);
-
-    const formatted = {
-      events: result.events.map((e) => this.formatPublicEvent(e)),
-      total: result.total,
-      page: result.page,
-      limit: result.limit,
-      totalPages: result.totalPages,
-    };
-
-    // Cache for 15 seconds to withstand traffic spikes
-    this.publicEventsCache.set(cacheKey, {
-      data: formatted,
-      expiresAt: now + 15000,
-    });
-
-    // Cleanup old keys if map exceeds 500 entries
-    if (this.publicEventsCache.size > 500) {
-      for (const [key, entry] of this.publicEventsCache.entries()) {
-        if (entry.expiresAt <= now) {
-          this.publicEventsCache.delete(key);
-        }
-      }
+    // Single-flight coalescing: share inflight promise to eliminate cache stampedes
+    if (this.inflightCatalogRequests.has(cacheKey)) {
+      return this.inflightCatalogRequests.get(cacheKey);
     }
 
-    return formatted;
+    const fetchPromise = (async () => {
+      try {
+        const result = await this.eventRepo.findPublicEvents(options);
+
+        const formatted = {
+          events: result.events.map((e) => this.formatPublicEvent(e)),
+          total: result.total,
+          page: result.page,
+          limit: result.limit,
+          totalPages: result.totalPages,
+        };
+
+        // Cache for 15 seconds to withstand traffic spikes
+        this.publicEventsCache.set(cacheKey, {
+          data: formatted,
+          expiresAt: Date.now() + 15000,
+        });
+
+        // Cleanup old keys if map exceeds 500 entries
+        if (this.publicEventsCache.size > 500) {
+          const currentTime = Date.now();
+          for (const [key, entry] of this.publicEventsCache.entries()) {
+            if (entry.expiresAt <= currentTime) {
+              this.publicEventsCache.delete(key);
+            }
+          }
+        }
+
+        return formatted;
+      } finally {
+        this.inflightCatalogRequests.delete(cacheKey);
+      }
+    })();
+
+    this.inflightCatalogRequests.set(cacheKey, fetchPromise);
+    return fetchPromise;
   }
 
   /**
-   * Retrieve a single public event with its host profile and live capacity metrics.
+   * Retrieve a single public event with its host profile and live capacity metrics (cached for 15s with single-flight coalescing).
    */
   async getPublicEventById(eventId: string): Promise<{
     event: SanitizedPublicEvent;
@@ -211,39 +233,79 @@ export class PublicEventService {
       isSoldOut: boolean;
     };
   } | null> {
-    const event = await this.eventRepo.findPublicById(eventId);
-    if (!event) {
-      return null;
+    const now = Date.now();
+    const cached = this.publicEventDetailCache.get(eventId);
+    if (cached && cached.expiresAt > now) {
+      return cached.data;
     }
 
-    // Resolve host details
-    let hostDoc: IUserDocument | null = null;
-    if (event.ownerId && mongoose.Types.ObjectId.isValid(event.ownerId.toString())) {
-      hostDoc = await this.userRepo.findById(event.ownerId.toString());
-    }
-    if (!hostDoc && event.ownerSupabaseId) {
-      hostDoc = await this.userRepo.findBySupabaseId(event.ownerSupabaseId);
+    // Single-flight coalescing: share inflight promise to eliminate cache stampedes
+    if (this.inflightDetailRequests.has(eventId)) {
+      return this.inflightDetailRequests.get(eventId);
     }
 
-    // Capacity metrics
-    const confirmedCount = await this.registrationRepo.countByEvent(
-      event._id.toString(),
-      ['CONFIRMED', 'ATTENDED']
-    );
+    const fetchPromise = (async () => {
+      try {
+        const event = await this.eventRepo.findPublicById(eventId);
+        if (!event) {
+          return null;
+        }
 
-    const totalCapacity = event.registration?.capacity || null;
-    const remainingCapacity = totalCapacity ? Math.max(0, totalCapacity - confirmedCount) : null;
-    const isSoldOut = Boolean(totalCapacity && confirmedCount >= totalCapacity);
+        // Parallelize host resolution and capacity count queries
+        const hostPromise = (async () => {
+          if (event.ownerId && mongoose.Types.ObjectId.isValid(event.ownerId.toString())) {
+            return this.userRepo.findById(event.ownerId.toString());
+          }
+          if (event.ownerSupabaseId) {
+            return this.userRepo.findBySupabaseId(event.ownerSupabaseId);
+          }
+          return null;
+        })();
 
-    return {
-      event: this.formatPublicEvent(event),
-      host: this.formatPublicHost(hostDoc, event.organization),
-      metrics: {
-        confirmedCount,
-        remainingCapacity,
-        isSoldOut,
-      },
-    };
+        const countPromise = this.registrationRepo.countByEvent(
+          event._id.toString(),
+          ['CONFIRMED', 'ATTENDED']
+        );
+
+        const [hostDoc, confirmedCount] = await Promise.all([hostPromise, countPromise]);
+
+        const totalCapacity = event.registration?.capacity || null;
+        const remainingCapacity = totalCapacity ? Math.max(0, totalCapacity - confirmedCount) : null;
+        const isSoldOut = Boolean(totalCapacity && confirmedCount >= totalCapacity);
+
+        const result = {
+          event: this.formatPublicEvent(event),
+          host: this.formatPublicHost(hostDoc, event.organization),
+          metrics: {
+            confirmedCount,
+            remainingCapacity,
+            isSoldOut,
+          },
+        };
+
+        // Cache for 15 seconds
+        this.publicEventDetailCache.set(eventId, {
+          data: result,
+          expiresAt: Date.now() + 15000,
+        });
+
+        if (this.publicEventDetailCache.size > 500) {
+          const currentTime = Date.now();
+          for (const [key, entry] of this.publicEventDetailCache.entries()) {
+            if (entry.expiresAt <= currentTime) {
+              this.publicEventDetailCache.delete(key);
+            }
+          }
+        }
+
+        return result;
+      } finally {
+        this.inflightDetailRequests.delete(eventId);
+      }
+    })();
+
+    this.inflightDetailRequests.set(eventId, fetchPromise);
+    return fetchPromise;
   }
 
   /**

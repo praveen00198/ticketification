@@ -55,7 +55,7 @@ export class MongoEventRepository {
     if (mongoose.connection.readyState !== 1 && !Boolean((this.model.findById as any)?.mock)) {
       return null;
     }
-    return await this.model.findById(id).exec();
+    return (await this.model.findById(id).lean().exec()) as unknown as IEventDocument | null;
   }
 
   /**

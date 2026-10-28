@@ -145,7 +145,9 @@ export class MongoEventCredentialRepository {
    */
   async findByVerificationToken(token: string): Promise<IEventCredentialDocument | null> {
     if (!token || token.length !== 64) return null;
-    return EventCredentialModel.findOne({ verificationToken: token }).populate('eventId', 'name eventType credentialTerminology venue schedule');
+    return EventCredentialModel.findOne({ verificationToken: token })
+      .populate('eventId', 'name eventType credentialTerminology venue schedule')
+      .lean() as any;
   }
 
   /**

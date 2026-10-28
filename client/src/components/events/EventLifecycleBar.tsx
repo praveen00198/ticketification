@@ -127,22 +127,6 @@ export const EventLifecycleBar: React.FC<EventLifecycleBarProps> = ({
     );
   };
 
-  const handleComplete = () => {
-    executeTransition(
-      () => eventsApi.completeEvent(eventId),
-      'COMPLETED',
-      'Event marked as completed.'
-    );
-  };
-
-  const handleArchive = () => {
-    executeTransition(
-      () => eventsApi.archiveEvent(eventId),
-      'ARCHIVED',
-      'Event records permanently sealed and archived.'
-    );
-  };
-
   const handleCancelSubmit = async () => {
     if (!cancelReason.trim()) {
       setError('Please provide a reason for cancelling this event.');
@@ -422,27 +406,16 @@ export const EventLifecycleBar: React.FC<EventLifecycleBarProps> = ({
             )}
 
             {currentStatus === 'EVENT_LIVE' && (
-              <button
-                type="button"
-                disabled={loading}
-                onClick={handleComplete}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
-              >
-                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
-                <span>End / Complete Event</span>
-              </button>
+              <span className="text-xs text-emerald-700 font-semibold px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Turnstile entry gates active</span>
+              </span>
             )}
 
             {currentStatus === 'COMPLETED' && (
-              <button
-                type="button"
-                disabled={loading}
-                onClick={handleArchive}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
-              >
-                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
-                <span>Archive Event Records</span>
-              </button>
+              <span className="text-xs text-stone-600 font-medium px-3 py-1.5 bg-stone-100 border border-stone-200 rounded-xl">
+                Event Concluded
+              </span>
             )}
           </div>
         )}

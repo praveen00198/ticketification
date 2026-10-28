@@ -4,7 +4,6 @@ import {
   Ticket,
   Calendar,
   ChevronDown,
-  KeyRound,
   LogOut,
   ChevronLeft,
   ChevronRight,
@@ -12,7 +11,6 @@ import {
   User,
 } from "lucide-react";
 import { useEvent } from "../../context/EventContext";
-import { ChangePasswordModal } from "../auth/ChangePasswordModal";
 import {
   getNavigationCategories,
   getUserDisplayRole,
@@ -53,7 +51,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isCollapsed = propIsCollapsed !== undefined ? propIsCollapsed : internalCollapsed;
   const setIsCollapsed = propSetIsCollapsed || setInternalCollapsed;
   const [eventMenuOpen, setEventMenuOpen] = useState(false);
-  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   const isInHostMode = isHostWorkspaceMode(location.pathname, currentEvent);
 
@@ -157,7 +154,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                   <div className="min-w-0">
                     <div className="text-[10px] font-semibold tracking-wider text-stone-400">
-                      {isInHostMode ? "Managed Event" : "Active Event"}
+                      Active Event
                     </div>
                     <div className="text-[13px] font-semibold leading-tight text-stone-900 truncate">
                       {currentEvent ? currentEvent.name : "Select Event"}
@@ -212,20 +209,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     )}
                   </div>
                 </div>
-              )}
-
-              {/* Exit to Global Dashboard button when inside event host workspace */}
-              {isInHostMode && (
-                <button
-                  onClick={() => {
-                    setCurrentEvent(null);
-                    navigate("/dashboard");
-                  }}
-                  className="w-full mt-1.5 flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-stone-500 hover:text-stone-900 hover:bg-stone-200/50 rounded-lg transition-colors cursor-pointer"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                  <span>Exit to Global Dashboard</span>
-                </button>
               )}
             </div>
           </div>
@@ -342,13 +325,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               <div className="flex items-center gap-0.5 shrink-0">
                 <button
-                  onClick={() => setIsChangePasswordOpen(true)}
-                  title="Change Password"
-                  className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 rounded-lg transition-colors cursor-pointer"
-                >
-                  <KeyRound className="w-3.5 h-3.5" />
-                </button>
-                <button
                   onClick={onLogout}
                   title="Sign Out"
                   className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
@@ -375,11 +351,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
       </aside>
-
-      <ChangePasswordModal
-        isOpen={isChangePasswordOpen}
-        onClose={() => setIsChangePasswordOpen(false)}
-      />
     </>
   );
 };

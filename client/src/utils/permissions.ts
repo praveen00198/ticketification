@@ -314,34 +314,39 @@ export function getHostWorkspaceNavigationCategories({
 
   const categories: NavCategory[] = [
     {
-      title: 'Core Event Management',
+      title: 'Workspace',
       items: [
         { label: 'Event Overview', path: `/events/${eventId}`, icon: LayoutDashboard },
         { label: 'Event Configuration', path: `/events/${eventId}?tab=configuration`, icon: Settings },
-        { label: 'Verification & Org', path: `/events/${eventId}?tab=verification`, icon: ShieldCheck },
+        { label: 'Verification & Organization', path: `/events/${eventId}?tab=verification`, icon: ShieldCheck },
+      ],
+    },
+    {
+      title: 'Attendees & Credentials',
+      items: [
         { label: 'Pass Management', path: `/events/${eventId}?tab=attendees`, icon: Ticket },
+        { label: 'Guest Roster', path: `/import`, icon: FileSpreadsheet, requiresEvent: true, requiresHost: true },
+        { label: 'Issued Tickets', path: `/tickets`, icon: Ticket, requiresEvent: true, requiresHost: true },
       ],
     },
     {
       title: 'Event Operations',
       items: [
         { label: 'Operations Console', path: `/events/${eventId}?tab=operations`, icon: QrCode },
-        { label: 'Guest Roster', path: `/import`, icon: FileSpreadsheet, requiresEvent: true, requiresHost: true },
-        { label: 'Issued Tickets', path: `/tickets`, icon: Ticket, requiresEvent: true, requiresHost: true },
         { label: 'Turnstile Scanner', path: `/scan`, icon: QrCode, requiresEvent: true, requiresHost: true },
         ...(caps.analytics ? [{ label: 'Reports & Analytics', path: `/reports`, icon: BarChart3, requiresEvent: true, requiresHost: true }] : []),
       ],
     },
     {
-      title: 'Personnel & Evaluation',
+      title: 'Teams & Evaluation',
       items: [
         { label: 'Team Console', path: `/events/${eventId}?tab=team`, icon: Users },
-        { label: 'Staff Console', path: `/events/${eventId}/staff-console`, icon: Users },
+        { label: 'Staff Console', path: `/events/${eventId}?tab=staff`, icon: Users },
         ...((caps.mentors || caps.evaluators || caps.judges)
           ? [
               {
                 label: 'Judging & Evaluation',
-                path: `/events/${eventId}/review-workspace`,
+                path: `/events/${eventId}?tab=judging`,
                 icon: Award,
               },
             ]

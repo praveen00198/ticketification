@@ -18,6 +18,7 @@ export class EventLifecycleController {
     try {
       const { eventId } = req.params;
       const callerId = (req as any).user?.id;
+      const callerRole = (req as any).user?.role;
       const { targetStatus, reason } = req.body;
 
       if (!targetStatus) {
@@ -28,7 +29,8 @@ export class EventLifecycleController {
         eventId,
         callerId,
         targetStatus,
-        reason
+        reason,
+        callerRole
       );
 
       res.status(200).json({
@@ -133,8 +135,9 @@ export class EventLifecycleController {
     try {
       const { eventId } = req.params;
       const callerId = (req as any).user?.id;
+      const callerRole = (req as any).user?.role;
 
-      const result = await this.lifecycleService.completeEvent(eventId, callerId);
+      const result = await this.lifecycleService.completeEvent(eventId, callerId, callerRole);
 
       res.status(200).json({
         success: true,
@@ -154,8 +157,9 @@ export class EventLifecycleController {
     try {
       const { eventId } = req.params;
       const callerId = (req as any).user?.id;
+      const callerRole = (req as any).user?.role;
 
-      const result = await this.lifecycleService.archiveEvent(eventId, callerId);
+      const result = await this.lifecycleService.archiveEvent(eventId, callerId, callerRole);
 
       res.status(200).json({
         success: true,

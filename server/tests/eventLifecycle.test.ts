@@ -222,30 +222,46 @@ describe('Phase 6: Event Lifecycle Engine', () => {
       expect(res.body.data.status).toBe('EVENT_LIVE');
     });
 
-    it('should complete event from EVENT_LIVE status', async () => {
+    it('should reject host attempting to complete event (HTTP 403) and allow platform admin', async () => {
       const event = mockEvents.get(testEventId.toString());
       event.status = 'EVENT_LIVE';
 
-      const res = await request(app)
+      // 1. Host attempt must be rejected with 403 Forbidden
+      const hostRes = await request(app)
         .post(`/api/events/${testEventId}/complete`)
         .set('Authorization', `Bearer ${hostToken}`);
 
-      expect(res.status).toBe(200);
-      expect(res.body.success).toBe(true);
-      expect(res.body.data.status).toBe('COMPLETED');
+      expect(hostRes.status).toBe(403);
+
+      // 2. Platform Admin attempt must succeed
+      const adminRes = await request(app)
+        .post(`/api/events/${testEventId}/complete`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(adminRes.status).toBe(200);
+      expect(adminRes.body.success).toBe(true);
+      expect(adminRes.body.data.status).toBe('COMPLETED');
     });
 
-    it('should archive event records from COMPLETED status', async () => {
+    it('should reject host attempting to archive event (HTTP 403) and allow platform admin', async () => {
       const event = mockEvents.get(testEventId.toString());
       event.status = 'COMPLETED';
 
-      const res = await request(app)
+      // 1. Host attempt must be rejected with 403 Forbidden
+      const hostRes = await request(app)
         .post(`/api/events/${testEventId}/archive`)
         .set('Authorization', `Bearer ${hostToken}`);
 
-      expect(res.status).toBe(200);
-      expect(res.body.success).toBe(true);
-      expect(res.body.data.status).toBe('ARCHIVED');
+      expect(hostRes.status).toBe(403);
+
+      // 2. Platform Admin attempt must succeed
+      const adminRes = await request(app)
+        .post(`/api/events/${testEventId}/archive`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(adminRes.status).toBe(200);
+      expect(adminRes.body.success).toBe(true);
+      expect(adminRes.body.data.status).toBe('ARCHIVED');
     });
   });
 

@@ -16,10 +16,19 @@ import {
   Shield,
 } from 'lucide-react';
 import { EventCheckinScannerCard } from '../components/events/EventCheckinScannerCard';
+import { useEvent } from '../context/EventContext';
+import { isHostOrOrganizer } from '../utils/permissions';
 
 export const VolunteerConsolePage: React.FC = () => {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
+  const { currentEvent } = useEvent();
+
+  useEffect(() => {
+    if (eventId && currentEvent && isHostOrOrganizer(null, currentEvent)) {
+      navigate(`/events/${eventId}?tab=staff`, { replace: true });
+    }
+  }, [eventId, currentEvent, navigate]);
 
   const [member, setMember] = useState<EventMemberItem | null>(null);
   const [tasks, setTasks] = useState<EventTaskItem[]>([]);

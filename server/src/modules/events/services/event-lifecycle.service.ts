@@ -46,16 +46,30 @@ export class EventLifecycleService {
     eventId: string,
     callerSupabaseId: string,
     targetStatus: EventStatus,
-    reason?: string
+    reason?: string,
+    callerRole?: string
   ): Promise<{ event: IEventDocument; message: string }> {
     const event = await this.eventRepo.findById(eventId);
     if (!event) {
       throw new AppError('Event not found', 404);
     }
 
-    // Zero-trust ownership authorization
-    if (event.ownerSupabaseId !== callerSupabaseId) {
-      throw new AppError('You do not have permission to manage this event.', 403);
+    const isAdmin = callerRole === 'ADMIN' || callerRole === 'SUPER_ADMIN';
+
+    // Restricted lifecycle statuses can strictly only be executed by Platform Admins
+    const RESTRICTED_STATUSES: EventStatus[] = ['COMPLETED', 'ARCHIVED', 'SUSPENDED'];
+    if (RESTRICTED_STATUSES.includes(targetStatus)) {
+      if (!isAdmin) {
+        throw new AppError(
+          `Unauthorized lifecycle transition: '${targetStatus}' is restricted to Platform Administrators.`,
+          403
+        );
+      }
+    } else {
+      // Zero-trust ownership authorization for host operations
+      if (event.ownerSupabaseId !== callerSupabaseId && !isAdmin) {
+        throw new AppError('You do not have permission to manage this event.', 403);
+      }
     }
 
     const currentStatus = event.status;
@@ -148,17 +162,17 @@ export class EventLifecycleService {
   }
 
   /**
-   * Mark event completed after event concludes.
+   * Mark event completed after event concludes (Platform Admin only).
    */
-  async completeEvent(eventId: string, callerSupabaseId: string) {
-    return this.transitionStatus(eventId, callerSupabaseId, 'COMPLETED', 'Event concluded');
+  async completeEvent(eventId: string, callerSupabaseId: string, callerRole?: string) {
+    return this.transitionStatus(eventId, callerSupabaseId, 'COMPLETED', 'Event concluded', callerRole);
   }
 
   /**
-   * Archive event records (read-only historical seal).
+   * Archive event records (read-only historical seal, Platform Admin only).
    */
-  async archiveEvent(eventId: string, callerSupabaseId: string) {
-    return this.transitionStatus(eventId, callerSupabaseId, 'ARCHIVED', 'Event records sealed');
+  async archiveEvent(eventId: string, callerSupabaseId: string, callerRole?: string) {
+    return this.transitionStatus(eventId, callerSupabaseId, 'ARCHIVED', 'Event records sealed', callerRole);
   }
 
   /**

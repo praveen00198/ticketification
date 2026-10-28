@@ -64,44 +64,43 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
     }
     if (path.startsWith('/events/') && path.includes('/staff-console')) {
       return [
-        { label: 'Dashboard', path: '/dashboard' },
+        { label: 'All Events', path: '/events' },
         { label: currentEvent ? currentEvent.name : 'Event', path: `/events/${currentEvent?.id || ''}` },
         { label: 'Staff Console', path, icon: Users },
       ];
     }
     if (path.startsWith('/events/') && path.includes('/review-workspace')) {
       return [
-        { label: 'Dashboard', path: '/dashboard' },
+        { label: 'All Events', path: '/events' },
         { label: currentEvent ? currentEvent.name : 'Event', path: `/events/${currentEvent?.id || ''}` },
         { label: 'Judging & Mentors', path, icon: Award },
       ];
     }
     if (path.startsWith('/events/')) {
       return [
-        { label: 'Dashboard', path: '/dashboard' },
-        { label: 'Events', path: '/events' },
+        { label: 'All Events', path: '/events' },
         { label: currentEvent ? currentEvent.name : 'Event Details', path, icon: Calendar },
       ];
     }
     if (path === '/import') {
       return [
-        { label: 'Events', path: '/events' },
+        { label: 'All Events', path: '/events' },
         ...(currentEvent ? [{ label: currentEvent.name, path: `/events/${currentEvent.id}` }] : []),
-        { label: 'Import Guests', path: '/import', icon: FileSpreadsheet },
+        { label: 'Guest Roster', path: '/import', icon: FileSpreadsheet },
       ];
     }
     if (path === '/tickets') {
       return [
-        { label: 'Events', path: '/events' },
+        { label: 'All Events', path: '/events' },
         ...(currentEvent ? [{ label: currentEvent.name, path: `/events/${currentEvent.id}` }] : []),
         { label: 'Issued Tickets', path: '/tickets', icon: Ticket },
       ];
     }
     if (path === '/scan') {
       return [
-        { label: 'Events', path: '/events' },
+        { label: 'All Events', path: '/events' },
         ...(currentEvent ? [{ label: currentEvent.name, path: `/events/${currentEvent.id}` }] : []),
-        { label: 'Scan & Turnstiles', path: '/scan', icon: QrCode },
+        { label: 'Turnstile Scanner', path: '/scan', icon: QrCode },
       ];
     }
     if (path === '/wallet') {
@@ -297,6 +296,18 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
               >
                 <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
                 <span>Create Event</span>
+              </button>
+            )}
+
+            {/* Quick Action: All Events (When inside Host Workspace) */}
+            {isHostWorkspaceMode(location.pathname, currentEvent) && (
+              <button
+                onClick={() => navigate('/events')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-stone-600 hover:text-stone-900 hover:bg-stone-200/60 rounded-xl transition-colors cursor-pointer"
+                title="View all events"
+              >
+                <Calendar className="w-3.5 h-3.5 text-stone-500" />
+                <span className="hidden sm:inline">All Events</span>
               </button>
             )}
 
