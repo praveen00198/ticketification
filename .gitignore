@@ -60,9 +60,3 @@ skills.json
 
 #docs
 docs/
-
-# Performance test artifacts & fixtures
-.performance/
-.performance/fixtures.json
-.performance/results/
-.playwright/

@@ -145,10 +145,7 @@ export class MongoEventCredentialRepository {
    */
   async findByVerificationToken(token: string): Promise<IEventCredentialDocument | null> {
     if (!token || token.length !== 64) return null;
-    return (await EventCredentialModel.findOne({ verificationToken: token })
-      .populate('eventId', 'name eventType credentialTerminology venue schedule')
-      .lean()
-      .exec()) as unknown as IEventCredentialDocument | null;
+    return EventCredentialModel.findOne({ verificationToken: token }).populate('eventId', 'name eventType credentialTerminology venue schedule');
   }
 
   /**
@@ -190,10 +187,8 @@ export class MongoEventCredentialRepository {
       EventCredentialModel.find(query)
         .sort({ sequenceNumber: -1 })
         .skip(offset)
-        .limit(limit)
-        .lean()
-        .exec() as unknown as Promise<IEventCredentialDocument[]>,
-      EventCredentialModel.countDocuments(query).exec(),
+        .limit(limit),
+      EventCredentialModel.countDocuments(query),
     ]);
 
     return { credentials, total };

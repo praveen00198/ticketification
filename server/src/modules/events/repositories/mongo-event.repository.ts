@@ -55,7 +55,7 @@ export class MongoEventRepository {
     if (mongoose.connection.readyState !== 1 && !Boolean((this.model.findById as any)?.mock)) {
       return null;
     }
-    return (await this.model.findById(id).lean().exec()) as unknown as IEventDocument | null;
+    return await this.model.findById(id).exec();
   }
 
   /**
@@ -243,8 +243,7 @@ export class MongoEventRepository {
         .sort({ 'schedule.startAt': 1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .lean()
-        .exec() as unknown as Promise<IEventDocument[]>,
+        .exec(),
       this.model.countDocuments(query).exec(),
     ]);
 
@@ -269,7 +268,7 @@ export class MongoEventRepository {
       return null;
     }
 
-    return (await this.model
+    return await this.model
       .findOne({
         _id: id,
         status: {
@@ -289,8 +288,7 @@ export class MongoEventRepository {
           { hostingType: 'ORGANIZATION', verificationStatus: 'VERIFIED' },
         ],
       })
-      .lean()
-      .exec()) as unknown as IEventDocument | null;
+      .exec();
   }
 
   /**

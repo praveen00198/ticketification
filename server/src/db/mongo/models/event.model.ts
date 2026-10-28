@@ -483,10 +483,6 @@ EventSchema.index({ ownerId: 1, eventType: 1 });
 EventSchema.index({ hostingType: 1, organizationVerificationStatus: 1 });
 EventSchema.index({ 'organization.name': 1 });
 EventSchema.index({ name: 'text', description: 'text' });
-// Public catalog discovery & sorting indexes
-EventSchema.index({ status: 1, 'schedule.startAt': 1, createdAt: -1 });
-EventSchema.index({ status: 1, organizationVerificationStatus: 1, verificationStatus: 1 });
-EventSchema.index({ status: 1, eventType: 1, 'schedule.startAt': 1 });
 
 export const EventModel: Model<IEventDocument> =
   mongoose.models.Event || mongoose.model<IEventDocument>('Event', EventSchema);

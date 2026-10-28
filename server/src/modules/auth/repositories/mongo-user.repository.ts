@@ -17,8 +17,8 @@ export class MongoUserRepository {
     const { isMongoConnected } = await import('../../../db/mongodb');
     if (isMongoConnected() || Boolean((UserModel.findById as any)?.mock)) {
       try {
-        const byId = await UserModel.findById(id).lean().exec();
-        if (byId) return byId as unknown as IUserDocument;
+        const byId = await UserModel.findById(id).exec();
+        if (byId) return byId;
       } catch {
         // Ignore CastError when id is not an ObjectId
       }
@@ -36,7 +36,7 @@ export class MongoUserRepository {
     if (!isMongoConnected() && !Boolean((UserModel.findOne as any)?.mock)) {
       return null;
     }
-    return (await UserModel.findOne({ supabaseUserId: id }).lean().exec()) as unknown as IUserDocument | null;
+    return UserModel.findOne({ supabaseUserId: id }).exec();
   }
 
   /**
@@ -48,7 +48,7 @@ export class MongoUserRepository {
     if (!isMongoConnected() && !Boolean((UserModel.findOne as any)?.mock)) {
       return null;
     }
-    return (await UserModel.findOne({ email: email.toLowerCase().trim() }).lean().exec()) as unknown as IUserDocument | null;
+    return UserModel.findOne({ email: email.toLowerCase().trim() }).exec();
   }
 
   /**

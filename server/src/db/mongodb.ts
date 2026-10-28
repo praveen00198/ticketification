@@ -42,12 +42,9 @@ export async function connectMongoDB(options: MongoConnectionOptions = {}): Prom
       console.warn('⚠️ [MongoDB] Disconnected from database instance.');
     });
 
-    const defaultMaxPool = parseInt(process.env.MONGODB_MAX_POOL_SIZE || '50', 10);
-    const defaultMinPool = parseInt(process.env.MONGODB_MIN_POOL_SIZE || '10', 10);
-
     await mongoose.connect(uri, {
-      maxPoolSize: options.maxPoolSize || defaultMaxPool,
-      minPoolSize: options.minPoolSize || defaultMinPool,
+      maxPoolSize: options.maxPoolSize || 10,
+      minPoolSize: options.minPoolSize || 2,
       serverSelectionTimeoutMS: options.serverSelectionTimeoutMS || 5000,
       autoIndex: process.env.NODE_ENV !== 'production', // Build indexes in dev/test, manage explicitly in prod
     });
