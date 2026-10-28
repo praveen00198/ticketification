@@ -60,3 +60,7 @@ skills.json
 
 #docs
 docs/
+
+# Performance testing & audit
+.performance/
+PERFORMANCE_AUDIT_REPORT.md
