@@ -63,4 +63,8 @@ docs/
 
 # Performance testing & audit
 .performance/
+performance-results/
+load-test-results/
+autocannon-*.json
+k6-results.json
 PERFORMANCE_AUDIT_REPORT.md

@@ -43,8 +43,8 @@ export async function connectMongoDB(options: MongoConnectionOptions = {}): Prom
     });
 
     await mongoose.connect(uri, {
-      maxPoolSize: options.maxPoolSize || 10,
-      minPoolSize: options.minPoolSize || 2,
+      maxPoolSize: options.maxPoolSize || 50,
+      minPoolSize: options.minPoolSize || 10,
       serverSelectionTimeoutMS: options.serverSelectionTimeoutMS || 5000,
       autoIndex: process.env.NODE_ENV !== 'production', // Build indexes in dev/test, manage explicitly in prod
     });

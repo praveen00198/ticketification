@@ -74,8 +74,9 @@ export class PublicEventService {
    * Helper to format an event document for public consumption.
    */
   private formatPublicEvent(event: IEventDocument): SanitizedPublicEvent {
+    const rawId = event._id ? event._id.toString() : (event as any).id ? String((event as any).id) : '';
     return {
-      id: event._id.toString(),
+      id: rawId,
       name: event.name,
       eventType: event.eventType,
       description: event.description,
@@ -131,8 +132,10 @@ export class PublicEventService {
     };
   }
 
+  private publicEventsCache = new Map<string, { data: any; expiresAt: number }>();
+
   /**
-   * Search and filter public catalog events.
+   * Search and filter public catalog events with 15s in-memory TTL cache.
    */
   async getPublicEvents(options: PublicEventQueryOptions = {}): Promise<{
     events: SanitizedPublicEvent[];
@@ -141,15 +144,40 @@ export class PublicEventService {
     limit: number;
     totalPages: number;
   }> {
+    const cacheKey = JSON.stringify(options);
+    const cached = this.publicEventsCache.get(cacheKey);
+    const now = Date.now();
+
+    if (cached && cached.expiresAt > now) {
+      return cached.data;
+    }
+
     const result = await this.eventRepo.findPublicEvents(options);
 
-    return {
+    const formatted = {
       events: result.events.map((e) => this.formatPublicEvent(e)),
       total: result.total,
       page: result.page,
       limit: result.limit,
       totalPages: result.totalPages,
     };
+
+    // Cache for 15 seconds to withstand traffic spikes
+    this.publicEventsCache.set(cacheKey, {
+      data: formatted,
+      expiresAt: now + 15000,
+    });
+
+    // Cleanup old keys if map exceeds 500 entries
+    if (this.publicEventsCache.size > 500) {
+      for (const [key, entry] of this.publicEventsCache.entries()) {
+        if (entry.expiresAt <= now) {
+          this.publicEventsCache.delete(key);
+        }
+      }
+    }
+
+    return formatted;
   }
 
   /**
