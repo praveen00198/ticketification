@@ -6,6 +6,7 @@ import { MongoEventReportRepository } from '../src/modules/events/repositories/m
 import { MongoUserRepository } from '../src/modules/auth/repositories/mongo-user.repository';
 import { EventRegistrationModel } from '../src/db/mongo/models/event-registration.model';
 import { AuditService } from '../src/modules/events/services/audit.service';
+import { publicEventService } from '../src/modules/events/services/public-event.service';
 
 describe('Phase 21: Interactive Public Platform Engine', () => {
   jest.setTimeout(30000);
@@ -77,6 +78,7 @@ describe('Phase 21: Interactive Public Platform Engine', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    publicEventService.clearCache();
   });
 
   describe('1. Public Event Discovery & Catalog', () => {
@@ -122,6 +124,35 @@ describe('Phase 21: Interactive Public Platform Engine', () => {
           pricingModel: 'FREE',
         })
       );
+    });
+
+    it('should serve repeated catalog queries from in-memory cache and support cache clearing', async () => {
+      publicEventService.clearCache();
+      const spy = jest.spyOn(MongoEventRepository.prototype, 'findPublicEvents').mockResolvedValue({
+        events: [mockPublicEvent as any],
+        total: 1,
+        page: 1,
+        limit: 12,
+        totalPages: 1,
+      });
+
+      // First query -> calls repository
+      const res1 = await request(app).get('/api/public/events').query({ page: 1, limit: 12 });
+      expect(res1.status).toBe(200);
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      // Second identical query -> served from cache without repository hit
+      const res2 = await request(app).get('/api/public/events').query({ page: 1, limit: 12 });
+      expect(res2.status).toBe(200);
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      // Invalidate cache
+      publicEventService.clearCache();
+
+      // Third query -> hits repository again
+      const res3 = await request(app).get('/api/public/events').query({ page: 1, limit: 12 });
+      expect(res3.status).toBe(200);
+      expect(spy).toHaveBeenCalledTimes(2);
     });
   });
 

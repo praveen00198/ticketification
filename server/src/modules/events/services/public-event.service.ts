@@ -134,6 +134,25 @@ export class PublicEventService {
 
   private publicEventsCache = new Map<string, { data: any; expiresAt: number }>();
 
+  private getCacheKey(options: PublicEventQueryOptions): string {
+    return [
+      options.page || 1,
+      options.limit || 12,
+      options.eventType || 'ALL',
+      options.venueType || 'ALL',
+      options.pricingModel || 'ALL',
+      (options.city || '').trim().toLowerCase(),
+      (options.search || '').trim().toLowerCase(),
+    ].join(':');
+  }
+
+  /**
+   * Explicitly invalidate cached public catalog entries (e.g. on event status transition).
+   */
+  public clearCache(): void {
+    this.publicEventsCache.clear();
+  }
+
   /**
    * Search and filter public catalog events with 15s in-memory TTL cache.
    */
@@ -144,7 +163,7 @@ export class PublicEventService {
     limit: number;
     totalPages: number;
   }> {
-    const cacheKey = JSON.stringify(options);
+    const cacheKey = this.getCacheKey(options);
     const cached = this.publicEventsCache.get(cacheKey);
     const now = Date.now();
 
