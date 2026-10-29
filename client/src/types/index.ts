@@ -26,6 +26,7 @@ export interface EventItem {
   logoUrl?: string | null;
   ticketTemplateUrl?: string | null;
   status: 'DRAFT' | 'UPCOMING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED' | string;
+  visibility?: 'public' | 'private';
   eventType?: string;
   credentialTerminology?: string;
   attendanceMode?: string;

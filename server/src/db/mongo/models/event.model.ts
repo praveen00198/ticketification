@@ -44,6 +44,9 @@ export type VenueType = 'PHYSICAL' | 'ONLINE' | 'HYBRID';
 
 export const VENUE_TYPES: VenueType[] = ['PHYSICAL', 'ONLINE', 'HYBRID'];
 
+export type EventVisibility = 'public' | 'private';
+export const EVENT_VISIBILITIES: EventVisibility[] = ['public', 'private'];
+
 export type EventStatus =
   | 'DRAFT'
   | 'SUBMITTED'
@@ -156,6 +159,7 @@ export interface IEvent {
   schedule: IEventSchedule;
   registration?: IEventRegistration;
   status: EventStatus;
+  visibility?: EventVisibility;
   hostingType?: HostingType;
   organization?: IEventOrganization;
   organizationVerificationStatus?: OrganizationVerificationStatus;
@@ -394,6 +398,15 @@ const EventSchema = new Schema<IEventDocument>(
       required: true,
       index: true,
     },
+    visibility: {
+      type: String,
+      enum: {
+        values: EVENT_VISIBILITIES,
+        message: 'Invalid visibility: {VALUE}',
+      },
+      default: 'public',
+      index: true,
+    },
     hostingType: {
       type: String,
       enum: {
@@ -480,6 +493,7 @@ EventSchema.index({ ownerId: 1, createdAt: -1 });
 EventSchema.index({ ownerSupabaseId: 1, createdAt: -1 });
 EventSchema.index({ ownerId: 1, status: 1 });
 EventSchema.index({ ownerId: 1, eventType: 1 });
+EventSchema.index({ visibility: 1, status: 1 });
 EventSchema.index({ hostingType: 1, organizationVerificationStatus: 1 });
 EventSchema.index({ 'organization.name': 1 });
 EventSchema.index({ name: 'text', description: 'text' });

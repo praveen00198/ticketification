@@ -24,17 +24,18 @@ export async function authMiddleware(
   _res: Response,
   next: NextFunction
 ): Promise<void> {
-  const authHeader = req.headers.authorization;
+  const authHeader = req.headers.authorization || (req.headers['authorization'] as string | undefined);
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  if (!authHeader) {
     return next(new AuthenticationError('Authentication required. Missing Bearer token.'));
   }
 
-  const token = authHeader.split(' ')[1]?.trim();
-
-  if (!token) {
-    return next(new AuthenticationError('Authentication required. Bearer token is empty.'));
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match || !match[1]?.trim()) {
+    return next(new AuthenticationError('Authentication required. Missing Bearer token.'));
   }
+
+  const token = match[1].trim();
 
   // 1. Verify token: Check custom backend JWT first (if enabled), then Supabase fallback
   let userId = '';
@@ -43,8 +44,8 @@ export async function authMiddleware(
   const isLocalAuthEnabled = !config.env.isProduction || config.env.enableLocalAuth;
   const payload = isLocalAuthEnabled ? verifyJwtToken(token) : null;
 
-  if (payload && payload.id) {
-    userId = String(payload.id);
+  if (payload && (payload.id || payload.sub || payload.userId)) {
+    userId = String(payload.id || payload.sub || payload.userId);
     email = (payload.email || '').toLowerCase().trim();
   } else {
     // Fall back to Supabase verification if configured

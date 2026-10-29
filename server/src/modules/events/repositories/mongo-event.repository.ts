@@ -196,6 +196,7 @@ export class MongoEventRepository {
     const skip = (page - 1) * limit;
 
     const query: Record<string, any> = {
+      visibility: { $ne: 'private' },
       status: { $in: ['PUBLISHED', 'REGISTRATION_OPEN', 'EVENT_LIVE'] },
       organizationVerificationStatus: { $nin: ['PENDING', 'REJECTED'] },
       verificationStatus: { $nin: ['PENDING', 'REJECTED'] },
@@ -272,6 +273,7 @@ export class MongoEventRepository {
     return (await this.model
       .findOne({
         _id: id,
+        visibility: { $ne: 'private' },
         status: {
           $in: [
             'PUBLISHED',
@@ -299,6 +301,7 @@ export class MongoEventRepository {
   async findPublicByHost(hostIdentifier: string): Promise<IEventDocument[]> {
     const isObjectId = mongoose.Types.ObjectId.isValid(hostIdentifier);
     const query: Record<string, any> = {
+      visibility: { $ne: 'private' },
       status: { $in: ['PUBLISHED', 'REGISTRATION_OPEN', 'EVENT_LIVE'] },
       organizationVerificationStatus: { $nin: ['PENDING', 'REJECTED'] },
       verificationStatus: { $nin: ['PENDING', 'REJECTED'] },

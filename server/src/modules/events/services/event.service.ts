@@ -6,6 +6,7 @@ import { mongoUserRepository, MongoUserRepository } from '../../auth/repositorie
 import { mongoEventVerificationRepository, MongoEventVerificationRepository } from '../repositories/mongo-event-verification.repository';
 import { mongoEventMemberRepository, MongoEventMemberRepository } from '../repositories/mongo-event-member.repository';
 import { supabaseStorageService, SupabaseStorageService } from '../../tickets/services/supabase-storage.service';
+import { publicEventService } from './public-event.service';
 import config from '../../../config/env';
 import {
   ValidationError,
@@ -83,6 +84,7 @@ export class EventService {
           }
         : undefined,
       status: doc.status,
+      visibility: doc.visibility || 'public',
       hostingType: doc.hostingType || 'INDIVIDUAL',
       organization: doc.organization,
       organizationVerificationStatus: doc.organizationVerificationStatus || 'NOT_REQUIRED',
@@ -155,6 +157,7 @@ export class EventService {
           }
         : undefined,
       status: 'DRAFT',
+      visibility: data.visibility || 'public',
       hostingType,
       organization: isOrg && data.organization ? {
         name: data.organization.name,
@@ -201,6 +204,7 @@ export class EventService {
       }
     }
 
+    publicEventService.clearCache();
     return this.formatCanonicalEvent(eventDoc);
   }
 
@@ -317,6 +321,7 @@ export class EventService {
       throw new NotFoundError('Event draft not found or could not be updated.');
     }
 
+    publicEventService.clearCache();
     return this.formatCanonicalEvent(updated);
   }
 
@@ -359,6 +364,46 @@ export class EventService {
     }
     if (!data.date) {
       throw new ValidationError('Event date is required.');
+    }
+
+    if (!config.env.databaseUrl) {
+      const wizardData: CreateEventWizardDTO = {
+        eventType: (data.eventType as any) || 'CONFERENCE',
+        name: data.name.trim(),
+        description: data.description?.trim(),
+        credentialTerminology: data.credentialTerminology || 'Attendee Pass',
+        attendanceMode: (data.attendanceMode as any) || 'TICKETIFICATION_REGISTRATION',
+        venue: {
+          type: 'PHYSICAL',
+          name: data.venue?.trim() || 'Main Venue',
+          city: 'Main City',
+          country: 'India',
+        },
+        schedule: {
+          startAt: new Date(data.date + (data.time ? `T${data.time}:00` : 'T09:00:00')).toISOString(),
+          endAt: new Date(new Date(data.date).getTime() + 86400000).toISOString(),
+          timezone: 'Asia/Kolkata',
+        },
+        visibility: data.visibility || 'public',
+        hostingType: 'INDIVIDUAL',
+      };
+      const canonical = await this.createEventWizard(userId, wizardData);
+      return {
+        id: canonical.id,
+        name: canonical.name,
+        date: data.date,
+        time: data.time || '09:00',
+        venue: data.venue?.trim() || 'Main Venue',
+        description: data.description?.trim() || null,
+        organizerName: data.organizerName?.trim() || null,
+        logoUrl: data.logoUrl || null,
+        ticketTemplateUrl: data.ticketTemplateUrl || null,
+        status: canonical.status,
+        visibility: canonical.visibility,
+        createdBy: userId,
+        createdAt: canonical.createdAt,
+        updatedAt: canonical.updatedAt,
+      } as any;
     }
 
     try {
@@ -448,7 +493,9 @@ export class EventService {
       if (mongoEvent.ownerSupabaseId !== userId) {
         throw new AuthorizationError('Access denied. You do not own this event.');
       }
-      return await this.mongoEventRepo.deleteDraft(eventId, userId);
+      const deleted = await this.mongoEventRepo.deleteDraft(eventId, userId);
+      if (deleted) publicEventService.clearCache();
+      return deleted;
     }
 
     const existing = await this.eventRepo.findById(eventId);
@@ -461,6 +508,7 @@ export class EventService {
     }
 
     await this.eventRepo.delete(eventId);
+    publicEventService.clearCache();
     return true;
   }
 

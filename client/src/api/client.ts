@@ -133,8 +133,13 @@ export function getAuthenticatedUserIdFromToken(): string | null {
 
 apiClient.interceptors.request.use((config) => {
   const token = getStoredAuthToken();
-  if (token && config.headers) {
-    config.headers.Authorization = `Bearer ${token}`;
+  if (token) {
+    const cleanToken = token.trim();
+    if (config.headers && typeof (config.headers as any).set === 'function') {
+      (config.headers as any).set('Authorization', `Bearer ${cleanToken}`);
+    } else if (config.headers) {
+      config.headers.Authorization = `Bearer ${cleanToken}`;
+    }
   }
   return config;
 });
@@ -215,10 +220,13 @@ apiClient.interceptors.response.use(
     }
 
     let message = error.response?.data?.error?.message;
-    if (!message) {
-      if (error.response?.status === 401) {
-        message = 'Your session has expired. Please sign in again.';
-      } else if (error.response?.status === 403) {
+    if (
+      error.response?.status === 401 ||
+      (message && /bearer.*token|token.*missing|authentication required/i.test(message))
+    ) {
+      message = 'Your session has expired or you are not signed in. Please sign in again.';
+    } else if (!message) {
+      if (error.response?.status === 403) {
         message = 'You do not have permission to perform this action.';
       } else if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
         message = 'Unable to connect to the server. Please check your internet connection and try again.';

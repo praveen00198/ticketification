@@ -111,7 +111,12 @@ export class EventController {
       }
 
       // Check if this is a Phase 4 Event Creation Wizard request
-      if (req.body.eventType || req.body.attendanceMode || req.body.venue) {
+      const isWizardPayload =
+        Boolean(req.body.eventType) ||
+        Boolean(req.body.attendanceMode) ||
+        (req.body.venue && typeof req.body.venue === 'object');
+
+      if (isWizardPayload) {
         const validatedWizard = validateEventWizardInput(req.body);
         const event = await this.service.createEventWizard(req.user.id, validatedWizard);
 

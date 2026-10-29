@@ -25,6 +25,7 @@ import {
   Clock,
   Ticket as TicketIcon,
   Globe,
+  Lock,
   ShieldCheck,
   FileSpreadsheet,
   UserCheck,
@@ -37,8 +38,10 @@ import {
   AttendanceMode,
   VenueType,
   HostingType,
+  EventVisibility,
   CreateEventWizardPayload,
 } from '../../api/events';
+import { getStoredAuthToken } from '../../api/client';
 
 interface EventCreationWizardProps {
   onSuccess?: (event: any) => void;
@@ -240,6 +243,7 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
     initialCard?.defaultCredential || 'Participant Pass'
   );
   const [attendanceMode, setAttendanceMode] = useState<AttendanceMode>('TICKETIFICATION_REGISTRATION');
+  const [visibility, setVisibility] = useState<EventVisibility>('public');
 
   // Keep state in sync if initialEventType changes externally
   useEffect(() => {
@@ -469,6 +473,13 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
   const handleSaveDraft = async () => {
     if (!validateStep(2) || !validateStep(6) || !validateStep(7)) return;
 
+    // Verify authentication session before submitting
+    const token = getStoredAuthToken();
+    if (!token) {
+      setErrorMessage('Your session has expired or you are not signed in. Please sign in again.');
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       setErrorMessage(null);
@@ -483,6 +494,7 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
         bannerUrl: bannerUrl || undefined,
         credentialTerminology: credentialTerminology.trim(),
         attendanceMode,
+        visibility,
         venue: {
           type: venueType,
           name: venueName.trim() || undefined,
@@ -709,6 +721,82 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                   )}
                 </div>
               )}
+            </div>
+
+            {/* Event Visibility */}
+            <div className="pt-4 border-t border-stone-200/80">
+              <label className="block text-xs font-semibold text-zinc-900 mb-1">
+                Event Visibility <span className="text-rose-500">*</span>
+              </label>
+              <p className="text-xs text-stone-500 mb-3">
+                Choose how your event can be discovered and accessed by attendees.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Public Option */}
+                <button
+                  type="button"
+                  onClick={() => setVisibility('public')}
+                  className={`flex flex-col text-left p-3.5 rounded-xl border transition-all cursor-pointer ${
+                    visibility === 'public'
+                      ? 'border-emerald-600 bg-emerald-50/40 ring-1 ring-emerald-500/20'
+                      : 'border-stone-200/90 bg-white hover:bg-stone-50/60'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <div className={`p-1.5 rounded-lg ${
+                        visibility === 'public' ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-600'
+                      }`}>
+                        <Globe className="w-4 h-4" />
+                      </div>
+                      <span className="text-xs font-bold text-zinc-900">Public Event</span>
+                    </div>
+                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                      visibility === 'public'
+                        ? 'border-emerald-600 bg-emerald-600'
+                        : 'border-stone-300 bg-white'
+                    }`}>
+                      {visibility === 'public' && <Check className="w-2.5 h-2.5 text-white" />}
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-stone-500 leading-relaxed">
+                    Discoverable on the public catalog and search. Anyone can view the public event page.
+                  </p>
+                </button>
+
+                {/* Private Option */}
+                <button
+                  type="button"
+                  onClick={() => setVisibility('private')}
+                  className={`flex flex-col text-left p-3.5 rounded-xl border transition-all cursor-pointer ${
+                    visibility === 'private'
+                      ? 'border-emerald-600 bg-emerald-50/40 ring-1 ring-emerald-500/20'
+                      : 'border-stone-200/90 bg-white hover:bg-stone-50/60'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <div className={`p-1.5 rounded-lg ${
+                        visibility === 'private' ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-600'
+                      }`}>
+                        <Lock className="w-4 h-4" />
+                      </div>
+                      <span className="text-xs font-bold text-zinc-900">Private Event</span>
+                    </div>
+                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                      visibility === 'private'
+                        ? 'border-emerald-600 bg-emerald-600'
+                        : 'border-stone-300 bg-white'
+                    }`}>
+                      {visibility === 'private' && <Check className="w-2.5 h-2.5 text-white" />}
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-stone-500 leading-relaxed">
+                    Hidden from public search and catalog. Accessible only via direct authorized link or invite.
+                  </p>
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -1389,6 +1477,17 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                 <h3 className="font-semibold text-stone-900 text-base mt-1">{name}</h3>
                 <div className="text-xs text-stone-500 mt-0.5">
                   Type: <span className="font-medium text-stone-800">{eventType}</span>
+                </div>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-xs text-stone-500">Visibility:</span>
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border ${
+                    visibility === 'public'
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : 'bg-zinc-100 text-zinc-700 border-zinc-200'
+                  }`}>
+                    {visibility === 'public' ? <Globe className="w-3 h-3 text-emerald-600" /> : <Lock className="w-3 h-3 text-zinc-600" />}
+                    {visibility === 'public' ? 'Public Event' : 'Private Event'}
+                  </span>
                 </div>
                 {description && <p className="text-xs text-stone-600 mt-2 line-clamp-2">{description}</p>}
                 {bannerUrl && (

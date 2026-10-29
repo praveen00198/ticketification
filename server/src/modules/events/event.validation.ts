@@ -10,6 +10,8 @@ import {
   VenueType,
   HostingType,
   DEFAULT_CREDENTIAL_TERMINOLOGY,
+  EventVisibility,
+  EVENT_VISIBILITIES,
 } from './event.types';
 import {
   EVENT_TYPES,
@@ -252,6 +254,16 @@ export function validateEventWizardInput(body: any): CreateEventWizardDTO {
     };
   }
 
+  // 11. Visibility (Optional, defaults to 'public')
+  let visibility: EventVisibility = 'public';
+  if (body.visibility !== undefined && body.visibility !== null) {
+    const rawVis = String(body.visibility).trim().toLowerCase() as EventVisibility;
+    if (!EVENT_VISIBILITIES.includes(rawVis)) {
+      throw new ValidationError(`Invalid visibility: "${body.visibility}". Allowed: ${EVENT_VISIBILITIES.join(', ')}.`);
+    }
+    visibility = rawVis;
+  }
+
   return {
     eventType,
     name,
@@ -264,6 +276,7 @@ export function validateEventWizardInput(body: any): CreateEventWizardDTO {
     registration,
     hostingType,
     organization,
+    visibility,
   };
 }
 
@@ -381,6 +394,14 @@ export function validateEventDraftUpdate(body: any): UpdateEventDraftDTO {
     updates.registration = body.registration;
   }
 
+  if (body.visibility !== undefined && body.visibility !== null) {
+    const rawVis = String(body.visibility).trim().toLowerCase() as EventVisibility;
+    if (!EVENT_VISIBILITIES.includes(rawVis)) {
+      throw new ValidationError(`Invalid visibility: "${body.visibility}". Allowed: ${EVENT_VISIBILITIES.join(', ')}.`);
+    }
+    updates.visibility = rawVis;
+  }
+
   return updates;
 }
 
@@ -410,6 +431,15 @@ export function validateCreateEventInput(body: any): CreateEventDTO {
     throw new ValidationError('Event date must be a valid date format (YYYY-MM-DD).');
   }
 
+  let visibility: EventVisibility = 'public';
+  if (body.visibility !== undefined && body.visibility !== null) {
+    const rawVis = String(body.visibility).trim().toLowerCase() as EventVisibility;
+    if (!EVENT_VISIBILITIES.includes(rawVis)) {
+      throw new ValidationError(`Invalid visibility: "${body.visibility}". Allowed: ${EVENT_VISIBILITIES.join(', ')}.`);
+    }
+    visibility = rawVis;
+  }
+
   return {
     name,
     date,
@@ -423,6 +453,7 @@ export function validateCreateEventInput(body: any): CreateEventDTO {
     eventType: body.eventType,
     credentialTerminology: body.credentialTerminology,
     attendanceMode: body.attendanceMode,
+    visibility,
   };
 }
 
@@ -473,6 +504,14 @@ export function validateUpdateEventInput(body: any): UpdateEventDTO {
 
   if (body.status !== undefined) {
     result.status = typeof body.status === 'string' ? body.status.trim().toUpperCase() : undefined;
+  }
+
+  if (body.visibility !== undefined && body.visibility !== null) {
+    const rawVis = String(body.visibility).trim().toLowerCase() as EventVisibility;
+    if (!EVENT_VISIBILITIES.includes(rawVis)) {
+      throw new ValidationError(`Invalid visibility: "${body.visibility}". Allowed: ${EVENT_VISIBILITIES.join(', ')}.`);
+    }
+    result.visibility = rawVis;
   }
 
   return result;

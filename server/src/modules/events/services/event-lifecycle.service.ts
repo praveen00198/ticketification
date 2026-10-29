@@ -14,6 +14,7 @@ import {
   MongoUserRepository,
 } from '../../auth/repositories/mongo-user.repository';
 import { assertPublicationReadiness } from '../utils/publication-readiness';
+import { publicEventService } from './public-event.service';
 
 export const ALLOWED_TRANSITIONS: Record<EventStatus, EventStatus[]> = {
   DRAFT: ['SUBMITTED', 'CANCELLED'],
@@ -127,6 +128,8 @@ export class EventLifecycleService {
       extraUpdates
     );
 
+    publicEventService.clearCache();
+
     return {
       event: updated!,
       message: `Event successfully transitioned to ${targetStatus}.`,
@@ -230,6 +233,8 @@ export class EventLifecycleService {
       extraUpdates
     );
 
+    publicEventService.clearCache();
+
     return {
       event: updated!,
       message: 'Event has been suspended by platform administration.',
@@ -286,6 +291,8 @@ export class EventLifecycleService {
       extraUpdates
     );
 
+    publicEventService.clearCache();
+
     return {
       event: updated!,
       message: `Event has been reinstated to ${targetStatus}.`,
@@ -304,6 +311,8 @@ export class EventLifecycleService {
     if (event.ownerSupabaseId !== callerSupabaseId) {
       throw new AppError('You do not have permission to view this event history.', 403);
     }
+
+    publicEventService.clearCache();
 
     return {
       statusHistory: event.statusHistory || [],

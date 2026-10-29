@@ -1,6 +1,8 @@
-import { apiClient } from './client';
+import { apiClient, getStoredAuthToken } from './client';
 import { EventItem, TicketType } from '../types';
 import { formatVenueLabel } from '../utils/venue';
+
+export type EventVisibility = 'public' | 'private';
 
 export type EventType =
   | 'CONFERENCE'
@@ -74,6 +76,7 @@ export interface CreateEventWizardPayload {
   };
   hostingType?: HostingType;
   organization?: EventOrganizationPayload;
+  visibility?: EventVisibility;
 }
 
 export interface UpdateEventDraftPayload {
@@ -92,6 +95,7 @@ export interface UpdateEventDraftPayload {
   };
   hostingType?: HostingType;
   organization?: Partial<EventOrganizationPayload>;
+  visibility?: EventVisibility;
 }
 
 export interface CanonicalEventItem {
@@ -112,6 +116,7 @@ export interface CanonicalEventItem {
     capacity?: number;
   };
   status: string;
+  visibility?: EventVisibility;
   hostingType?: HostingType;
   organization?: EventOrganizationPayload;
   organizationVerificationStatus?: OrganizationVerificationStatus;
@@ -145,6 +150,7 @@ export interface CreateEventPayload {
   logoUrl?: string;
   ticketTemplateUrl?: string;
   status?: string;
+  visibility?: EventVisibility;
 }
 
 export interface UpdateEventPayload {
@@ -157,6 +163,7 @@ export interface UpdateEventPayload {
   logoUrl?: string;
   ticketTemplateUrl?: string;
   status?: string;
+  visibility?: EventVisibility;
 }
 
 export interface CreateTicketTypePayload {
@@ -217,6 +224,7 @@ export function normalizeEventItem(item: any): EventItem {
     logoUrl: item.logoUrl ?? null,
     ticketTemplateUrl: item.ticketTemplateUrl ?? null,
     status: item.status || 'DRAFT',
+    visibility: item.visibility || 'public',
     eventType: item.eventType,
     credentialTerminology: item.credentialTerminology || item.credentialType,
     attendanceMode: item.attendanceMode,
@@ -306,7 +314,15 @@ export const eventsApi = {
   },
 
   async createEvent(payload: CreateEventPayload | CreateEventWizardPayload): Promise<EventItem> {
-    const res: any = await apiClient.post('/events', payload);
+    const token = getStoredAuthToken();
+    if (!token) {
+      throw new Error('Your session has expired or you are not signed in. Please sign in again.');
+    }
+    const res: any = await apiClient.post('/events', payload, {
+      headers: {
+        Authorization: `Bearer ${token.trim()}`,
+      },
+    });
     return normalizeEventItem(res.data?.data || res.data);
   },
 

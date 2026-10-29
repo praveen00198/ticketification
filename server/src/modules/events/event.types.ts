@@ -9,6 +9,8 @@ import {
   IEventVenue,
   IEventSchedule,
   IEventRegistration,
+  EventVisibility,
+  EVENT_VISIBILITIES,
 } from '../../db/mongo/models/event.model';
 
 export {
@@ -19,6 +21,8 @@ export {
   HostingType,
   OrganizationVerificationStatus,
   IEventOrganization,
+  EventVisibility,
+  EVENT_VISIBILITIES,
 };
 
 export const DEFAULT_CREDENTIAL_TERMINOLOGY: Record<EventType, string> = {
@@ -57,6 +61,7 @@ export interface CreateEventWizardDTO {
   };
   hostingType?: HostingType;
   organization?: IEventOrganization;
+  visibility?: EventVisibility;
 }
 
 export interface UpdateEventDraftDTO {
@@ -79,6 +84,7 @@ export interface UpdateEventDraftDTO {
   };
   hostingType?: HostingType;
   organization?: Partial<IEventOrganization>;
+  visibility?: EventVisibility;
 }
 
 export interface CanonicalEventResponse {
@@ -103,6 +109,7 @@ export interface CanonicalEventResponse {
     capacity?: number;
   };
   status: EventStatus;
+  visibility: EventVisibility;
   hostingType?: HostingType;
   organization?: IEventOrganization;
   organizationVerificationStatus?: OrganizationVerificationStatus;
@@ -128,6 +135,7 @@ export interface CreateEventDTO {
   eventType?: EventType;
   credentialTerminology?: string;
   attendanceMode?: AttendanceMode;
+  visibility?: EventVisibility;
 }
 
 export interface UpdateEventDTO {
@@ -143,6 +151,7 @@ export interface UpdateEventDTO {
   eventType?: EventType;
   credentialTerminology?: string;
   attendanceMode?: AttendanceMode;
+  visibility?: EventVisibility;
 }
 
 export interface CreateTicketTypeDTO {
@@ -170,6 +179,7 @@ export interface EventResponse {
   eventType?: string;
   credentialTerminology?: string;
   attendanceMode?: string;
+  visibility?: string;
 }
 
 export interface TicketTypeResponse {
