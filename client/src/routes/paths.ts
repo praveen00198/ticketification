@@ -20,6 +20,7 @@ export const ROUTES = {
   EVENTS: '/events',
   CREATE_EVENT: '/events/create',
   EVENT_DETAIL: '/events/:eventId',
+  ATTENDEE_WORKSPACE: '/events/:eventId/attendee',
   WALLET: '/wallet',
   REGISTRATIONS: '/registrations',
   HISTORY: '/history',

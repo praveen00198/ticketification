@@ -15,6 +15,7 @@ import { Register } from './pages/Register';
 const Dashboard                  = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
 const EventsPage                 = lazy(() => import('./pages/EventsPage').then(m => ({ default: m.EventsPage })));
 const EventDetailPage            = lazy(() => import('./pages/EventDetailPage').then(m => ({ default: m.EventDetailPage })));
+const AttendeeEventDashboardPage = lazy(() => import('./pages/AttendeeEventDashboardPage').then(m => ({ default: m.AttendeeEventDashboardPage })));
 const GuestImport                = lazy(() => import('./pages/GuestImport').then(m => ({ default: m.GuestImport })));
 const TicketList                 = lazy(() => import('./pages/TicketList').then(m => ({ default: m.TicketList })));
 const ScannerPage                = lazy(() => import('./pages/ScannerPage').then(m => ({ default: m.ScannerPage })));
@@ -125,6 +126,19 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
+
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      setToken(null);
+      setUser(null);
+      setAuthStatus('UNAUTHENTICATED');
+      setAuthError('Your session has expired. Please sign in again.');
+    };
+    window.addEventListener('ticketification:auth-expired', handleAuthExpired);
+    return () => {
+      window.removeEventListener('ticketification:auth-expired', handleAuthExpired);
+    };
+  }, []);
 
   const handleLoginSuccess = (
     newToken: string,
@@ -263,6 +277,7 @@ const AppContent: React.FC = () => {
             <Route path={ROUTES.EVENTS} element={<EventsPage />} />
             <Route path={ROUTES.CREATE_EVENT} element={<CreateEventPage />} />
             <Route path={ROUTES.EVENT_DETAIL} element={<EventDetailPage />} />
+            <Route path={ROUTES.ATTENDEE_WORKSPACE} element={<AttendeeEventDashboardPage />} />
 
             {/* Normal User Dashboard Modules */}
             {/* 1. Event Discovery */}

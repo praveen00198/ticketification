@@ -177,6 +177,9 @@ export function isHostWorkspaceMode(
   currentEvent?: { id?: string } | null
 ): boolean {
   if (!currentEvent) return false;
+  if (pathname.includes('/attendee') || pathname.endsWith('/public')) {
+    return false;
+  }
   if (pathname.startsWith('/events/') && !pathname.startsWith('/events/create')) {
     return true;
   }
@@ -375,9 +378,17 @@ export function getAttendeeWorkspaceNavigationCategories({
     {
       title: 'Attendee Workspace',
       items: [
-        { label: 'My Event Pass', path: `/wallet`, icon: Ticket },
-        { label: 'Event Guide', path: `/events/${eventId}/public`, icon: Compass },
+        { label: 'Event Overview', path: `/events/${eventId}/attendee`, icon: LayoutDashboard },
+        { label: 'Entry Pass & QR', path: `/events/${eventId}/attendee?tab=pass`, icon: Ticket },
+        { label: 'Guide & Schedule', path: `/events/${eventId}/attendee?tab=guide`, icon: Compass },
+        { label: 'Team & Project', path: `/events/${eventId}/attendee?tab=team`, icon: Users },
+      ],
+    },
+    {
+      title: 'My Activities',
+      items: [
         { label: 'My Registrations', path: `/registrations`, icon: CheckCircle2 },
+        { label: 'Pass Wallet', path: `/wallet`, icon: Wallet },
       ],
     },
   ];
@@ -402,9 +413,11 @@ export function getNavigationCategories({
     return getHostWorkspaceNavigationCategories({ user, currentEvent });
   }
 
-  // Event-specific attendee workspace: active when user has registered ATTENDEE role in event scope
+  // Event-specific attendee workspace: active when user is in attendee workspace route or has registered role
+  const isAttendeeRoute = Boolean(pathname && pathname.includes('/attendee'));
   const isAttendeeRole = (currentEvent as any)?.userRole === 'ATTENDEE' || (currentEvent as any)?.role === 'ATTENDEE';
-  if (pathname && pathname.startsWith('/events/') && currentEvent && isAttendeeRole && !canManageEventOperations(user, currentEvent)) {
+
+  if ((isAttendeeRoute || isAttendeeRole) && currentEvent && !canManageEventOperations(user, currentEvent)) {
     return getAttendeeWorkspaceNavigationCategories({ user, currentEvent });
   }
 

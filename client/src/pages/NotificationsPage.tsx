@@ -73,9 +73,9 @@ export const NotificationsPage: React.FC = () => {
           })()
         : new Set<string>();
 
-      const [regRes, passesRes] = await Promise.all([
+      const [regRes, walletRes] = await Promise.all([
         attendeeApi.getMyRegistrations(),
-        apiClient.get('/tickets/my-passes'),
+        attendeeApi.getWallet(),
       ]);
 
       const items: NotificationItem[] = [];
@@ -113,14 +113,14 @@ export const NotificationsPage: React.FC = () => {
       }
 
       // 2. Derive real notifications from verified turnstile check-in passes
-      const passesData = passesRes?.data?.passes || passesRes?.data;
+      const passesData = walletRes?.data;
       if (Array.isArray(passesData)) {
         for (const pass of passesData) {
-          if (pass.status === 'USED' || pass.checkedIn) {
-            const passId = pass.id || pass._id;
+          if (pass.status === 'CHECKED_IN' || (pass as any).status === 'USED' || pass.checkInCount > 0 || (pass as any).checkedIn) {
+            const passId = pass.credentialId || (pass as any).id || (pass as any)._id;
             const eventName = pass.eventName || 'Event';
             const notifId = `checkin-${passId}`;
-            const rawDate = pass.checkedInAt || pass.firstCheckedInAt || pass.updatedAt;
+            const rawDate = (pass as any).checkedInAt || (pass as any).firstCheckedInAt || (pass as any).updatedAt || pass.registeredAt;
             const isValidDate = rawDate && !isNaN(new Date(rawDate).getTime());
             const dateStr = isValidDate ? new Date(rawDate).toISOString() : null;
 

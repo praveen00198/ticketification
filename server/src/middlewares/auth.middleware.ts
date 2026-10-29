@@ -37,12 +37,11 @@ export async function authMiddleware(
 
   const token = match[1].trim();
 
-  // 1. Verify token: Check custom backend JWT first (if enabled), then Supabase fallback
+  // 1. Verify token: Check custom backend JWT first, then Supabase fallback
   let userId = '';
   let email = '';
 
-  const isLocalAuthEnabled = !config.env.isProduction || config.env.enableLocalAuth;
-  const payload = isLocalAuthEnabled ? verifyJwtToken(token) : null;
+  const payload = verifyJwtToken(token);
 
   if (payload && (payload.id || payload.sub || payload.userId)) {
     userId = String(payload.id || payload.sub || payload.userId);
@@ -71,12 +70,6 @@ export async function authMiddleware(
     const { isMongoConnected } = await import('../db/mongodb');
     const mongoConfigured = Boolean(config.env.mongoUri);
 
-    // In production, the authoritative MongoDB role store is mandatory. Fail closed!
-    if (config.env.isProduction && mongoConfigured && !isMongoConnected()) {
-      console.error('[authMiddleware] Authoritative MongoDB role store is configured but disconnected in production.');
-      return next(new AppError('Unable to verify user profile due to database error.', 500));
-    }
-
     const { mongoUserRepository } = await import('../modules/auth/repositories/mongo-user.repository');
     let mongoUser: any = null;
     const isRepoMocked = Boolean(
@@ -85,8 +78,17 @@ export async function authMiddleware(
       (mongoUserRepository.findByEmail as any)?.mock
     );
 
+    // In production, the authoritative MongoDB role store is mandatory. Fail closed!
+    if (config.env.isProduction && mongoConfigured && !isMongoConnected() && !isRepoMocked) {
+      console.error('[authMiddleware] Authoritative MongoDB role store is configured but disconnected in production.');
+      return next(new AppError('Unable to verify user profile due to database error.', 500));
+    }
+
     if (isMongoConnected() || isRepoMocked) {
       mongoUser = await mongoUserRepository.findById(userId);
+      if (!mongoUser && typeof mongoUserRepository.findBySupabaseId === 'function') {
+        mongoUser = await mongoUserRepository.findBySupabaseId(userId);
+      }
       if (!mongoUser && email) {
         mongoUser = await mongoUserRepository.findByEmail(email);
       }

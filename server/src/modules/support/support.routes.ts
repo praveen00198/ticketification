@@ -1,7 +1,12 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { mongoEventReportRepository } from '../events/repositories/mongo-event-report.repository';
 import { authMiddleware, AuthenticatedRequest } from '../../middlewares/auth.middleware';
-import { ValidationError, AuthenticationError } from '../../middlewares/error.middleware';
+import {
+  ValidationError,
+  AuthenticationError,
+  NotFoundError,
+  AuthorizationError,
+} from '../../middlewares/error.middleware';
 import { REPORT_CATEGORIES } from '../../db/mongo/models/event-report.model';
 
 const router = Router();
@@ -76,7 +81,7 @@ router.get('/faqs', (_req: Request, res: Response) => {
  */
 router.post('/report', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { eventId, category, reason, reporterEmail, reporterName } = req.body;
+    const { eventId, category, reason, description, reporterEmail, reporterName } = req.body;
     let user = (req as any).user;
     const authHeader = req.headers.authorization;
 
@@ -104,8 +109,9 @@ router.post('/report', async (req: Request, res: Response, next: NextFunction) =
       throw new ValidationError('A valid contact email address is required.');
     }
 
-    if (!reason || reason.trim().length < 10) {
-      throw new ValidationError('Please provide a detailed description of the issue (minimum 10 characters).');
+    const textContent = (reason || description || '').trim();
+    if (!textContent || textContent.length < 5) {
+      throw new ValidationError('Please provide a detailed description of the issue (minimum 5 characters).');
     }
 
     const reportCategory = category && REPORT_CATEGORIES.includes(category) ? category : 'OTHER';
@@ -116,7 +122,7 @@ router.post('/report', async (req: Request, res: Response, next: NextFunction) =
       reporterName: name,
       reporterUserId: userId,
       category: reportCategory,
-      reason: reason.trim(),
+      reason: textContent,
       status: 'PENDING',
       ipAddress: req.ip || '127.0.0.1',
       userAgent: req.headers['user-agent'] || 'unknown',
@@ -131,6 +137,68 @@ router.post('/report', async (req: Request, res: Response, next: NextFunction) =
     next(err);
   }
 });
+
+/**
+ * @route   GET /api/support/events/:eventId/reports
+ * @desc    Retrieve issue reports filed for a specific event (Host / Admin only)
+ */
+router.get(
+  '/events/:eventId/reports',
+  authMiddleware,
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const { eventId } = req.params;
+      const userId = req.user?.id;
+      if (!userId) {
+        throw new AuthenticationError('Unauthorized. Please authenticate first.');
+      }
+
+      // Check event ownership / host authorization
+      const { EventModel } = await import('../../db/mongo/models/event.model');
+      const { EventMemberModel } = await import('../../db/mongo/models/event-member.model');
+      const event = await EventModel.findById(eventId).lean().exec();
+      if (!event) {
+        throw new NotFoundError('Event not found');
+      }
+
+      const isOwner =
+        event.createdBy?.toString() === userId ||
+        (event as any).ownerSupabaseId === userId ||
+        (event as any).organizerEmail?.toLowerCase() === req.user?.email?.toLowerCase();
+
+      let isHostMember = false;
+      if (!isOwner) {
+        const member = await EventMemberModel.findOne({
+          eventId: event._id,
+          $or: [{ userId }, { userEmail: req.user?.email?.toLowerCase() }],
+          status: 'ACTIVE',
+          role: { $in: ['HOST', 'COORDINATOR'] },
+        }).lean().exec();
+        isHostMember = Boolean(member);
+      }
+
+      const isAdmin =
+        req.user?.platformRole === 'ADMIN' ||
+        req.user?.platformRole === 'SUPER_ADMIN' ||
+        req.user?.role === 'ADMIN' ||
+        req.user?.role === 'SUPER_ADMIN';
+
+      if (!isOwner && !isHostMember && !isAdmin) {
+        throw new AuthorizationError('You are not authorized to view support reports for this event.');
+      }
+
+      const reports = await mongoEventReportRepository.findByEventId(eventId);
+
+      res.json({
+        success: true,
+        count: reports.length,
+        data: reports,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 /**
  * @route   GET /api/support/my-reports

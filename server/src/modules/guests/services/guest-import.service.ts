@@ -11,6 +11,7 @@ import {
   ValidationError,
   NotFoundError,
   ConflictError,
+  AuthorizationError,
 } from '../../../middlewares/error.middleware';
 import crypto from 'crypto';
 import mongoose from 'mongoose';
@@ -83,22 +84,31 @@ export class GuestImportService {
           String(mongoEvent.ownerSupabaseId) === userId;
 
         if (!isOwner) {
+          const userObjId = mongoose.Types.ObjectId.isValid(userId)
+            ? new mongoose.Types.ObjectId(userId)
+            : null;
+
           const member = await EventMemberModel.findOne({
             eventId: mongoEvent._id,
             status: 'ACTIVE',
-            role: { $in: ['HOST', 'COORDINATOR'] } as any,
+            role: { $in: ['HOST', 'COORDINATOR'] },
+            ...(userObjId
+              ? { $or: [{ userId: userObjId }, { userEmail: userId }] }
+              : { $or: [{ userId }, { userEmail: userId }] }),
           } as any);
+
           if (!member) {
-            throw new NotFoundError('Event not found or unauthorized');
+            throw new AuthorizationError('Access denied. You do not have permission to manage guest imports for this event.', 403);
           }
         }
         return { isMongo: true, event: mongoEvent };
       }
+      throw new NotFoundError('Event not found');
     }
 
     const event = await this.eventRepo.findByIdAndOwner(eventId, userId);
     if (!event) {
-      throw new NotFoundError('Event not found or unauthorized');
+      throw new AuthorizationError('Access denied. You do not have permission to manage guest imports for this event.', 403);
     }
     return { isMongo: false, event };
   }

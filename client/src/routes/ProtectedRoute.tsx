@@ -2,6 +2,7 @@ import React from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { WifiOff, RotateCw, LogOut } from 'lucide-react';
 import { ROUTES } from './paths';
+import { getStoredAuthToken } from '../api/client';
 
 export type AuthStatus =
   | 'INITIALIZING'
@@ -32,11 +33,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   // Resolve effective status supporting both explicit authStatus and legacy props
   const effectiveStatus: AuthStatus =
     authStatus ||
-    (isLoading
-      ? 'INITIALIZING'
-      : isAuthenticated
-      ? 'AUTHENTICATED'
-      : 'UNAUTHENTICATED');
+    (isLoading !== undefined
+      ? (isLoading ? 'INITIALIZING' : (isAuthenticated ? 'AUTHENTICATED' : 'UNAUTHENTICATED'))
+      : (isAuthenticated !== undefined
+        ? (isAuthenticated ? 'AUTHENTICATED' : 'UNAUTHENTICATED')
+        : (getStoredAuthToken() ? 'INITIALIZING' : 'UNAUTHENTICATED')));
 
   // 1. Session verification in progress
   if (effectiveStatus === 'INITIALIZING') {

@@ -332,7 +332,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
             : 'px-3 sm:px-8 py-4 sm:py-5'
         }`}>
           <div className="w-full flex-1 flex flex-col">
-            {children || <Outlet />}
+            {children || <Outlet context={{ user }} />}
           </div>
         </main>
       </div>

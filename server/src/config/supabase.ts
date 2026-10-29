@@ -19,13 +19,31 @@ export const supabaseStorageAdmin =
     : null;
 
 /**
- * @deprecated Supabase Auth has been completely removed from Ticketification.
- * Maintained as null strictly for backwards compatibility with legacy test mocks.
+ * Supabase Admin Client for fallback user authentication token verification.
+ * Initialized when SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are configured.
  */
-export const supabaseAdmin: any = null;
+export const supabaseAdmin =
+  config.env.supabaseUrl && config.env.supabaseServiceRoleKey
+    ? createClient(config.env.supabaseUrl, config.env.supabaseServiceRoleKey, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+        },
+      })
+    : null;
 
 /**
- * @deprecated Supabase Auth has been completely removed from Ticketification.
- * Maintained as null strictly for backwards compatibility with legacy test mocks.
+ * Supabase Public Client for client-facing/anon operations if configured.
  */
-export const supabasePublic: any = null;
+export const supabasePublic =
+  config.env.supabaseUrl && config.env.supabaseAnonKey
+    ? createClient(config.env.supabaseUrl, config.env.supabaseAnonKey, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+        },
+      })
+    : null;
+

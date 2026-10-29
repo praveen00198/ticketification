@@ -51,12 +51,8 @@ function validateAndLoadEnv(): EnvConfig {
   const rawJwtSecret = process.env.JWT_SECRET || '';
   const jwtSecret = isProduction ? rawJwtSecret : (rawJwtSecret || 'Ticketification_Default_Secret_2026');
 
-  // In production, local authentication is STRICTLY opt-in via ENABLE_LOCAL_AUTH=true.
-  // Missing Supabase configuration NEVER implicitly enables local authentication in production.
-  // In development and test environments, local auth is enabled by default unless explicitly disabled.
-  const enableLocalAuth = isProduction
-    ? process.env.ENABLE_LOCAL_AUTH === 'true'
-    : process.env.ENABLE_LOCAL_AUTH !== 'false';
+  // Local authentication is enabled by default unless explicitly disabled via ENABLE_LOCAL_AUTH=false.
+  const enableLocalAuth = process.env.ENABLE_LOCAL_AUTH !== 'false';
 
   // Parse and validate explicit trusted frontend CORS origins
   const rawCorsOrigins = [

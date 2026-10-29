@@ -58,14 +58,51 @@ export const apiClient = axios.create({
  * Eliminates duplicate token exposure in browser storage.
  */
 export function getStoredRefreshToken(): string | null {
-  return localStorage.getItem('ticketification_refresh_token');
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return null;
+  }
+
+  const token = localStorage.getItem('ticketification_refresh_token');
+  if (token) return token;
+
+  // Supabase localStorage session fallback
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (
+        key &&
+        ((key.startsWith('sb-') && key.endsWith('-auth-token')) ||
+          key === 'supabase.auth.token')
+      ) {
+        const item = localStorage.getItem(key);
+        if (item) {
+          const parsed = JSON.parse(item);
+          const sbRefreshToken =
+            parsed?.refresh_token || parsed?.currentSession?.refresh_token;
+          if (sbRefreshToken && typeof sbRefreshToken === 'string') {
+            return sbRefreshToken;
+          }
+        }
+      }
+    }
+  } catch {
+    // Ignore storage parse errors
+  }
+
+  return null;
 }
 
 export function setStoredRefreshToken(token: string): void {
-  localStorage.setItem('ticketification_refresh_token', token);
+  if (typeof window !== 'undefined' && window.localStorage) {
+    localStorage.setItem('ticketification_refresh_token', token);
+  }
 }
 
 export function getStoredAuthToken(): string | null {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return null;
+  }
+
   const token = localStorage.getItem('ticketification_token');
   if (token) return token;
 
@@ -77,22 +114,51 @@ export function getStoredAuthToken(): string | null {
     return legacyToken;
   }
 
+  // Supabase localStorage session fallback
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (
+        key &&
+        ((key.startsWith('sb-') && key.endsWith('-auth-token')) ||
+          key === 'supabase.auth.token')
+      ) {
+        const item = localStorage.getItem(key);
+        if (item) {
+          const parsed = JSON.parse(item);
+          const sbAccessToken =
+            parsed?.access_token || parsed?.currentSession?.access_token;
+          if (sbAccessToken && typeof sbAccessToken === 'string') {
+            return sbAccessToken;
+          }
+        }
+      }
+    }
+  } catch {
+    // Ignore storage parse errors
+  }
+
   return null;
 }
 
 export function setStoredAuthToken(token: string, refreshToken?: string): void {
-  localStorage.setItem('ticketification_token', token);
-  if (refreshToken) {
-    setStoredRefreshToken(refreshToken);
+  if (typeof window !== 'undefined' && window.localStorage) {
+    localStorage.setItem('ticketification_token', token);
+    if (refreshToken) {
+      setStoredRefreshToken(refreshToken);
+    }
+    // Remove legacy storage key to prevent duplicate credentials in storage
+    localStorage.removeItem('admin_token');
   }
-  // Remove legacy storage key to prevent duplicate credentials in storage
-  localStorage.removeItem('admin_token');
 }
 
 export function clearStoredAuthToken(): void {
-  localStorage.removeItem('ticketification_token');
-  localStorage.removeItem('ticketification_refresh_token');
-  localStorage.removeItem('admin_token');
+  if (typeof window !== 'undefined' && window.localStorage) {
+    localStorage.removeItem('ticketification_token');
+    localStorage.removeItem('ticketification_refresh_token');
+    localStorage.removeItem('admin_token');
+    window.dispatchEvent(new CustomEvent('ticketification:auth-expired'));
+  }
 }
 
 /**
@@ -124,7 +190,7 @@ export function getAuthenticatedUserIdFromToken(): string | null {
     }
     if (!jsonString) return null;
     const parsed = JSON.parse(jsonString);
-    const resolvedId = parsed.id || parsed.userId || parsed._id;
+    const resolvedId = parsed.id || parsed.sub || parsed.userId || parsed._id;
     return resolvedId ? String(resolvedId) : null;
   } catch {
     return null;
@@ -139,27 +205,38 @@ apiClient.interceptors.request.use((config) => {
       (config.headers as any).set('Authorization', `Bearer ${cleanToken}`);
     } else if (config.headers) {
       config.headers.Authorization = `Bearer ${cleanToken}`;
+    } else {
+      config.headers = { Authorization: `Bearer ${cleanToken}` } as any;
+    }
+  } else {
+    // If request requires authentication (not a public or auth endpoint), fail-fast client-side
+    const url = config.url || '';
+    const isPublic =
+      url.startsWith('/public/') ||
+      url.startsWith('/auth/login') ||
+      url.startsWith('/auth/register') ||
+      url.startsWith('/auth/refresh') ||
+      url.startsWith('/health');
+    if (!isPublic) {
+      return Promise.reject({
+        response: {
+          status: 401,
+          data: {
+            error: {
+              message: 'Your session has expired or you are not signed in. Please sign in again.',
+              code: 'SESSION_EXPIRED',
+            },
+          },
+        },
+        message: 'Your session has expired or you are not signed in. Please sign in again.',
+      });
     }
   }
   return config;
 });
 
-let isRefreshing = false;
-let failedQueue: Array<{
-  resolve: (token: string) => void;
-  reject: (error: any) => void;
-}> = [];
-
-const processQueue = (error: any, token: string | null = null) => {
-  failedQueue.forEach((prom) => {
-    if (error) {
-      prom.reject(error);
-    } else {
-      prom.resolve(token!);
-    }
-  });
-  failedQueue = [];
-};
+// Shared in-flight refresh promise mutex to eliminate concurrent refresh races
+let refreshPromise: Promise<string> | null = null;
 
 apiClient.interceptors.response.use(
   (response) => response.data,
@@ -178,39 +255,47 @@ apiClient.interceptors.response.use(
       const storedRefreshToken = getStoredRefreshToken();
 
       if (storedRefreshToken) {
-        if (isRefreshing) {
-          return new Promise((resolve, reject) => {
-            failedQueue.push({ resolve, reject });
-          })
-            .then((newToken) => {
-              originalRequest.headers.Authorization = `Bearer ${newToken}`;
-              return apiClient(originalRequest);
-            })
-            .catch((err) => Promise.reject(err));
+        originalRequest._retry = true;
+
+        if (!refreshPromise) {
+          refreshPromise = (async () => {
+            try {
+              const res = await axios.post(`${API_BASE_URL}/auth/refresh`, {
+                refreshToken: storedRefreshToken,
+              });
+
+              if (res.data?.success && res.data?.data?.token) {
+                const newToken = res.data.data.token;
+                const newRefreshToken = res.data.data.refreshToken;
+                setStoredAuthToken(newToken, newRefreshToken);
+                return newToken;
+              }
+              throw new Error('Refresh endpoint returned unsuccessful payload');
+            } catch (refreshErr: any) {
+              const status = refreshErr.response?.status;
+              // Only clear stored tokens on explicit authentication rejection (401 or 403)
+              if (status === 401 || status === 403) {
+                clearStoredAuthToken();
+              }
+              throw refreshErr;
+            } finally {
+              refreshPromise = null;
+            }
+          })();
         }
 
-        originalRequest._retry = true;
-        isRefreshing = true;
-
         try {
-          const res = await axios.post(`${API_BASE_URL}/auth/refresh`, {
-            refreshToken: storedRefreshToken,
-          });
-
-          if (res.data?.success && res.data?.data?.token) {
-            const newToken = res.data.data.token;
-            const newRefreshToken = res.data.data.refreshToken;
-            setStoredAuthToken(newToken, newRefreshToken);
-
+          const newToken = await refreshPromise;
+          if (originalRequest.headers && typeof (originalRequest.headers as any).set === 'function') {
+            (originalRequest.headers as any).set('Authorization', `Bearer ${newToken}`);
+          } else if (originalRequest.headers) {
             originalRequest.headers.Authorization = `Bearer ${newToken}`;
-            processQueue(null, newToken);
-            isRefreshing = false;
-            return apiClient(originalRequest);
+          } else {
+            originalRequest.headers = { Authorization: `Bearer ${newToken}` } as any;
           }
-        } catch (refreshErr) {
-          processQueue(refreshErr, null);
-          isRefreshing = false;
-          clearStoredAuthToken();
+          return apiClient(originalRequest);
+        } catch (retryErr) {
+          return Promise.reject(retryErr);
         }
       } else {
         clearStoredAuthToken();
@@ -277,19 +362,25 @@ export function extractErrorMessage(error: any, fallbackMessage: string = 'An un
   if (!error) return fallbackMessage;
   if (typeof error === 'string') return error;
 
+  let message = '';
   // Check structured backend error response: { error: { message, code, details } }
   if (typeof error.response?.data?.error?.message === 'string') {
-    return error.response.data.error.message;
+    message = error.response.data.error.message;
+  } else if (typeof error.response?.data?.error === 'string') {
+    message = error.response.data.error;
+  } else if (typeof error.response?.data?.message === 'string') {
+    message = error.response.data.message;
+  } else if (typeof error.message === 'string' && error.message) {
+    message = error.message;
   }
-  if (typeof error.response?.data?.error === 'string') {
-    return error.response.data.error;
+
+  if (message) {
+    if (/bearer.*token|token.*missing|authentication required|invalid or expired authentication/i.test(message)) {
+      return 'Your session has expired or you are not signed in. Please sign in again.';
+    }
+    return message;
   }
-  if (typeof error.response?.data?.message === 'string') {
-    return error.response.data.message;
-  }
-  if (typeof error.message === 'string' && error.message) {
-    return error.message;
-  }
+
   return fallbackMessage;
 }
 

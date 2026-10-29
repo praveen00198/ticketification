@@ -45,8 +45,6 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
     { label: 'Dashboard', path: '/', icon: LayoutDashboard },
     { label: 'My Wallet', path: '/wallet', icon: Wallet },
     { label: 'Events', path: '/events', icon: Calendar },
-    { label: 'Import Guests', path: '/import', icon: FileSpreadsheet },
-    { label: 'View Tickets', path: '/tickets', icon: Ticket },
   ];
 
   return (

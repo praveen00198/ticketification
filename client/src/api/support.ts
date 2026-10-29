@@ -9,8 +9,24 @@ export interface FAQItem {
 
 export interface SupportReportPayload {
   eventId?: string;
-  category: 'BUG' | 'HARASSMENT' | 'SCAM' | 'INAPPROPRIATE_CONTENT' | 'SAFETY_VIOLATION' | 'TECHNICAL_ISSUE' | 'ACCESS_ISSUE' | 'OTHER';
-  description: string;
+  category:
+    | 'BUG'
+    | 'HARASSMENT'
+    | 'SCAM'
+    | 'INAPPROPRIATE_CONTENT'
+    | 'SAFETY_VIOLATION'
+    | 'TECHNICAL_ISSUE'
+    | 'ACCESS_ISSUE'
+    | 'REGISTRATION_ISSUE'
+    | 'CREDENTIAL_QR_ISSUE'
+    | 'SCHEDULE_INFO'
+    | 'TEAM_PARTICIPANT_ISSUE'
+    | 'VENUE_ACCESSIBILITY'
+    | 'OTHER';
+  description?: string;
+  reason?: string;
+  reporterEmail?: string;
+  reporterName?: string;
   evidenceUrls?: string[];
 }
 

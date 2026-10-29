@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { useEvent } from '../context/EventContext';
+import { isHostOrOrganizer } from '../utils/permissions';
 import { apiClient } from '../api/client';
 import {
   QrCode,
@@ -23,7 +24,10 @@ import { Button, Card, Badge, StatCard, InView, AnimatedGroup, EmptyEventsState 
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
+  const outletCtx = useOutletContext<{ user: any } | null>();
+  const user = outletCtx?.user || null;
   const { currentEvent, events, setCurrentEvent } = useEvent();
+  const isHost = currentEvent ? isHostOrOrganizer(user, currentEvent) : false;
 
   const [stats, setStats] = useState<any>(null);
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
@@ -277,68 +281,137 @@ export const Dashboard: React.FC = () => {
 
       {/* Quick Action Shortcuts */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-        <div
-          onClick={() => navigate('/import')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && navigate('/import')}
-          className="group bg-white border border-stone-200/90 hover:border-stone-900 p-4 sm:p-5 rounded-2xl cursor-pointer transition-all shadow-xs flex items-center justify-between"
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-900 flex items-center justify-center border border-stone-200 group-hover:scale-105 transition-transform shrink-0">
-              <FileSpreadsheet className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-zinc-900 group-hover:text-black transition-colors truncate">
-                Import Guest Data
+        {isHost ? (
+          <>
+            <div
+              onClick={() => navigate('/import')}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && navigate('/import')}
+              className="group bg-white border border-stone-200/90 hover:border-stone-900 p-4 sm:p-5 rounded-2xl cursor-pointer transition-all shadow-xs flex items-center justify-between"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-900 flex items-center justify-center border border-stone-200 group-hover:scale-105 transition-transform shrink-0">
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-zinc-900 group-hover:text-black transition-colors truncate">
+                    Import Guest Data
+                  </div>
+                  <div className="text-[11px] text-stone-400 truncate">Excel & CSV Upload Wizard</div>
+                </div>
               </div>
-              <div className="text-[11px] text-stone-400 truncate">Excel & CSV Upload Wizard</div>
+              <ArrowRight className="w-4 h-4 text-stone-400 group-hover:text-black transition-colors shrink-0 ml-2" />
             </div>
-          </div>
-          <ArrowRight className="w-4 h-4 text-stone-400 group-hover:text-black transition-colors shrink-0 ml-2" />
-        </div>
 
-        <div
-          onClick={() => navigate('/tickets')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && navigate('/tickets')}
-          className="group bg-white border border-stone-200/90 hover:border-stone-900 p-4 sm:p-5 rounded-2xl cursor-pointer transition-all shadow-xs flex items-center justify-between"
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-900 flex items-center justify-center border border-stone-200 group-hover:scale-105 transition-transform shrink-0">
-              <Ticket className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-zinc-900 group-hover:text-black transition-colors truncate">
-                View & Generate Tickets
+            <div
+              onClick={() => navigate('/tickets')}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && navigate('/tickets')}
+              className="group bg-white border border-stone-200/90 hover:border-stone-900 p-4 sm:p-5 rounded-2xl cursor-pointer transition-all shadow-xs flex items-center justify-between"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-900 flex items-center justify-center border border-stone-200 group-hover:scale-105 transition-transform shrink-0">
+                  <Ticket className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-zinc-900 group-hover:text-black transition-colors truncate">
+                    View & Generate Tickets
+                  </div>
+                  <div className="text-[11px] text-stone-400 truncate">Credentials & ZIP Export</div>
+                </div>
               </div>
-              <div className="text-[11px] text-stone-400 truncate">Credentials & ZIP Export</div>
+              <ArrowRight className="w-4 h-4 text-stone-400 group-hover:text-black transition-colors shrink-0 ml-2" />
             </div>
-          </div>
-          <ArrowRight className="w-4 h-4 text-stone-400 group-hover:text-black transition-colors shrink-0 ml-2" />
-        </div>
 
-        <div
-          onClick={() => navigate('/scan')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && navigate('/scan')}
-          className="group bg-white border border-stone-200/90 hover:border-stone-900 p-4 sm:p-5 rounded-2xl cursor-pointer transition-all shadow-xs flex items-center justify-between"
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-900 flex items-center justify-center border border-stone-200 group-hover:scale-105 transition-transform shrink-0">
-              <QrCode className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-zinc-900 group-hover:text-black transition-colors truncate">
-                Turnstiles Scanner
+            <div
+              onClick={() => navigate('/scan')}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && navigate('/scan')}
+              className="group bg-white border border-stone-200/90 hover:border-stone-900 p-4 sm:p-5 rounded-2xl cursor-pointer transition-all shadow-xs flex items-center justify-between"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-900 flex items-center justify-center border border-stone-200 group-hover:scale-105 transition-transform shrink-0">
+                  <QrCode className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-zinc-900 group-hover:text-black transition-colors truncate">
+                    Turnstiles Scanner
+                  </div>
+                  <div className="text-[11px] text-stone-400 truncate">High-throughput gate scanner</div>
+                </div>
               </div>
-              <div className="text-[11px] text-stone-400 truncate">High-throughput gate scanner</div>
+              <ArrowRight className="w-4 h-4 text-stone-400 group-hover:text-black transition-colors shrink-0 ml-2" />
             </div>
-          </div>
-          <ArrowRight className="w-4 h-4 text-stone-400 group-hover:text-black transition-colors shrink-0 ml-2" />
-        </div>
+          </>
+        ) : (
+          <>
+            <div
+              onClick={() => navigate('/explore')}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && navigate('/explore')}
+              className="group bg-white border border-stone-200/90 hover:border-stone-900 p-4 sm:p-5 rounded-2xl cursor-pointer transition-all shadow-xs flex items-center justify-between"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-900 flex items-center justify-center border border-stone-200 group-hover:scale-105 transition-transform shrink-0">
+                  <Compass className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-zinc-900 group-hover:text-black transition-colors truncate">
+                    Explore Events
+                  </div>
+                  <div className="text-[11px] text-stone-400 truncate">Browse Public Catalog</div>
+                </div>
+              </div>
+              <ArrowRight className="w-4 h-4 text-stone-400 group-hover:text-black transition-colors shrink-0 ml-2" />
+            </div>
+
+            <div
+              onClick={() => navigate('/registrations')}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && navigate('/registrations')}
+              className="group bg-white border border-stone-200/90 hover:border-stone-900 p-4 sm:p-5 rounded-2xl cursor-pointer transition-all shadow-xs flex items-center justify-between"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-900 flex items-center justify-center border border-stone-200 group-hover:scale-105 transition-transform shrink-0">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-zinc-900 group-hover:text-black transition-colors truncate">
+                    My Registrations
+                  </div>
+                  <div className="text-[11px] text-stone-400 truncate">View Entries & Dashboards</div>
+                </div>
+              </div>
+              <ArrowRight className="w-4 h-4 text-stone-400 group-hover:text-black transition-colors shrink-0 ml-2" />
+            </div>
+
+            <div
+              onClick={() => navigate('/wallet')}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && navigate('/wallet')}
+              className="group bg-white border border-stone-200/90 hover:border-stone-900 p-4 sm:p-5 rounded-2xl cursor-pointer transition-all shadow-xs flex items-center justify-between"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-900 flex items-center justify-center border border-stone-200 group-hover:scale-105 transition-transform shrink-0">
+                  <Wallet className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-zinc-900 group-hover:text-black transition-colors truncate">
+                    My Pass Wallet
+                  </div>
+                  <div className="text-[11px] text-stone-400 truncate">QR passes & credentials</div>
+                </div>
+              </div>
+              <ArrowRight className="w-4 h-4 text-stone-400 group-hover:text-black transition-colors shrink-0 ml-2" />
+            </div>
+          </>
+        )}
       </div>
 
       {/* Recent Activity Table */}
@@ -346,7 +419,7 @@ export const Dashboard: React.FC = () => {
         <div className="flex items-center justify-between border-b border-stone-100 pb-3">
           <h2 className="text-xs sm:text-sm font-bold text-zinc-900 flex items-center gap-2">
             <Clock className="w-4 h-4 text-stone-600 shrink-0" />
-            <span>Recent Generated Credentials</span>
+            <span>{isHost ? 'Recent Generated Credentials' : 'Recent Event Activity'}</span>
           </h2>
           <Button
             variant="ghost"
@@ -361,13 +434,17 @@ export const Dashboard: React.FC = () => {
         {recentActivity.length === 0 ? (
           <div className="py-1 w-full flex flex-col items-center justify-center">
             <EmptyEventsState
-              title="No Credential Activity Logged"
-              description="No admission passes or guest badges have been generated or scanned for this event yet. Import your guest roster to begin generating verified credentials."
+              title={isHost ? 'No Credential Activity Logged' : 'No Recent Activity'}
+              description={
+                isHost
+                  ? 'No admission passes or guest badges have been generated or scanned for this event yet. Import your guest roster to begin generating verified credentials.'
+                  : 'You do not have any recent credential activity logged. Register for events to access verified passes.'
+              }
               slotText="ACTIVITY STANDBY"
               categoryText="GUEST ACTIVITY • 0 PASSES"
-              actionText="Import Guest Roster"
-              actionIcon={<FileSpreadsheet className="w-3.5 h-3.5" />}
-              onAction={() => navigate('/import')}
+              actionText={isHost ? 'Import Guest Roster' : 'Explore Events'}
+              actionIcon={isHost ? <FileSpreadsheet className="w-3.5 h-3.5" /> : <Compass className="w-3.5 h-3.5" />}
+              onAction={() => navigate(isHost ? '/import' : '/explore')}
             />
           </div>
         ) : (

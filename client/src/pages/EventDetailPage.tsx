@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
 import { eventsApi, UpdateEventPayload } from '../api/events';
 import { EventItem, TicketType } from '../types';
 import { useEvent } from '../context/EventContext';
+import { canManageEventOperations } from '../utils/permissions';
 import {
   ArrowLeft,
   AlertCircle,
@@ -12,6 +13,8 @@ import { ContextAwareHostConsole } from '../components/events/ContextAwareHostCo
 export const EventDetailPage: React.FC = () => {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
+  const context = useOutletContext<{ user?: any }>();
+  const user = context?.user;
   const { setCurrentEvent, refreshEvents } = useEvent();
 
   const [event, setEvent] = useState<EventItem | null>(null);
@@ -37,6 +40,13 @@ export const EventDetailPage: React.FC = () => {
       setLoading(true);
       setError(null);
       const data = await eventsApi.getEvent(eventId);
+
+      // If caller is an attendee without host management permissions, route to Attendee Workspace
+      if (user && !canManageEventOperations(user, data)) {
+        navigate(`/events/${eventId}/attendee`, { replace: true });
+        return;
+      }
+
       setEvent(data);
       setCurrentEvent(data);
       setTicketTypes(data.ticketTypes || []);
@@ -50,7 +60,11 @@ export const EventDetailPage: React.FC = () => {
         status: data.status,
       });
     } catch (err: any) {
-      setError(err.message || 'Failed to load event details');
+      if (err?.response?.status === 403) {
+        navigate(`/events/${eventId}/attendee`, { replace: true });
+        return;
+      }
+      setError(err?.response?.data?.message || err.message || 'Failed to load event details');
     } finally {
       setLoading(false);
     }

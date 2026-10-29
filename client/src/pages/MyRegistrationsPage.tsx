@@ -16,6 +16,7 @@ import {
   Wallet,
   Hash,
   Eye,
+  LayoutDashboard,
 } from 'lucide-react';
 import { attendeeApi } from '../api/attendee';
 import { extractErrorMessage } from '../api/client';
@@ -422,11 +423,13 @@ export const MyRegistrationsPage: React.FC = () => {
 
                   {/* Event Name + Description */}
                   <div>
-                    <h3 className={`text-base font-semibold leading-snug line-clamp-1 ${
-                      isMuted ? 'text-zinc-500' : 'text-zinc-900'
-                    }`}>
-                      {reg.eventName || event.name || 'Untitled Event'}
-                    </h3>
+                    <Link to={`/events/${eventId}/attendee`} className="hover:underline">
+                      <h3 className={`text-base font-semibold leading-snug line-clamp-1 ${
+                        isMuted ? 'text-zinc-500' : 'text-zinc-900'
+                      }`}>
+                        {reg.eventName || event.name || 'Untitled Event'}
+                      </h3>
+                    </Link>
                     <p className="text-xs text-stone-500 line-clamp-2 mt-1">
                       {event.description || 'No description provided.'}
                     </p>
@@ -458,24 +461,28 @@ export const MyRegistrationsPage: React.FC = () => {
                 </div>
 
                 {/* Footer Actions */}
-                <div className="pt-4 mt-4 border-t border-stone-100 flex items-center justify-between gap-3">
-                  <div>
-                    {reg.status === 'CONFIRMED' && !completed ? (
+                <div className="pt-4 mt-4 border-t border-stone-100 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Link
+                      to={`/events/${eventId}/attendee`}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-stone-900 hover:bg-black text-white text-xs font-semibold rounded-xl shadow-xs transition-colors"
+                    >
+                      <LayoutDashboard className="w-3.5 h-3.5" />
+                      Event Dashboard
+                    </Link>
+                    {reg.status === 'CONFIRMED' && !completed && (
                       <Link
                         to={ROUTES.WALLET}
-                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-stone-900 hover:text-black group-hover:underline underline-offset-2"
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-stone-600 hover:text-stone-900 transition-colors"
+                        title="View Pass in Wallet"
                       >
-                        <Eye className="w-3.5 h-3.5" />
-                        View Pass <ArrowRight className="w-3 h-3 transition-transform group-hover:translate-x-0.5" />
+                        <Eye className="w-3.5 h-3.5" /> Pass
                       </Link>
-                    ) : completed && reg.status === 'CONFIRMED' ? (
+                    )}
+                    {completed && reg.status === 'CONFIRMED' && (
                       <span className="inline-flex items-center gap-1.5 text-[11px] text-stone-400">
                         <CheckCircle2 className="w-3 h-3" />
-                        {reg.credential?.status === 'CHECKED_IN' ? 'Attended' : 'Event Completed'}
-                      </span>
-                    ) : (
-                      <span className="text-[11px] text-stone-400">
-                        Registered {new Date(reg.registeredAt || reg.createdAt || Date.now()).toLocaleDateString()}
+                        {reg.credential?.status === 'CHECKED_IN' ? 'Attended' : 'Completed'}
                       </span>
                     )}
                   </div>
