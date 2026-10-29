@@ -31,10 +31,13 @@ function resolveApiBaseUrl(): string {
     return `${cleanUrl}/api`;
   }
 
-  // If running in browser on localhost/127.0.0.1 (e.g. vite preview), route via local proxy
+  // If running in browser on localhost or Vercel (where vercel.json rewrites /api/* to the backend), route via relative /api
   if (
     typeof window !== 'undefined' &&
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    (window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname.endsWith('.vercel.app') ||
+      window.location.hostname === 'ticketification.vercel.app')
   ) {
     return '/api';
   }

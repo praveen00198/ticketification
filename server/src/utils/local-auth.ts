@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import config from '../config/env';
+import { AppError } from '../middlewares/error.middleware';
 
 /**
  * Derives a secure password hash using PBKDF2 (SHA-512 with 10,000 iterations).
@@ -42,7 +43,12 @@ function getEffectiveSecret(customSecret?: string): string {
     return process.env.JWT_SECRET;
   }
   if (config.env.isProduction) {
-    throw new Error('[Security Invariant] JWT_SECRET must be configured with a secure value in production environment.');
+    throw new AppError(
+      '[Security Invariant] JWT_SECRET must be configured with a secure value in production environment.',
+      500,
+      undefined,
+      'AUTH_CONFIG_ERROR'
+    );
   }
   return 'Ticketification_Default_Secret_2026';
 }

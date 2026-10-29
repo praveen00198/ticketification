@@ -107,6 +107,8 @@ export function errorHandler(
     message = 'Database or network service is currently unreachable. Please try again shortly.';
   } else if (message.includes('relation') && message.includes('does not exist')) {
     message = 'Database service initialization error. Please contact the administrator.';
+  } else if (message.includes('Blocked by CORS policy')) {
+    message = 'Access forbidden: Origin not allowed by CORS policy.';
   } else if (statusCode === 500 && !isAppError) {
     message = 'A server error occurred. Please try again or contact support.';
   }

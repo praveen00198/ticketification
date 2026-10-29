@@ -51,14 +51,20 @@ export class AuthService {
 
     if (mongoConfigured) {
       try {
-        const { isMongoConnected } = await import('../../../db/mongodb');
+        let { isMongoConnected } = await import('../../../db/mongodb');
+        if (!isMongoConnected()) {
+          const { connectMongoDB } = await import('../../../db/mongodb');
+          await connectMongoDB();
+          const freshMongo = await import('../../../db/mongodb');
+          isMongoConnected = freshMongo.isMongoConnected;
+        }
         if (isMongoConnected()) {
           existingUser = await this.mongoUserRepo.findByEmail(normalizedEmail);
         }
       } catch (err: any) {
         if (config.env.isProduction) {
           console.error('[AuthService] MongoDB connection error during registration:', err);
-          throw new AppError('Database service temporarily unavailable.', 500);
+          throw new AppError('Database service temporarily unavailable.', 503, undefined, 'SERVICE_UNAVAILABLE');
         }
       }
     }
@@ -80,7 +86,13 @@ export class AuthService {
 
     if (mongoConfigured) {
       try {
-        const { isMongoConnected } = await import('../../../db/mongodb');
+        let { isMongoConnected } = await import('../../../db/mongodb');
+        if (!isMongoConnected()) {
+          const { connectMongoDB } = await import('../../../db/mongodb');
+          await connectMongoDB();
+          const freshMongo = await import('../../../db/mongodb');
+          isMongoConnected = freshMongo.isMongoConnected;
+        }
         if (isMongoConnected()) {
           createdUser = await this.mongoUserRepo.create({
             supabaseUserId: generatedId,
@@ -97,7 +109,7 @@ export class AuthService {
           throw new ConflictError('An account with this email address already exists. Please sign in.');
         }
         console.error('[AuthService] MongoDB error creating user:', dbErr);
-        throw new AppError('Unable to create user account due to database error.', 500);
+        throw new AppError('Unable to create user account due to database error.', 500, undefined, 'DATABASE_ERROR');
       }
     }
 
@@ -123,7 +135,7 @@ export class AuthService {
     }
 
     if (!createdUser) {
-      throw new AppError('Unable to create user account due to database error.', 500);
+      throw new AppError('Unable to create user account due to database service unavailability.', 503, undefined, 'SERVICE_UNAVAILABLE');
     }
 
     const userId = createdUser.supabaseUserId || createdUser.id || generatedId;

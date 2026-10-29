@@ -15,7 +15,7 @@ import attendeeRoutes from './modules/events/routes/attendee.routes';
 import { publicEventRouter } from './modules/events/routes/public-event.routes';
 import supportRoutes from './modules/support/support.routes';
 import { ticketService } from './modules/tickets/services/ticket.service';
-import { errorHandler } from './middlewares/error.middleware';
+import { errorHandler, AuthorizationError } from './middlewares/error.middleware';
 import config from './config/env';
 import sharp from 'sharp';
 import { logMemory } from './utils/memory-logger';
@@ -52,6 +52,9 @@ if (config.env.isProduction && trustedOrigins.length === 0) {
   );
 }
 
+// Regex to safely allow official project Vercel deployments (production + preview domains)
+const VERCEL_PREVIEW_ORIGIN_REGEX = /^https:\/\/ticketification([a-z0-9-]*)\.vercel\.app$/i;
+
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -71,12 +74,15 @@ app.use(
         }
       }
 
-      // In production, strictly match against explicit trusted origins
-      if (trustedOrigins.includes(normalizedOrigin)) {
+      // In production, match against explicit trusted origins or project Vercel domains
+      if (
+        trustedOrigins.includes(normalizedOrigin) ||
+        VERCEL_PREVIEW_ORIGIN_REGEX.test(normalizedOrigin)
+      ) {
         return callback(null, true);
       }
 
-      return callback(new Error('Blocked by CORS policy: Origin not allowed'));
+      return callback(new AuthorizationError('Blocked by CORS policy: Origin not allowed'));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

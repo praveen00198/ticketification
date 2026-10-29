@@ -107,12 +107,19 @@ export const Register: React.FC<RegisterProps> = ({
       }
     } catch (err: any) {
       const responseData = err?.response?.data;
-      setError(
-        responseData?.error?.message ||
-        responseData?.message ||
-        err?.message ||
-        'Registration failed. Please try again.'
-      );
+      const status = err?.response?.status;
+      if (status === 409) {
+        setError('An account with this email address already exists. Please sign in instead.');
+      } else if (status === 503) {
+        setError('The database service is temporarily initializing. Please try again in a few moments.');
+      } else {
+        setError(
+          responseData?.error?.message ||
+          responseData?.message ||
+          err?.message ||
+          'Registration failed. Please try again.'
+        );
+      }
     } finally {
       setLoading(false);
     }
