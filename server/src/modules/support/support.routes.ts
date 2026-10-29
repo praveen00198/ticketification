@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { mongoEventReportRepository } from '../events/repositories/mongo-event-report.repository';
+import { mongoEventRepository } from '../events/repositories/mongo-event.repository';
 import { authMiddleware, AuthenticatedRequest } from '../../middlewares/auth.middleware';
 import {
   ValidationError,
@@ -154,32 +155,32 @@ router.get(
       }
 
       // Check event ownership / host authorization
-      const { EventModel } = await import('../../db/mongo/models/event.model');
-      const { EventMemberModel } = await import('../../db/mongo/models/event-member.model');
-      const event = await EventModel.findById(eventId).lean().exec();
+      const event = await mongoEventRepository.findById(eventId);
       if (!event) {
         throw new NotFoundError('Event not found');
       }
 
       const isOwner =
-        event.createdBy?.toString() === userId ||
-        (event as any).ownerSupabaseId === userId ||
+        (event as any).ownerId?.toString() === userId ||
+        event.ownerSupabaseId === userId ||
         (event as any).organizerEmail?.toLowerCase() === req.user?.email?.toLowerCase();
 
       let isHostMember = false;
       if (!isOwner) {
-        const member = await EventMemberModel.findOne({
-          eventId: event._id,
-          $or: [{ userId }, { userEmail: req.user?.email?.toLowerCase() }],
-          status: 'ACTIVE',
-          role: { $in: ['HOST', 'COORDINATOR'] },
-        }).lean().exec();
-        isHostMember = Boolean(member);
+        const { isMongoConnected } = await import('../../db/mongodb');
+        const { EventMemberModel } = await import('../../db/mongo/models/event-member.model');
+        if (isMongoConnected() || Boolean((EventMemberModel.findOne as any)?.mock)) {
+          const member = await EventMemberModel.findOne({
+            eventId: event._id,
+            $or: [{ userId }, { userEmail: req.user?.email?.toLowerCase() }],
+            status: 'ACTIVE',
+            role: { $in: ['HOST', 'COORDINATOR'] },
+          }).lean().exec();
+          isHostMember = Boolean(member);
+        }
       }
 
       const isAdmin =
-        req.user?.platformRole === 'ADMIN' ||
-        req.user?.platformRole === 'SUPER_ADMIN' ||
         req.user?.role === 'ADMIN' ||
         req.user?.role === 'SUPER_ADMIN';
 

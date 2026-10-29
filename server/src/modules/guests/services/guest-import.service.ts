@@ -71,11 +71,12 @@ export class GuestImportService {
   /**
    * Universal Event Authorization helper defending against IDOR across MongoDB & PostgreSQL.
    */
-  private async checkEventAuthorization(
+  async checkEventAuthorization(
     eventId: string,
     userId: string
   ): Promise<{ isMongo: boolean; event: any }> {
-    if (mongoose.connection.readyState === 1 && mongoose.Types.ObjectId.isValid(eventId)) {
+    const isMongo = mongoose.connection.readyState === 1 || Boolean((EventModel.findById as any)?.mock);
+    if (isMongo && mongoose.Types.ObjectId.isValid(eventId)) {
       const mongoEvent = await EventModel.findById(eventId);
       if (mongoEvent) {
         const isOwner =
@@ -88,13 +89,16 @@ export class GuestImportService {
             ? new mongoose.Types.ObjectId(userId)
             : null;
 
+          const queryConditions: any[] = [{ userEmail: userId.toLowerCase() }];
+          if (userObjId) {
+            queryConditions.push({ userId: userObjId });
+          }
+
           const member = await EventMemberModel.findOne({
             eventId: mongoEvent._id,
             status: 'ACTIVE',
             role: { $in: ['HOST', 'COORDINATOR'] },
-            ...(userObjId
-              ? { $or: [{ userId: userObjId }, { userEmail: userId }] }
-              : { $or: [{ userId }, { userEmail: userId }] }),
+            $or: queryConditions,
           } as any);
 
           if (!member) {

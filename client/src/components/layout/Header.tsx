@@ -4,7 +4,6 @@ import {
   Ticket,
   QrCode,
   LayoutDashboard,
-  FileSpreadsheet,
   LogOut,
   Menu,
   X,
