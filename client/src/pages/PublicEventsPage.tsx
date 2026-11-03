@@ -1,15 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  Calendar,
-  MapPin,
-  Video,
-  Ticket,
-  ArrowRight,
-  ShieldCheck,
-  Sparkles,
-  X,
-} from "lucide-react";
+import { X } from "lucide-react";
 import {
   RiCompass3Line,
   RiMacbookLine,
@@ -28,6 +19,7 @@ import {
 } from "@remixicon/react";
 import { publicApi, PublicEventSummary } from "../api/public";
 import { EmptyEventsState, ErrorState } from "../components/ui";
+import { FolderTabEventCard } from "../components/events/FolderTabEventCard";
 
 const PRIMARY_EVENT_TYPES = [
   { label: "All Categories", value: "ALL", icon: RiCompass3Line },
@@ -227,15 +219,7 @@ export const PublicEventsPage: React.FC = () => {
     cityInput,
   );
 
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return "Date TBA";
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  };
+
 
   return (
     <div className="min-h-screen bg-white text-[#111827] font-sans">
@@ -708,91 +692,27 @@ export const PublicEventsPage: React.FC = () => {
           /* ── Event Grid ── */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {events.map((event) => (
-              <div
+              <FolderTabEventCard
                 key={event.id}
+                id={event.id}
+                name={event.name}
+                eventType={event.eventType}
+                description={event.description}
+                bannerUrl={event.bannerUrl}
+                dateStr={event.schedule?.startAt}
+                timeStr={event.schedule?.startAt}
+                venueLabel={
+                  event.venue?.type === "ONLINE"
+                    ? "Virtual Gathering"
+                    : (event.venue?.city ? `${event.venue.city}, ` : "") +
+                      (event.venue?.name || "Venue TBA")
+                }
+                venueType={event.venue?.type}
+                pricingModel={event.registration?.pricingModel}
+                verificationStatus={event.verificationStatus}
                 onClick={() => navigate(`/events/${event.id}/public`)}
-                className="group relative flex flex-col justify-between bg-white border border-stone-200/90 hover:border-stone-900 rounded-2xl overflow-hidden cursor-pointer transition-all duration-200 hover:shadow-lg hover:shadow-stone-900/5 hover:-translate-y-0.5"
-              >
-                {/* Banner Header */}
-                <div className="relative h-44 w-full bg-stone-100 overflow-hidden">
-                  {event.bannerUrl ? (
-                    <img
-                      src={event.bannerUrl}
-                      alt={event.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-stone-100 text-stone-300">
-                      <Sparkles className="w-8 h-8 text-stone-300" />
-                    </div>
-                  )}
-
-                  {/* Badges Overlay */}
-                  <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
-                    <span className="px-2.5 py-1 rounded-md bg-white/95 backdrop-blur-md text-stone-800 text-[11px] font-bold uppercase tracking-wider shadow-sm border border-stone-200/50">
-                      {event.eventType.replace("_", " ")}
-                    </span>
-                    {event.verificationStatus === "VERIFIED" && (
-                      <span className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-800 text-[11px] font-semibold border border-emerald-200 shadow-sm">
-                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                        Verified
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Content Details */}
-                <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                  <div className="space-y-1.5">
-                    <h3 className="text-base font-bold text-stone-900 group-hover:text-black transition-colors line-clamp-1">
-                      {event.name}
-                    </h3>
-                    <p className="text-xs text-stone-500 line-clamp-2 leading-relaxed">
-                      {event.description ||
-                        "Join attendees for this high-impact gathering and networking opportunity."}
-                    </p>
-                  </div>
-
-                  <div className="space-y-2 pt-3 border-t border-stone-100 text-xs text-stone-600">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-3.5 h-3.5 text-stone-500 shrink-0" />
-                      <span>{formatDate(event.schedule?.startAt)}</span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {event.venue?.type === "ONLINE" ? (
-                        <>
-                          <Video className="w-3.5 h-3.5 text-stone-500 shrink-0" />
-                          <span className="truncate">Virtual Gathering</span>
-                        </>
-                      ) : (
-                        <>
-                          <MapPin className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-                          <span className="truncate">
-                            {event.venue?.city ? `${event.venue.city}, ` : ""}
-                            {event.venue?.name || "Venue TBA"}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Card Footer */}
-                  <div className="pt-3 border-t border-stone-100 flex items-center justify-between text-xs">
-                    <span className="inline-flex items-center gap-1.5 font-semibold text-stone-700 bg-stone-100 px-2.5 py-0.5 rounded-full border border-stone-200">
-                      <Ticket className="w-3.5 h-3.5 text-stone-600" />
-                      {event.registration?.pricingModel === "PAID"
-                        ? "Paid Admission"
-                        : "Free Pass"}
-                    </span>
-
-                    <span className="inline-flex items-center gap-1 font-semibold text-stone-800 group-hover:text-black transition-colors">
-                      View Details
-                      <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-                    </span>
-                  </div>
-                </div>
-              </div>
+                onSelect={() => navigate(`/events/${event.id}/public`)}
+              />
             ))}
           </div>
         )}
