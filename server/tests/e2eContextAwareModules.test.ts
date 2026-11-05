@@ -27,6 +27,7 @@ import { eventMemberService } from '../src/modules/events/services/event-member.
 import { mongoEventRubricRepository } from '../src/modules/events/repositories/mongo-event-rubric.repository';
 import { mongoEventMemberRepository } from '../src/modules/events/repositories/mongo-event-member.repository';
 import { mongoEventAssignmentRepository } from '../src/modules/events/repositories/mongo-event-assignment.repository';
+import { EventModel } from '../src/db/mongo/models/event.model';
 
 /**
  * Navigation Categories Contract Evaluator
@@ -188,6 +189,21 @@ describe('Context-Aware Event Module Visibility & Organization Verification E2E 
       }
       return Promise.resolve(currentActiveEvent);
     });
+
+    jest.spyOn(eventRepository, 'findByIdAndOwner').mockImplementation((id: string, userId: string) => {
+      if (currentActiveEvent && (currentActiveEvent._id.toString() === id || currentActiveEvent.id === id)) {
+        return Promise.resolve(currentActiveEvent);
+      }
+      return Promise.resolve(currentActiveEvent);
+    });
+
+    jest.spyOn(EventModel, 'findById').mockImplementation(((id: any) => {
+      return {
+        exec: jest.fn().mockResolvedValue(currentActiveEvent),
+        then: (resolve: any, reject: any) => Promise.resolve(currentActiveEvent).then(resolve, reject),
+        catch: (reject: any) => Promise.resolve(currentActiveEvent).catch(reject),
+      } as any;
+    }) as any);
 
     // Default Rubric, Member, Ticket Type, and Guest Mocks to prevent DB hanging
     jest.spyOn(mongoEventRubricRepository, 'createRubric').mockImplementation((data: any) =>
