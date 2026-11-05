@@ -18,12 +18,13 @@ export interface PublicationReadinessResult {
 export function validatePublicationReadiness(event: IEventDocument): PublicationReadinessResult {
   const errors: string[] = [];
 
-  // 1. Organization Verification Gate (Applicable only to organization-associated events)
+  // 1. Organization Verification Gate (Applicable only to public organization-associated events; private events are exempt)
+  const isPrivate = event.visibility === 'private';
   const isOrg =
     event.hostingType === 'ORGANIZATION' ||
     event.organizationVerificationStatus !== 'NOT_REQUIRED';
 
-  if (isOrg) {
+  if (isOrg && !isPrivate) {
     if (
       event.organizationVerificationStatus === 'PENDING' ||
       event.verificationStatus === 'PENDING'

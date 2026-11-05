@@ -28,6 +28,8 @@ export const Dashboard: React.FC = () => {
   const user = outletCtx?.user || null;
   const { currentEvent, events, setCurrentEvent } = useEvent();
   const isHost = currentEvent ? isHostOrOrganizer(user, currentEvent) : false;
+  const isNativeRegistration = currentEvent?.attendanceMode === 'TICKETIFICATION_REGISTRATION';
+  const showGuestRoster = isHost && !isNativeRegistration;
 
   const [stats, setStats] = useState<any>(null);
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
@@ -283,26 +285,28 @@ export const Dashboard: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         {isHost ? (
           <>
-            <div
-              onClick={() => navigate('/import')}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && navigate('/import')}
-              className="group bg-white border border-stone-200/90 hover:border-stone-900 p-4 sm:p-5 rounded-2xl cursor-pointer transition-all shadow-xs flex items-center justify-between"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-900 flex items-center justify-center border border-stone-200 group-hover:scale-105 transition-transform shrink-0">
-                  <FileSpreadsheet className="w-5 h-5" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs font-bold text-zinc-900 group-hover:text-black transition-colors truncate">
-                    Import Guest Data
+            {showGuestRoster && (
+              <div
+                onClick={() => navigate('/import')}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && navigate('/import')}
+                className="group bg-white border border-stone-200/90 hover:border-stone-900 p-4 sm:p-5 rounded-2xl cursor-pointer transition-all shadow-xs flex items-center justify-between"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-900 flex items-center justify-center border border-stone-200 group-hover:scale-105 transition-transform shrink-0">
+                    <FileSpreadsheet className="w-5 h-5" />
                   </div>
-                  <div className="text-[11px] text-stone-400 truncate">Excel & CSV Upload Wizard</div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-zinc-900 group-hover:text-black transition-colors truncate">
+                      Import Guest Data
+                    </div>
+                    <div className="text-[11px] text-stone-400 truncate">Excel & CSV Upload Wizard</div>
+                  </div>
                 </div>
+                <ArrowRight className="w-4 h-4 text-stone-400 group-hover:text-black transition-colors shrink-0 ml-2" />
               </div>
-              <ArrowRight className="w-4 h-4 text-stone-400 group-hover:text-black transition-colors shrink-0 ml-2" />
-            </div>
+            )}
 
             <div
               onClick={() => navigate('/tickets')}
@@ -437,14 +441,36 @@ export const Dashboard: React.FC = () => {
               title={isHost ? 'No Credential Activity Logged' : 'No Recent Activity'}
               description={
                 isHost
-                  ? 'No admission passes or guest badges have been generated or scanned for this event yet. Import your guest roster to begin generating verified credentials.'
+                  ? isNativeRegistration
+                    ? 'No admission passes or guest badges have been generated or scanned for this event yet. Issue passes or share the registration link to begin generating verified credentials.'
+                    : 'No admission passes or guest badges have been generated or scanned for this event yet. Import your guest roster to begin generating verified credentials.'
                   : 'You do not have any recent credential activity logged. Register for events to access verified passes.'
               }
               slotText="ACTIVITY STANDBY"
               categoryText="GUEST ACTIVITY • 0 PASSES"
-              actionText={isHost ? 'Import Guest Roster' : 'Explore Events'}
-              actionIcon={isHost ? <FileSpreadsheet className="w-3.5 h-3.5" /> : <Compass className="w-3.5 h-3.5" />}
-              onAction={() => navigate(isHost ? '/import' : '/explore')}
+              actionText={
+                isHost
+                  ? isNativeRegistration
+                    ? 'Manage Passes'
+                    : 'Import Guest Roster'
+                  : 'Explore Events'
+              }
+              actionIcon={
+                isHost
+                  ? isNativeRegistration
+                    ? <Ticket className="w-3.5 h-3.5" />
+                    : <FileSpreadsheet className="w-3.5 h-3.5" />
+                  : <Compass className="w-3.5 h-3.5" />
+              }
+              onAction={() =>
+                navigate(
+                  isHost
+                    ? isNativeRegistration
+                      ? `/events/${currentEvent?.id}?tab=attendees`
+                      : '/import'
+                    : '/explore'
+                )
+              }
             />
           </div>
         ) : (

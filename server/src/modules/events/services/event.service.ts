@@ -54,10 +54,13 @@ export class EventService {
    */
   private formatCanonicalEvent(doc: IEventDocument): CanonicalEventResponse {
     let displayStatus: string = doc.status;
-    if (doc.organizationVerificationStatus === 'PENDING' || doc.verificationStatus === 'PENDING') {
-      displayStatus = 'Draft — Organization Verification Pending';
-    } else if (doc.organizationVerificationStatus === 'REJECTED' || doc.verificationStatus === 'REJECTED') {
-      displayStatus = 'Draft — Organization Verification Rejected';
+    const isPrivate = doc.visibility === 'private';
+    if (!isPrivate) {
+      if (doc.organizationVerificationStatus === 'PENDING' || doc.verificationStatus === 'PENDING') {
+        displayStatus = 'Draft — Organization Verification Pending';
+      } else if (doc.organizationVerificationStatus === 'REJECTED' || doc.verificationStatus === 'REJECTED') {
+        displayStatus = 'Draft — Organization Verification Rejected';
+      }
     }
 
     return {
@@ -127,8 +130,9 @@ export class EventService {
     // 2. Resolve hosting type & organization association
     const hostingType: HostingType = data.hostingType === 'ORGANIZATION' ? 'ORGANIZATION' : 'INDIVIDUAL';
     const isOrg = hostingType === 'ORGANIZATION';
-    const orgVerificationStatus: OrganizationVerificationStatus = isOrg ? 'PENDING' : 'NOT_REQUIRED';
-    const initialVerificationStatus = isOrg ? 'PENDING' : 'UNVERIFIED';
+    const isPrivate = data.visibility === 'private';
+    const orgVerificationStatus: OrganizationVerificationStatus = (isOrg && !isPrivate) ? 'PENDING' : 'NOT_REQUIRED';
+    const initialVerificationStatus = (isOrg && !isPrivate) ? 'PENDING' : 'UNVERIFIED';
 
     // 3. Prepare canonical MongoDB Event document
     const credentialTerminology =
@@ -175,7 +179,7 @@ export class EventService {
     });
 
     // 4. Create or associate event verification record if organization-hosted
-    if (isOrg && data.organization) {
+    if (isOrg && !isPrivate && data.organization) {
       try {
         await this.eventVerificationRepo.createVerification({
           eventId: eventDoc._id,
@@ -314,6 +318,19 @@ export class EventService {
         endAt: updates.schedule.endAt ? new Date(updates.schedule.endAt) : existing.schedule.endAt,
         timezone: updates.schedule.timezone || existing.schedule.timezone,
       };
+    }
+
+    if (updates.visibility !== undefined) {
+      if (updates.visibility === 'private') {
+        updatePayload.organizationVerificationStatus = 'NOT_REQUIRED';
+      } else if (
+        updates.visibility === 'public' &&
+        (existing.hostingType === 'ORGANIZATION' || updates.hostingType === 'ORGANIZATION') &&
+        existing.verificationStatus !== 'VERIFIED'
+      ) {
+        updatePayload.organizationVerificationStatus = 'PENDING';
+        updatePayload.verificationStatus = 'PENDING';
+      }
     }
 
     const updated = await this.mongoEventRepo.updateDraft(eventId, userId, updatePayload);

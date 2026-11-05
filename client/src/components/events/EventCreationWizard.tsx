@@ -1432,8 +1432,16 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                 <div className="p-3.5 rounded-xl bg-stone-100 border border-stone-200 text-stone-800 text-xs flex items-start gap-2.5">
                   <AlertCircle className="w-4 h-4 text-stone-700 shrink-0 mt-0.5" />
                   <div className="leading-relaxed">
-                    <span className="font-semibold">Publication Notice:</span> Organization-hosted events will be saved as{' '}
-                    <span className="font-semibold">Draft — Verification Pending</span>. They will remain non-public and cannot be published until verified and approved by a platform administrator.
+                    {visibility === 'private' ? (
+                      <>
+                        <span className="font-semibold">Private Event Exemption:</span> Because this event is private, organization verification is not required for creation or publication. You can configure and publish this event immediately.
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-semibold">Publication Notice:</span> Organization-hosted events will be saved as{' '}
+                        <span className="font-semibold">Draft — Verification Pending</span>. They will remain non-public and cannot be published until verified and approved by a platform administrator.
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1445,20 +1453,20 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
         {step === 8 && (
           <div className="space-y-5">
             <div className={`p-4 rounded-2xl border text-xs flex items-center justify-between ${
-              hostingType === 'ORGANIZATION'
+              hostingType === 'ORGANIZATION' && visibility !== 'private'
                 ? 'bg-amber-50 border-amber-200 text-amber-900'
                 : 'bg-stone-50 border-stone-200 text-stone-800'
             }`}>
               <div className="flex items-center gap-2">
-                <CheckCircle2 className={`w-4 h-4 ${hostingType === 'ORGANIZATION' ? 'text-amber-600' : 'text-stone-900'}`} />
+                <CheckCircle2 className={`w-4 h-4 ${hostingType === 'ORGANIZATION' && visibility !== 'private' ? 'text-amber-600' : 'text-stone-900'}`} />
                 <span>
-                  {hostingType === 'ORGANIZATION'
+                  {hostingType === 'ORGANIZATION' && visibility !== 'private'
                     ? 'Review event & organization verification details before saving.'
                     : 'Ready to create your event! Review your configuration below.'}
                 </span>
               </div>
               <span className="font-semibold uppercase tracking-wider text-[11px] px-2.5 py-0.5 rounded-full bg-white border border-current">
-                {hostingType === 'ORGANIZATION' ? 'VERIFICATION PENDING' : 'Status: DRAFT'}
+                {hostingType === 'ORGANIZATION' && visibility !== 'private' ? 'VERIFICATION PENDING' : 'Status: DRAFT'}
               </span>
             </div>
 
@@ -1575,7 +1583,7 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
                       <Building2 className="w-4 h-4 text-stone-900" />
                       <span>{orgName}</span>
                       <span className="text-[10px] bg-amber-100 text-amber-900 font-semibold px-2 py-0.5 rounded-full">
-                        Verification Pending
+                        {visibility === 'private' ? 'Verification Exempt (Private)' : 'Verification Pending'}
                       </span>
                     </div>
                     <div>Category: <span className="font-medium text-stone-900">{orgInstitutionType}</span></div>
@@ -1637,7 +1645,7 @@ export const EventCreationWizard: React.FC<EventCreationWizardProps> = ({
               ) : (
                 <>
                   <ShieldCheck className="w-4 h-4" />
-                  {hostingType === 'ORGANIZATION' ? 'Save & Submit for Verification' : 'Save Event Draft'}
+                  {hostingType === 'ORGANIZATION' && visibility !== 'private' ? 'Save & Submit for Verification' : 'Save Event Draft'}
                 </>
               )}
             </button>

@@ -244,10 +244,14 @@ export const EVENT_CAPABILITY_MATRIX: Record<EventType, EventCapabilities> = {
  * Unknown or undefined types safely fall back to the safe baseline.
  */
 export function getEventCapabilities(eventType?: string | null): EventCapabilities {
-  if (!eventType || !(eventType in EVENT_CAPABILITY_MATRIX)) {
+  if (!eventType) {
     return { ...DEFAULT_CAPABILITIES };
   }
-  return { ...EVENT_CAPABILITY_MATRIX[eventType as EventType] };
+  const normalized = String(eventType).trim().toUpperCase() as EventType;
+  if (!(normalized in EVENT_CAPABILITY_MATRIX)) {
+    return { ...DEFAULT_CAPABILITIES };
+  }
+  return { ...EVENT_CAPABILITY_MATRIX[normalized] };
 }
 
 /**

@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import mongoose from 'mongoose';
-import { AppError } from '../../../middlewares/error.middleware';
+import { AppError, ValidationError } from '../../../middlewares/error.middleware';
+import { hasCapability } from '../utils/event-capabilities';
 import {
   mongoEventMemberRepository,
   MongoEventMemberRepository,
@@ -91,6 +92,24 @@ export class EventMemberService {
       throw new AppError('Role is required.', 400);
     }
 
+    if (dto.role === 'JUDGE' && !hasCapability(event.eventType, 'judges')) {
+      throw new ValidationError(
+        `Judge role is not supported for event type '${event.eventType}'.`
+      );
+    }
+
+    if (dto.role === 'EVALUATOR' && !hasCapability(event.eventType, 'evaluators')) {
+      throw new ValidationError(
+        `Evaluator role is not supported for event type '${event.eventType}'.`
+      );
+    }
+
+    if (dto.role === 'MENTOR' && !hasCapability(event.eventType, 'mentors')) {
+      throw new ValidationError(
+        `Mentor role is not supported for event type '${event.eventType}'.`
+      );
+    }
+
     // Check if membership already exists for this email
     const existing = await this.memberRepo.findByEventAndEmail(eventId, email);
     if (existing) {
@@ -115,6 +134,26 @@ export class EventMemberService {
       assignedPermissions = Array.from(new Set(validPermissions));
     } else {
       assignedPermissions = [...(DEFAULT_ROLE_PERMISSIONS[dto.role] || [])];
+    }
+
+    if (
+      (assignedPermissions.includes('SCORE_ASSIGNED_TEAMS') ||
+        assignedPermissions.includes('VIEW_EVALUATION_RESULTS')) &&
+      !hasCapability(event.eventType, 'judges') &&
+      !hasCapability(event.eventType, 'evaluators')
+    ) {
+      throw new ValidationError(
+        `Evaluation permissions are not supported for event type '${event.eventType}'.`
+      );
+    }
+
+    if (
+      assignedPermissions.includes('MENTOR_ASSIGNED_TEAMS') &&
+      !hasCapability(event.eventType, 'mentors')
+    ) {
+      throw new ValidationError(
+        `Mentorship permissions are not supported for event type '${event.eventType}'.`
+      );
     }
 
     // Generate secure 64-char hex token
@@ -216,11 +255,51 @@ export class EventMemberService {
     callerSupabaseId: string,
     updates: { role?: EventRole; permissions?: EventPermission[] }
   ): Promise<IEventMemberDocument> {
-    await this.assertCanManageStaff(eventId, callerSupabaseId);
+    const { event } = await this.assertCanManageStaff(eventId, callerSupabaseId);
 
     const member = await this.memberRepo.findById(memberId);
     if (!member || member.eventId.toString() !== eventId) {
       throw new AppError('Member not found for this event.', 404);
+    }
+
+    if (updates.role === 'JUDGE' && !hasCapability(event.eventType, 'judges')) {
+      throw new ValidationError(
+        `Judge role is not supported for event type '${event.eventType}'.`
+      );
+    }
+
+    if (updates.role === 'EVALUATOR' && !hasCapability(event.eventType, 'evaluators')) {
+      throw new ValidationError(
+        `Evaluator role is not supported for event type '${event.eventType}'.`
+      );
+    }
+
+    if (updates.role === 'MENTOR' && !hasCapability(event.eventType, 'mentors')) {
+      throw new ValidationError(
+        `Mentor role is not supported for event type '${event.eventType}'.`
+      );
+    }
+
+    if (updates.permissions && Array.isArray(updates.permissions)) {
+      if (
+        (updates.permissions.includes('SCORE_ASSIGNED_TEAMS') ||
+          updates.permissions.includes('VIEW_EVALUATION_RESULTS')) &&
+        !hasCapability(event.eventType, 'judges') &&
+        !hasCapability(event.eventType, 'evaluators')
+      ) {
+        throw new ValidationError(
+          `Evaluation permissions are not supported for event type '${event.eventType}'.`
+        );
+      }
+
+      if (
+        updates.permissions.includes('MENTOR_ASSIGNED_TEAMS') &&
+        !hasCapability(event.eventType, 'mentors')
+      ) {
+        throw new ValidationError(
+          `Mentorship permissions are not supported for event type '${event.eventType}'.`
+        );
+      }
     }
 
     // Cannot modify HOST role to non-host if they are the primary host

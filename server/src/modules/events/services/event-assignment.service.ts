@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
-import { AppError } from '../../../middlewares/error.middleware';
+import { AppError, ValidationError } from '../../../middlewares/error.middleware';
+import { hasCapability } from '../utils/event-capabilities';
 import {
   mongoEventAssignmentRepository,
   MongoEventAssignmentRepository,
@@ -99,7 +100,7 @@ export class EventAssignmentService {
     callerSupabaseId: string,
     dto: CreateEventAssignmentDTO
   ): Promise<IEventAssignmentDocument> {
-    const { callerMongoId } = await this.assertCanManageAssignments(eventId, callerSupabaseId);
+    const { event, callerMongoId } = await this.assertCanManageAssignments(eventId, callerSupabaseId);
 
     if (!dto.memberId || !mongoose.Types.ObjectId.isValid(dto.memberId)) {
       throw new AppError('Valid memberId is required.', 400);
@@ -107,6 +108,24 @@ export class EventAssignmentService {
 
     if (!dto.role || !ASSIGNMENT_ROLES.includes(dto.role)) {
       throw new AppError(`Invalid role '${dto.role}'. Allowed: ${ASSIGNMENT_ROLES.join(', ')}`, 400);
+    }
+
+    if (dto.role === 'JUDGE' && !hasCapability(event.eventType, 'judges')) {
+      throw new ValidationError(
+        `Judge assignments are not supported for event type '${event.eventType}'.`
+      );
+    }
+
+    if (dto.role === 'EVALUATOR' && !hasCapability(event.eventType, 'evaluators')) {
+      throw new ValidationError(
+        `Evaluator assignments are not supported for event type '${event.eventType}'.`
+      );
+    }
+
+    if (dto.role === 'MENTOR' && !hasCapability(event.eventType, 'mentors')) {
+      throw new ValidationError(
+        `Mentor assignments are not supported for event type '${event.eventType}'.`
+      );
     }
 
     if (!dto.targetName || !dto.targetName.trim()) {

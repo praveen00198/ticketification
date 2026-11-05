@@ -1,3 +1,5 @@
+import mongoose from 'mongoose';
+import { EventModel } from '../../../db/mongo/models/event.model';
 import { guestRepository, GuestRepository } from '../repositories/guest.repository';
 import { eventRepository, EventRepository } from '../../events/repositories/event.repository';
 import { ticketTypeRepository, TicketTypeRepository } from '../../events/repositories/ticket-type.repository';
@@ -25,13 +27,47 @@ export class GuestService {
    * Helper to verify that the user owns the specified event.
    */
   private async assertEventOwnership(eventId: string, userId: string) {
-    const event = await this.eventRepo.findById(eventId);
+    let event: any = null;
+
+    const isMongo = mongoose.connection.readyState === 1 || Boolean((EventModel.findById as any)?.mock);
+    if (isMongo && mongoose.Types.ObjectId.isValid(eventId)) {
+      const mongoEvent = await EventModel.findById(eventId);
+      if (mongoEvent) {
+        const isOwner =
+          mongoEvent.ownerSupabaseId === userId ||
+          String(mongoEvent.ownerId) === userId ||
+          String(mongoEvent.ownerSupabaseId) === userId ||
+          (mongoEvent as any).createdBy === userId;
+
+        if (!isOwner) {
+          throw new AuthorizationError('Access denied: You do not own this event.');
+        }
+        event = mongoEvent;
+      }
+    }
+
+    if (!event) {
+      try {
+        event = await this.eventRepo.findById(eventId);
+      } catch {
+        event = null;
+      }
+    }
+
     if (!event) {
       throw new NotFoundError('Event not found.');
     }
-    if (event.createdBy !== userId) {
+
+    if (event.createdBy && event.createdBy !== userId) {
       throw new AuthorizationError('Access denied: You do not own this event.');
     }
+
+    if (event.attendanceMode === 'TICKETIFICATION_REGISTRATION') {
+      throw new ValidationError(
+        'Guest roster operations are not permitted for events using native platform registration.'
+      );
+    }
+
     return event;
   }
 

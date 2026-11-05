@@ -92,7 +92,11 @@ export function isEventOwner(
 
   const userEmail = user.email ? user.email.toLowerCase().trim() : '';
   const eventEmail = (event as any).organizerEmail ? String((event as any).organizerEmail).toLowerCase().trim() : '';
-  if (userEmail && eventEmail && userEmail === eventEmail) {
+  if (
+    userEmail &&
+    ((eventEmail && userEmail === eventEmail) ||
+      (createdByStr && userEmail === createdByStr.toLowerCase().trim()))
+  ) {
     return true;
   }
 
@@ -310,7 +314,7 @@ export function getHostWorkspaceNavigationCategories({
   currentEvent,
 }: {
   user?: UserIdentity | null;
-  currentEvent: { id: string; name: string; eventType?: string };
+  currentEvent: { id: string; name: string; eventType?: string; attendanceMode?: string; visibility?: string };
 }): NavCategory[] {
   const caps = getEventCapabilities(currentEvent.eventType);
   const eventId = currentEvent.id;
@@ -328,7 +332,9 @@ export function getHostWorkspaceNavigationCategories({
       title: 'Attendees & Credentials',
       items: [
         { label: 'Pass Management', path: `/events/${eventId}?tab=attendees`, icon: Ticket },
-        { label: 'Guest Roster', path: `/import`, icon: FileSpreadsheet, requiresEvent: true, requiresHost: true },
+        ...(currentEvent.attendanceMode !== 'TICKETIFICATION_REGISTRATION'
+          ? [{ label: 'Guest Roster', path: `/import`, icon: FileSpreadsheet, requiresEvent: true, requiresHost: true }]
+          : []),
         { label: 'Issued Tickets', path: `/tickets`, icon: Ticket, requiresEvent: true, requiresHost: true },
       ],
     },
@@ -343,9 +349,9 @@ export function getHostWorkspaceNavigationCategories({
     {
       title: 'Teams & Evaluation',
       items: [
-        { label: 'Team Console', path: `/events/${eventId}?tab=team`, icon: Users },
+        ...(caps.teams ? [{ label: 'Team Console', path: `/events/${eventId}?tab=team`, icon: Users }] : []),
         { label: 'Staff Console', path: `/events/${eventId}?tab=staff`, icon: Users },
-        ...((caps.mentors || caps.evaluators || caps.judges)
+        ...(Boolean(caps.judges || caps.evaluators)
           ? [
               {
                 label: 'Judging & Evaluation',
@@ -404,7 +410,7 @@ export function getNavigationCategories({
   pathname,
 }: {
   user: UserIdentity | null;
-  currentEvent?: { id: string; name: string; eventType?: string; createdBy?: string; ownerId?: string; ownerSupabaseId?: string; userRole?: string; role?: string } | null;
+  currentEvent?: { id: string; name: string; eventType?: string; attendanceMode?: string; visibility?: string; createdBy?: string; ownerId?: string; ownerSupabaseId?: string; userRole?: string; role?: string } | null;
   pathname?: string;
 }): NavCategory[] {
   const isHostMode = pathname ? isHostWorkspaceMode(pathname, currentEvent) : Boolean(currentEvent);

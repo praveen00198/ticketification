@@ -105,6 +105,13 @@ export class GuestImportService {
             throw new AuthorizationError('Access denied. You do not have permission to manage guest imports for this event.', 403);
           }
         }
+
+        if (mongoEvent.attendanceMode === 'TICKETIFICATION_REGISTRATION') {
+          throw new ValidationError(
+            'Guest roster operations are not permitted for events using native platform registration.'
+          );
+        }
+
         return { isMongo: true, event: mongoEvent };
       }
       throw new NotFoundError('Event not found');
@@ -112,8 +119,15 @@ export class GuestImportService {
 
     const event = await this.eventRepo.findByIdAndOwner(eventId, userId);
     if (!event) {
-      throw new AuthorizationError('Access denied. You do not have permission to manage guest imports for this event.', 403);
+      throw new NotFoundError('Event not found or unauthorized');
     }
+
+    if ((event as any).attendanceMode === 'TICKETIFICATION_REGISTRATION') {
+      throw new ValidationError(
+        'Guest roster operations are not permitted for events using native platform registration.'
+      );
+    }
+
     return { isMongo: false, event };
   }
 

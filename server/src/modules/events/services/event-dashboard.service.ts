@@ -15,6 +15,7 @@ export interface EventTypeFeatures {
   hasSessions: boolean;
   hasHighThroughputTurnstile: boolean;
   credentialTerm: string;
+  hasGuestRoster: boolean;
 }
 
 export interface EventDashboardSummary {
@@ -82,7 +83,11 @@ export class EventDashboardService {
   /**
    * Derive type-aware feature capabilities based on event type.
    */
-  deriveFeatures(eventType: string = 'OTHER', credentialTaxonomy?: string): EventTypeFeatures {
+  deriveFeatures(
+    eventType: string = 'OTHER',
+    credentialTaxonomy?: string,
+    attendanceMode?: string
+  ): EventTypeFeatures {
     const normalizedType = (eventType || 'OTHER').toUpperCase().trim();
 
     const isCompetition = ['HACKATHON', 'COMPETITION', 'COLLEGE_FEST'].includes(normalizedType);
@@ -109,6 +114,7 @@ export class EventDashboardService {
       hasSessions: isConference,
       hasHighThroughputTurnstile: isHighVelocity,
       credentialTerm,
+      hasGuestRoster: (attendanceMode || '').trim().toUpperCase() === 'EXISTING_ATTENDEE_DATA',
     };
   }
 
@@ -122,7 +128,11 @@ export class EventDashboardService {
     }
 
     const eventType = (event.eventType || 'OTHER').toUpperCase();
-    const features = this.deriveFeatures(eventType, (event as any).credentialTaxonomy);
+    const features = this.deriveFeatures(
+      eventType,
+      (event as any).credentialTaxonomy,
+      (event as any).attendanceMode
+    );
 
     // Parallel aggregate queries
     const [credMetrics, checkinStats, members, storageMetrics, auditLogs, teams] = await Promise.all([

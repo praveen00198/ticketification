@@ -203,7 +203,7 @@ export const EventsPage: React.FC = () => {
                         variant={
                           event.status === 'ACTIVE' || event.status === 'PUBLISHED'
                             ? 'emerald'
-                            : event.organizationVerificationStatus === 'PENDING'
+                            : event.organizationVerificationStatus === 'PENDING' && event.visibility !== 'private'
                             ? 'amber'
                             : event.status === 'DRAFT'
                             ? 'amber'
@@ -213,7 +213,7 @@ export const EventsPage: React.FC = () => {
                         }
                         size="sm"
                       >
-                        {event.organizationVerificationStatus === 'PENDING'
+                        {event.organizationVerificationStatus === 'PENDING' && event.visibility !== 'private'
                           ? 'Draft — Verification Pending'
                           : event.displayStatus || event.status}
                       </Badge>

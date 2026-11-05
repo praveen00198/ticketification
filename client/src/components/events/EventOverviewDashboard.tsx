@@ -22,6 +22,7 @@ import {
 import { EventItem, TicketType } from '../../types';
 import { EventDashboardSummary, EventTypeFeatures, eventsApi, EventStatusHistoryItem } from '../../api/events';
 import { formatVenueLabel } from '../../utils/venue';
+import { getEventCapabilities } from '../../utils/event-capabilities';
 
 interface EventOverviewDashboardProps {
   event: EventItem;
@@ -47,6 +48,7 @@ export const EventOverviewDashboard: React.FC<EventOverviewDashboardProps> = ({
   onNavigateTab,
 }) => {
   const navigate = useNavigate();
+  const caps = getEventCapabilities(event.eventType);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyItems, setHistoryItems] = useState<EventStatusHistoryItem[]>([]);
@@ -478,7 +480,11 @@ export const EventOverviewDashboard: React.FC<EventOverviewDashboardProps> = ({
                   <li>Configure at least one pass category so attendees can receive credentials.</li>
                 )}
                 {(summary?.credentials.total ?? 0) === 0 && (
-                  <li>No tickets have been generated yet. Use Guest Roster import or issue passes.</li>
+                  <li>
+                    {event.attendanceMode === 'TICKETIFICATION_REGISTRATION'
+                      ? 'No passes claimed yet. Share public registration link or issue passes.'
+                      : 'No tickets have been generated yet. Use Guest Roster import or issue passes.'}
+                  </li>
                 )}
               </ul>
             </div>
@@ -525,37 +531,41 @@ export const EventOverviewDashboard: React.FC<EventOverviewDashboardProps> = ({
                 <ArrowRight className="w-3.5 h-3.5 text-stone-400 group-hover:text-stone-900 group-hover:translate-x-0.5 transition-all" />
               </button>
 
-              <button
-                onClick={() => navigate('/import')}
-                className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-stone-100 transition-colors text-left group cursor-pointer"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-lg bg-stone-100 flex items-center justify-center text-stone-700 group-hover:bg-stone-900 group-hover:text-white transition-colors">
-                    <FileSpreadsheet className="w-3.5 h-3.5" />
+              {event.attendanceMode !== 'TICKETIFICATION_REGISTRATION' && (
+                <button
+                  onClick={() => navigate('/import')}
+                  className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-stone-100 transition-colors text-left group cursor-pointer"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-stone-100 flex items-center justify-center text-stone-700 group-hover:bg-stone-900 group-hover:text-white transition-colors">
+                      <FileSpreadsheet className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-stone-900">Guest Roster Import</div>
+                      <div className="text-[10px] text-stone-500">CSV bulk guest onboarding</div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="text-xs font-semibold text-stone-900">Guest Roster Import</div>
-                    <div className="text-[10px] text-stone-500">CSV bulk guest onboarding</div>
-                  </div>
-                </div>
-                <ArrowRight className="w-3.5 h-3.5 text-stone-400 group-hover:text-stone-900 group-hover:translate-x-0.5 transition-all" />
-              </button>
+                  <ArrowRight className="w-3.5 h-3.5 text-stone-400 group-hover:text-stone-900 group-hover:translate-x-0.5 transition-all" />
+                </button>
+              )}
 
-              <button
-                onClick={() => onNavigateTab('team')}
-                className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-stone-100 transition-colors text-left group cursor-pointer"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-lg bg-stone-100 flex items-center justify-center text-stone-700 group-hover:bg-stone-900 group-hover:text-white transition-colors">
-                    <Users className="w-3.5 h-3.5" />
+              {caps.teams && (
+                <button
+                  onClick={() => onNavigateTab('team')}
+                  className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-stone-100 transition-colors text-left group cursor-pointer"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-stone-100 flex items-center justify-center text-stone-700 group-hover:bg-stone-900 group-hover:text-white transition-colors">
+                      <Users className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-stone-900">Team Console</div>
+                      <div className="text-[10px] text-stone-500">Participant cohorts & rosters</div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="text-xs font-semibold text-stone-900">Team Console</div>
-                    <div className="text-[10px] text-stone-500">Participant cohorts & rosters</div>
-                  </div>
-                </div>
-                <ArrowRight className="w-3.5 h-3.5 text-stone-400 group-hover:text-stone-900 group-hover:translate-x-0.5 transition-all" />
-              </button>
+                  <ArrowRight className="w-3.5 h-3.5 text-stone-400 group-hover:text-stone-900 group-hover:translate-x-0.5 transition-all" />
+                </button>
+              )}
 
               <button
                 onClick={() => onNavigateTab('operations')}

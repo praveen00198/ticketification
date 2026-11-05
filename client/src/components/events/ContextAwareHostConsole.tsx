@@ -26,6 +26,7 @@ import { EventCredentialTemplateCard } from './EventCredentialTemplateCard';
 import { EventCheckinScannerCard } from './EventCheckinScannerCard';
 import { EventAuditLogCard } from './EventAuditLogCard';
 import { EventRegistrationModal } from './EventRegistrationModal';
+import { getEventCapabilities } from '../../utils/event-capabilities';
 
 export type HostConsoleTab =
   | 'overview'
@@ -70,6 +71,7 @@ export const ContextAwareHostConsole: React.FC<ContextAwareHostConsoleProps> = (
 }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const caps = getEventCapabilities(event.eventType);
 
   const getValidTab = (rawTab: string | null): HostConsoleTab => {
     if (!rawTab) return 'overview';
@@ -79,9 +81,13 @@ export const ContextAwareHostConsole: React.FC<ContextAwareHostConsoleProps> = (
     if (lower === 'verification' || lower === 'verify' || lower === 'org') return 'verification';
     if (lower === 'attendees' || lower === 'credentials' || lower === 'passes' || lower === 'tickets') return 'attendees';
     if (lower === 'operations' || lower === 'gate' || lower === 'scan' || lower === 'turnstiles') return 'operations';
-    if (lower === 'team' || lower === 'teams' || lower === 'participants') return 'team';
+    if (lower === 'team' || lower === 'teams' || lower === 'participants') {
+      return Boolean(caps.teams) ? 'team' : 'overview';
+    }
     if (lower === 'staff' || lower === 'volunteers') return 'staff';
-    if (lower === 'judging' || lower === 'evaluation' || lower === 'rubrics' || lower === 'review') return 'judging';
+    if (lower === 'judging' || lower === 'evaluation' || lower === 'rubrics' || lower === 'review') {
+      return Boolean(caps.judges || caps.evaluators) ? 'judging' : 'overview';
+    }
     if (lower === 'audit' || lower === 'security') return 'audit';
     return 'overview';
   };
@@ -342,6 +348,7 @@ export const ContextAwareHostConsole: React.FC<ContextAwareHostConsoleProps> = (
             isOwner={true}
             isIndividual={isIndividual}
             organizationVerificationStatus={event.organizationVerificationStatus}
+            visibility={event.visibility}
             onStatusChange={() => onRefreshEvent()}
           />
         </div>
@@ -364,13 +371,15 @@ export const ContextAwareHostConsole: React.FC<ContextAwareHostConsoleProps> = (
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              <button
-                onClick={() => navigate('/import')}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-semibold rounded-xl border border-stone-200 transition-colors cursor-pointer"
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-stone-600" />
-                <span>Guest Roster Import</span>
-              </button>
+              {event.attendanceMode !== 'TICKETIFICATION_REGISTRATION' && (
+                <button
+                  onClick={() => navigate('/import')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-semibold rounded-xl border border-stone-200 transition-colors cursor-pointer"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-stone-600" />
+                  <span>Guest Roster Import</span>
+                </button>
+              )}
               <button
                 onClick={() => navigate('/tickets')}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-semibold rounded-xl border border-stone-200 transition-colors cursor-pointer"
@@ -443,7 +452,7 @@ export const ContextAwareHostConsole: React.FC<ContextAwareHostConsoleProps> = (
       {/* ═══════════════════════════════════════════════════════════════
           SECTION 6: DEDICATED TEAM CONSOLE
       ═══════════════════════════════════════════════════════════════ */}
-      {activeTab === 'team' && (
+      {activeTab === 'team' && Boolean(caps.teams) && (
         <TeamConsole
           eventId={eventId}
           isHostOrCoordinator={true}
@@ -480,7 +489,7 @@ export const ContextAwareHostConsole: React.FC<ContextAwareHostConsoleProps> = (
       {/* ═══════════════════════════════════════════════════════════════
           SECTION 8: JUDGING & EVALUATION
       ═══════════════════════════════════════════════════════════════ */}
-      {activeTab === 'judging' && (
+      {activeTab === 'judging' && Boolean(caps.judges || caps.evaluators) && (
         <div className="space-y-6">
           <div className="border-b border-stone-200/80 pb-4">
             <h1 className="text-xl sm:text-2xl font-bold text-stone-900 tracking-tight flex items-center gap-2">

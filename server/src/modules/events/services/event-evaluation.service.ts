@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
-import { AppError } from '../../../middlewares/error.middleware';
+import { AppError, ValidationError } from '../../../middlewares/error.middleware';
+import { hasCapability } from '../utils/event-capabilities';
 import {
   mongoEventRubricRepository,
   MongoEventRubricRepository,
@@ -82,6 +83,12 @@ export class EventEvaluationService {
   ): Promise<{ event: any; callerMongoId: mongoose.Types.ObjectId }> {
     const event = await this.eventRepo.findById(eventId);
     if (!event) throw new AppError('Event not found', 404);
+
+    if (!hasCapability(event.eventType, 'judges') && !hasCapability(event.eventType, 'evaluators')) {
+      throw new ValidationError(
+        `Judging and evaluation rubrics are not supported for event type '${event.eventType}'.`
+      );
+    }
 
     const callerUser = await this.userRepo.findBySupabaseId(callerSupabaseId);
     if (!callerUser) throw new AppError('Caller profile not found', 403);
@@ -202,6 +209,12 @@ export class EventEvaluationService {
   ): Promise<IEventEvaluationDocument> {
     const event = await this.eventRepo.findById(eventId);
     if (!event) throw new AppError('Event not found', 404);
+
+    if (!hasCapability(event.eventType, 'judges') && !hasCapability(event.eventType, 'evaluators')) {
+      throw new ValidationError(
+        `Judging evaluations are not supported for event type '${event.eventType}'.`
+      );
+    }
 
     const callerUser = await this.userRepo.findBySupabaseId(callerSupabaseId);
     if (!callerUser) throw new AppError('Unauthorized', 401);

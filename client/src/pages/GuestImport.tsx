@@ -25,6 +25,7 @@ import {
   RefreshCw,
   Check,
   Calendar,
+  Ticket,
 } from 'lucide-react';
 import { EmptyEventsState } from '../components/ui';
 
@@ -133,6 +134,11 @@ export const GuestImport: React.FC = () => {
   const handleUploadAndAnalyze = async () => {
     if (!file || !currentEvent) return;
 
+    if (currentEvent.attendanceMode === 'TICKETIFICATION_REGISTRATION') {
+      setError('Guest roster import is disabled because this event uses native platform registration.');
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -238,6 +244,24 @@ export const GuestImport: React.FC = () => {
           onAction={() => navigate('/events')}
           secondaryActionText="Create New Event"
           onSecondaryAction={() => navigate('/events/create')}
+        />
+      </div>
+    );
+  }
+
+  if (currentEvent.attendanceMode === 'TICKETIFICATION_REGISTRATION') {
+    return (
+      <div className="w-full flex-1 flex flex-col items-center justify-center my-auto min-h-[420px]">
+        <EmptyEventsState
+          title="Native Platform Registration Active"
+          description="This event uses native Ticketification registration. Guest roster spreadsheet import is only available for events configured with external or manual attendee data. Registrations and credentials are handled automatically through the public registration flow."
+          slotText="ROSTER IMPORT INACTIVE"
+          categoryText="NATIVE REGISTRATION • AUTO-MANAGED"
+          actionText="Pass Management"
+          actionIcon={<Ticket className="w-3.5 h-3.5" />}
+          onAction={() => navigate(`/events/${currentEvent.id}?tab=attendees`)}
+          secondaryActionText="Event Overview"
+          onSecondaryAction={() => navigate(`/events/${currentEvent.id}`)}
         />
       </div>
     );

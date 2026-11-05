@@ -23,6 +23,7 @@ interface EventLifecycleBarProps {
   currentStatus: string;
   isOwner?: boolean;
   isIndividual?: boolean;
+  visibility?: string;
   onStatusChange: (newStatus: string) => void;
 }
 
@@ -41,6 +42,7 @@ export const EventLifecycleBar: React.FC<EventLifecycleBarProps> = ({
   currentStatus,
   isOwner = true,
   isIndividual = false,
+  visibility,
   onStatusChange,
 }) => {
   const [loading, setLoading] = useState(false);
@@ -272,8 +274,8 @@ export const EventLifecycleBar: React.FC<EventLifecycleBarProps> = ({
             </div>
             <p className="text-xs text-zinc-500 mt-0.5">
               {currentStatus === 'DRAFT' &&
-                (isIndividual
-                  ? 'Event draft is in preparation. Configure event details and submit for review.'
+                (isIndividual || visibility === 'private'
+                  ? 'Event draft is in preparation. Configure event details and submit for review or publish.'
                   : 'Event is in preparation. Complete institutional verification or submit for review.')}
               {currentStatus === 'SUBMITTED' && 'Submitted for verification review. Awaiting platform administration decision.'}
               {currentStatus === 'APPROVED' && 'Event is verified and approved. Ready to be published to attendees.'}
@@ -293,15 +295,27 @@ export const EventLifecycleBar: React.FC<EventLifecycleBarProps> = ({
         {isOwner && currentStatus !== 'ARCHIVED' && currentStatus !== 'CANCELLED' && currentStatus !== 'SUSPENDED' && (
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
             {currentStatus === 'DRAFT' && (
-              <button
-                type="button"
-                disabled={loading}
-                onClick={handleSubmitEvent}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-stone-900 hover:bg-black disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
-              >
-                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                <span>Submit Event for Review</span>
-              </button>
+              isIndividual || visibility === 'private' ? (
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={handlePublish}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-stone-900 hover:bg-black disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
+                >
+                  {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe className="w-3.5 h-3.5" />}
+                  <span>Publish Event</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={handleSubmitEvent}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-stone-900 hover:bg-black disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
+                >
+                  {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                  <span>Submit Event for Review</span>
+                </button>
+              )
             )}
 
             {currentStatus === 'SUBMITTED' && (
