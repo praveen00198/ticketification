@@ -12,12 +12,13 @@ import axios from 'axios';
 export const DEFAULT_PRODUCTION_API_URL = 'https://ticketification.onrender.com/api';
 
 function resolveApiBaseUrl(): string {
+  const env = typeof import.meta !== 'undefined' && (import.meta as any).env ? (import.meta as any).env : ({} as any);
   // In development, route through Vite's local proxy to reach the local backend
-  if (import.meta.env.DEV && !import.meta.env.VITE_FORCE_REMOTE_API) {
+  if (env.DEV && !env.VITE_FORCE_REMOTE_API) {
     return '/api';
   }
 
-  const envUrl = (import.meta.env.VITE_API_URL || '').trim();
+  const envUrl = (env.VITE_API_URL || '').trim();
   if (envUrl) {
     // Remove any trailing slashes
     const cleanUrl = envUrl.replace(/\/+$/, '');

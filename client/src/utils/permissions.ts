@@ -349,7 +349,7 @@ export function getHostWorkspaceNavigationCategories({
     {
       title: 'Teams & Evaluation',
       items: [
-        ...(caps.teams ? [{ label: 'Team Console', path: `/events/${eventId}?tab=team`, icon: Users }] : []),
+        ...(caps.teams ? [{ label: 'Teams', path: `/events/${eventId}?tab=team`, icon: Users }] : []),
         { label: 'Staff Console', path: `/events/${eventId}?tab=staff`, icon: Users },
         ...(Boolean(caps.judges || caps.evaluators)
           ? [

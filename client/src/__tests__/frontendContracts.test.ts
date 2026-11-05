@@ -147,10 +147,10 @@ export function runFrontendContractVerification(): { passed: number; failed: num
     });
     const allItems = categories.flatMap((cat) => cat.items);
     const judgingItem = allItems.find((item) => item.label === 'Judging & Evaluation' || item.path.includes('tab=judging'));
-    const teamItem = allItems.find((item) => item.label === 'Team Console' || item.path.includes('tab=team'));
+    const teamItem = allItems.find((item) => item.label === 'Teams' || item.label === 'Team Console' || item.path.includes('tab=team'));
 
     assert(judgingItem === undefined, 'Wedding must omit Judging & Evaluation from navigation');
-    assert(teamItem === undefined, 'Wedding must omit Team Console from navigation');
+    assert(teamItem === undefined, 'Wedding must omit Teams from navigation');
   });
 
   test('omits Judging & Evaluation and Team Console for CONCERT category', () => {
@@ -164,10 +164,10 @@ export function runFrontendContractVerification(): { passed: number; failed: num
     });
     const allItems = categories.flatMap((cat) => cat.items);
     const judgingItem = allItems.find((item) => item.label === 'Judging & Evaluation' || item.path.includes('tab=judging'));
-    const teamItem = allItems.find((item) => item.label === 'Team Console' || item.path.includes('tab=team'));
+    const teamItem = allItems.find((item) => item.label === 'Teams' || item.label === 'Team Console' || item.path.includes('tab=team'));
 
     assert(judgingItem === undefined, 'Concert must omit Judging & Evaluation from navigation');
-    assert(teamItem === undefined, 'Concert must omit Team Console from navigation');
+    assert(teamItem === undefined, 'Concert must omit Teams from navigation');
   });
 
   test('omits Judging & Evaluation and Team Console for CONFERENCE category', () => {
@@ -181,10 +181,10 @@ export function runFrontendContractVerification(): { passed: number; failed: num
     });
     const allItems = categories.flatMap((cat) => cat.items);
     const judgingItem = allItems.find((item) => item.label === 'Judging & Evaluation' || item.path.includes('tab=judging'));
-    const teamItem = allItems.find((item) => item.label === 'Team Console' || item.path.includes('tab=team'));
+    const teamItem = allItems.find((item) => item.label === 'Teams' || item.label === 'Team Console' || item.path.includes('tab=team'));
 
     assert(judgingItem === undefined, 'Conference must omit Judging & Evaluation from navigation');
-    assert(teamItem === undefined, 'Conference must omit Team Console from navigation');
+    assert(teamItem === undefined, 'Conference must omit Teams from navigation');
   });
 
   test('omits Judging & Evaluation and Team Console for WORKSHOP while retaining mentors capability', () => {
@@ -199,10 +199,10 @@ export function runFrontendContractVerification(): { passed: number; failed: num
     });
     const allItems = categories.flatMap((cat) => cat.items);
     const judgingItem = allItems.find((item) => item.label === 'Judging & Evaluation' || item.path.includes('tab=judging'));
-    const teamItem = allItems.find((item) => item.label === 'Team Console' || item.path.includes('tab=team'));
+    const teamItem = allItems.find((item) => item.label === 'Teams' || item.label === 'Team Console' || item.path.includes('tab=team'));
 
     assert(judgingItem === undefined, 'Workshop must omit Judging & Evaluation despite having mentors capability');
-    assert(teamItem === undefined, 'Workshop must omit Team Console');
+    assert(teamItem === undefined, 'Workshop must omit Teams');
   });
 
   test('preserves both Judging & Evaluation and Team Console for HACKATHON category', () => {
@@ -217,10 +217,10 @@ export function runFrontendContractVerification(): { passed: number; failed: num
     });
     const allItems = categories.flatMap((cat) => cat.items);
     const judgingItem = allItems.find((item) => item.label === 'Judging & Evaluation');
-    const teamItem = allItems.find((item) => item.label === 'Team Console');
+    const teamItem = allItems.find((item) => item.label === 'Teams' || item.label === 'Team Console');
 
     assert(judgingItem !== undefined, 'Hackathon must include Judging & Evaluation');
-    assert(teamItem !== undefined, 'Hackathon must include Team Console');
+    assert(teamItem !== undefined, 'Hackathon must include Teams navigation item');
   });
 
   test('proves mentors capability alone never renders Judging & Evaluation (strict decoupling)', () => {

@@ -450,7 +450,7 @@ export const ContextAwareHostConsole: React.FC<ContextAwareHostConsoleProps> = (
       )}
 
       {/* ═══════════════════════════════════════════════════════════════
-          SECTION 6: DEDICATED TEAM CONSOLE
+          SECTION 6: TEAMS
       ═══════════════════════════════════════════════════════════════ */}
       {activeTab === 'team' && Boolean(caps.teams) && (
         <TeamConsole

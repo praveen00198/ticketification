@@ -1160,6 +1160,14 @@ export interface EventTeamItem {
   tableNumber?: string;
   leaderName: string;
   leaderEmail: string;
+  leaderPhone?: string;
+  phone?: string;
+  contact?: string;
+  city?: string;
+  state?: string;
+  location?: string;
+  checkedIn?: boolean;
+  onboarded?: boolean;
   members: TeamMemberItem[];
   projectTitle?: string;
   projectDescription?: string;

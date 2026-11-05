@@ -559,7 +559,7 @@ export const EventOverviewDashboard: React.FC<EventOverviewDashboardProps> = ({
                       <Users className="w-3.5 h-3.5" />
                     </div>
                     <div>
-                      <div className="text-xs font-semibold text-stone-900">Team Console</div>
+                      <div className="text-xs font-semibold text-stone-900">Teams</div>
                       <div className="text-[10px] text-stone-500">Participant cohorts & rosters</div>
                     </div>
                   </div>
