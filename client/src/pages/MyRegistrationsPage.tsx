@@ -1,58 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Calendar,
-  MapPin,
-  Ticket,
   AlertCircle,
   CheckCircle2,
-  Loader2,
   ArrowRight,
   Search,
   X,
   Wallet,
-  QrCode,
 } from 'lucide-react';
+import { RegistrationEventCard } from '../components/events/RegistrationEventCard';
 import { attendeeApi } from '../api/attendee';
 import { extractErrorMessage } from '../api/client';
 import { ROUTES } from '../routes/paths';
-import { formatLocalizedDateTime } from '../utils/date';
 import { formatVenueLabel } from '../utils/venue';
 import { EmptyEventsState, ErrorState, InView, AnimatedGroup } from '../components/ui';
 
 type RegistrationFilter = 'ALL' | 'UPCOMING' | 'COMPLETED';
 
-/**
- * Computes a human-readable relative time string like "in 3 days" or "2 weeks ago".
- */
-const getRelativeTimeLabel = (dateStr: string | undefined): string | null => {
-  if (!dateStr) return null;
-  const now = Date.now();
-  const target = new Date(dateStr).getTime();
-  if (isNaN(target)) return null;
-
-  const diffMs = target - now;
-  const absDiffMs = Math.abs(diffMs);
-  const isFuture = diffMs > 0;
-
-  if (absDiffMs < 60 * 60 * 1000) {
-    return isFuture ? 'Starting soon' : 'Just ended';
-  }
-  if (absDiffMs < 24 * 60 * 60 * 1000) {
-    const hours = Math.round(absDiffMs / (60 * 60 * 1000));
-    return isFuture ? `in ${hours}h` : `${hours}h ago`;
-  }
-  if (absDiffMs < 7 * 24 * 60 * 60 * 1000) {
-    const days = Math.round(absDiffMs / (24 * 60 * 60 * 1000));
-    return isFuture ? `in ${days}d` : `${days}d ago`;
-  }
-  if (absDiffMs < 30 * 24 * 60 * 60 * 1000) {
-    const weeks = Math.round(absDiffMs / (7 * 24 * 60 * 60 * 1000));
-    return isFuture ? `in ${weeks}w` : `${weeks}w ago`;
-  }
-  const months = Math.round(absDiffMs / (30 * 24 * 60 * 60 * 1000));
-  return isFuture ? `in ${months}mo` : `${months}mo ago`;
-};
 
 export const MyRegistrationsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -136,40 +100,6 @@ export const MyRegistrationsPage: React.FC = () => {
     return true;
   });
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'CONFIRMED':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Confirmed
-          </span>
-        );
-      case 'PENDING_APPROVAL':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" /> Pending
-          </span>
-        );
-      case 'CANCELLED':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-stone-100 text-stone-500">
-            <span className="w-1.5 h-1.5 rounded-full bg-stone-400" /> Cancelled
-          </span>
-        );
-      case 'REJECTED':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700">
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> Rejected
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-stone-100 text-stone-600">
-            {status}
-          </span>
-        );
-    }
-  };
 
   const FILTER_TABS: { key: RegistrationFilter; label: string }[] = [
     { key: 'ALL', label: 'All Passes' },
@@ -259,13 +189,13 @@ export const MyRegistrationsPage: React.FC = () => {
           </div>
 
           {/* Right: Segmented Switcher */}
-          <div className="inline-flex items-center self-start sm:self-auto bg-stone-100/90 border border-stone-200/70 overflow-hidden rounded-full shrink-0 shadow-2xs p-0.5">
+          <div className="inline-flex items-center self-start sm:self-auto bg-stone-100/90 border border-stone-200/70 overflow-hidden rounded-full shrink-0 shadow-2xs">
             {FILTER_TABS.map((tab) => (
               <button
                 key={tab.key}
                 type="button"
                 onClick={() => setFilter(tab.key)}
-                className={`px-4 py-1.5 text-xs font-medium rounded-full transition-all cursor-pointer ${
+                className={`px-4 py-2.5 text-xs font-medium rounded transition-all cursor-pointer ${
                   filter === tab.key
                     ? 'bg-white text-stone-900 shadow-xs font-semibold'
                     : 'text-stone-500 hover:text-stone-800'
@@ -333,115 +263,33 @@ export const MyRegistrationsPage: React.FC = () => {
             {filteredRegistrations.map((reg) => {
               const event = reg.event || reg.eventId || {};
               const eventId = event._id || reg.eventId;
-              const startAt = formatLocalizedDateTime(event.schedule?.startAt || reg.schedule?.startAt);
-              const venue = formatVenueLabel(event.venue || reg.venue);
-              const isCancelled = reg.status === 'CANCELLED';
-              const isRejected = reg.status === 'REJECTED';
               const completed = isRegistrationCompleted(reg);
-              const isMuted = isCancelled || isRejected || completed;
-              const credentialId = reg.credential?.formattedId || reg.credentialId;
-              const relativeTime = getRelativeTimeLabel(event.schedule?.startAt || reg.schedule?.startAt);
 
               return (
-                <div
+                <RegistrationEventCard
                   key={reg._id || reg.id}
-                  className={`group bg-white border border-stone-200/80 hover:border-stone-300 rounded-2xl p-5 flex flex-col justify-between transition-all duration-200 hover:shadow-md hover:shadow-stone-900/4 hover:-translate-y-0.5 ${
-                    isMuted ? 'opacity-75' : ''
-                  }`}
-                >
-                  <div className="space-y-3.5">
-                    {/* Top Row: Event Type + Relative Time + Status */}
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[10px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded-md bg-stone-100 text-stone-600">
-                          {event.eventType || reg.eventType || 'EVENT'}
-                        </span>
-                        {relativeTime && !isCancelled && !isRejected && (
-                          <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
-                            completed
-                              ? 'bg-stone-100 text-stone-500'
-                              : 'bg-emerald-50 text-emerald-700'
-                          }`}>
-                            {relativeTime}
-                          </span>
-                        )}
-                      </div>
-                      {getStatusBadge(reg.status)}
-                    </div>
-
-                    {/* Event Title */}
-                    <div>
-                      <Link to={ROUTES.WALLET} className="hover:underline">
-                        <h3 className={`text-base font-semibold leading-snug line-clamp-1 ${
-                          isMuted ? 'text-zinc-500' : 'text-zinc-900'
-                        }`}>
-                          {reg.eventName || event.name || 'Untitled Event'}
-                        </h3>
-                      </Link>
-                    </div>
-
-                    {/* Event Details (No harsh divider lines) */}
-                    <div className="space-y-2 text-xs text-stone-600">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-                        <span className="text-stone-700 font-medium">{startAt}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <MapPin className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-                        <span className="text-stone-500 truncate">{venue}</span>
-                      </div>
-                      <div className="flex items-center gap-2 pt-1 flex-wrap">
-                        <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-stone-100 text-stone-700">
-                          <Ticket className="w-3 h-3 text-stone-400" />
-                          {reg.ticketTier || reg.registrationType || 'Attendee Pass'}
-                        </span>
-                        {credentialId && (
-                          <span className="font-mono text-[11px] text-stone-400 tracking-wide">
-                            #{credentialId}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Footer Actions (No divider line, prominent View Pass) */}
-                  <div className="pt-4 mt-4 flex items-center justify-between gap-3">
-                    <div>
-                      {reg.status === 'CONFIRMED' && !completed ? (
-                        <Link
-                          to={ROUTES.WALLET}
-                          className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-stone-900 hover:bg-black text-white text-xs font-semibold rounded-full shadow-2xs transition-all active:scale-95 cursor-pointer"
-                        >
-                          <QrCode className="w-3.5 h-3.5" />
-                          View Pass
-                        </Link>
-                      ) : completed && reg.status === 'CONFIRMED' ? (
-                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-stone-400">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-stone-400" />
-                          {reg.credential?.status === 'CHECKED_IN' ? 'Attended' : 'Completed'}
-                        </span>
-                      ) : (
-                        <span />
-                      )}
-                    </div>
-
-                    {!isCancelled && !isRejected && !completed && (
-                      <button
-                        onClick={() => handleCancelRegistration(eventId, reg.eventName || event.name)}
-                        disabled={cancellingId === eventId}
-                        className="text-xs font-medium text-stone-400 hover:text-rose-600 transition-colors cursor-pointer py-1.5 px-2 rounded-lg hover:bg-rose-50/50 disabled:opacity-50"
-                      >
-                        {cancellingId === eventId ? (
-                          <span className="inline-flex items-center gap-1 text-rose-500">
-                            <Loader2 className="w-3 h-3 animate-spin" /> Cancelling...
-                          </span>
-                        ) : (
-                          'Cancel Entry'
-                        )}
-                      </button>
-                    )}
-                  </div>
-                </div>
+                  id={eventId}
+                  registrationId={reg._id || reg.id}
+                  name={reg.eventName || event.name || 'Untitled Event'}
+                  eventType={event.eventType || reg.eventType || 'EVENT'}
+                  description={event.description || reg.description}
+                  bannerUrl={event.bannerUrl || reg.bannerUrl}
+                  dateStr={event.schedule?.startAt || reg.schedule?.startAt}
+                  timeStr={event.schedule?.startAt || reg.schedule?.startAt}
+                  venueLabel={formatVenueLabel(event.venue || reg.venue)}
+                  venueType={event.venue?.type || reg.venue?.type}
+                  status={reg.status}
+                  credentialStatus={reg.credential?.status}
+                  isCompleted={completed}
+                  isCancelling={cancellingId === eventId}
+                  onViewPass={() => navigate(ROUTES.WALLET)}
+                  onCancel={
+                    !reg.status || reg.status === 'CANCELLED' || reg.status === 'REJECTED' || completed
+                      ? undefined
+                      : () => handleCancelRegistration(eventId, reg.eventName || event.name)
+                  }
+                  onClick={() => navigate(ROUTES.WALLET)}
+                />
               );
             })}
           </AnimatedGroup>

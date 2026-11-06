@@ -241,14 +241,14 @@ export const FolderTabEventCard: React.FC<FolderTabEventCardProps> = ({
             {/* Event Title */}
             <h3
               title={name}
-              className="text-base sm:text-md font-semibold text-stone-900 tracking-wide line-clamp-1 mt-2"
+              className="text-base sm:text-lg font-bold text-stone-900 tracking-wide line-clamp-1 mt-2.5"
             >
               {name}
             </h3>
 
             {/* 2-line Description directly under Title (harmonious, no gap) */}
             {description && (
-              <p className="text-xs text-stone-500 line-clamp-2 tracking-wide leading-tight mt-1">
+              <p className="text-xs text-stone-500 line-clamp-2 tracking-wide leading-tight mt-0.5">
                 {description}
               </p>
             )}

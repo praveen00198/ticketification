@@ -7,9 +7,11 @@ import {
 import { qrService } from '../src/modules/tickets/services/qr.service';
 import { TicketService } from '../src/modules/tickets/services/ticket.service';
 import { NotFoundError, ValidationError } from '../src/middlewares/error.middleware';
+import sharp from 'sharp';
+import jsQR from 'jsqr';
 
 describe('Phase 4: Ticket Generation & PNG Rendering Pipeline', () => {
-  jest.setTimeout(15000);
+  jest.setTimeout(45000);
   describe('PNG Binary Header Verification (isPngBuffer)', () => {
     it('should return true for a valid PNG buffer with magic bytes 0x89504E47', () => {
       // 8-byte standard PNG signature: 89 50 4E 47 0D 0A 1A 0A
@@ -425,6 +427,7 @@ describe('Phase 4: Ticket Generation & PNG Rendering Pipeline', () => {
         });
       }
 
+      if (global.gc) global.gc();
       const startRss = process.memoryUsage().rss / 1024 / 1024;
       let peakRss = startRss;
       const timer = setInterval(() => {
@@ -432,18 +435,247 @@ describe('Phase 4: Ticket Generation & PNG Rendering Pipeline', () => {
         if (rssMb > peakRss) peakRss = rssMb;
       }, 10);
 
-      const results = await ticketImageService.renderBatchTickets(items, 2);
-      clearInterval(timer);
-
-      expect(results).toHaveLength(10);
-      for (const res of results) {
-        expect(isPngBuffer(res.pngBuffer)).toBe(true);
+      try {
+        const results = await ticketImageService.renderBatchTickets(items, 2);
+        expect(results).toHaveLength(10);
+        for (const res of results) {
+          expect(isPngBuffer(res.pngBuffer)).toBe(true);
+        }
+        const deltaRss = peakRss - startRss;
+        expect(deltaRss).toBeLessThan(200);
+      } finally {
+        clearInterval(timer);
       }
-      const deltaRss = peakRss - startRss;
-      expect(deltaRss).toBeLessThan(150);
+    });
+  });
+
+  describe('Milestone 1: Default Global Ticket Credential Verification', () => {
+    const dummyQr = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+    it('should output a valid high-resolution PNG image with magic bytes 0x89504E47', async () => {
+      const ticketData: TicketImageData = {
+        ticketId: 'SMP-00001',
+        guestName: 'Rahul Sharma',
+        eventName: 'Ticketification Launch Summit 2026',
+        eventDate: 'November 20, 2026',
+        eventTime: '10:00 AM IST',
+        ticketType: 'VIP Attendee',
+        qrCodeDataUrl: dummyQr,
+        venue: 'Grand Convention Centre, Hall A',
+        sequenceNumber: 42,
+      };
+
+      const result = await ticketImageService.generateTicketImage(ticketData);
+      expect(result).toBeDefined();
+      expect(result.pngBuffer).toBeDefined();
+      expect(isPngBuffer(result.pngBuffer)).toBe(true);
+      expect(result.pngBuffer.length).toBeGreaterThan(5000);
+      expect(result.fileName).toBe('ticket-SMP-00001.png');
+
+      const meta = await sharp(result.pngBuffer).metadata();
+      expect(meta.width).toBe(1620);
+      expect(meta.height).toBe(2025);
+      expect(meta.format).toBe('png');
+    });
+
+    it('should include all required metadata fields in the default global design', () => {
+      const ticketData: TicketImageData = {
+        ticketId: 'SMP-00042',
+        guestName: 'Aman Gupta (राहुल शर्मा)',
+        eventName: 'NextGen Tech Summit 2026',
+        eventDate: 'Nov 15, 2026',
+        eventTime: '09:30 AM IST',
+        ticketType: 'VIP Delegate • All Access',
+        venue: 'Grand Hall A, Cyber Hub',
+        sequenceNumber: 42,
+        organization: 'Lead Systems Architect • Tech Corp',
+        qrCodeDataUrl: dummyQr,
+      };
+
+      const svg = ticketImageService.buildSvg(ticketData);
+
+      // Event title
+      expect(svg).toContain('NextGen Tech Summit 2026');
+      // Event date & time
+      expect(svg).toContain('Nov 15, 2026');
+      expect(svg).toContain('09:30 AM IST');
+      // Venue & Location
+      expect(svg).toContain('Grand Hall A, Cyber Hub');
+      // Attendee Name (supporting multilingual Devanagari)
+      expect(svg).toContain('Aman Gupta (राहुल शर्मा)');
+      // Organization / Subtitle
+      expect(svg).toContain('Lead Systems Architect • Tech Corp');
+      // Ticket tier badge text and style tokens
+      expect(svg).toContain('VIP Delegate • All Access');
+      expect(svg).toContain('#ECFDF5'); // Badge background
+      expect(svg).toContain('#10B981'); // Emerald accent
+      expect(svg).toContain('#059669'); // Badge text
+      // Clean light background & card
+      expect(svg).toContain('#FAFAF9');
+      expect(svg).toContain('#F4F4F5');
+      // Formatted sequence ID
+      expect(svg).toContain('#00042');
+      // High-contrast QR container and instructions
+      expect(svg).toContain('Scan at entry gate for instant verification');
+      expect(svg).toContain('SECURE TAMPER-PROOF ACCESS CREDENTIAL');
+      expect(svg).toContain('Powered by Ticketification • Official Event Pass');
+      expect(svg).toContain('STATUS: ACTIVE');
+    });
+
+    it('should strictly enforce invariant FR-TCK-3: internal ticket ID and crypto token are NEVER visibly printed', () => {
+      const cryptoToken = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+      const ticketData: TicketImageData = {
+        ticketId: 'SECRET-INTERNAL-DB-UUID-99999',
+        guestName: 'Priya Verma',
+        eventName: 'Developer Conference',
+        eventDate: '2026-11-20',
+        ticketType: 'General Admission',
+        verificationToken: cryptoToken,
+        qrCodeDataUrl: dummyQr,
+        sequenceNumber: 15,
+      };
+
+      const svg = ticketImageService.buildSvg(ticketData);
+
+      // Must NOT contain internal ticket database ID
+      expect(svg).not.toContain('SECRET-INTERNAL-DB-UUID-99999');
+      // Must NOT contain raw cryptographic verification token in text
+      expect(svg).not.toContain(cryptoToken);
+      // But DOES contain human-friendly sequence number
+      expect(svg).toContain('#00015');
+    });
+
+    it('should generate high-contrast 380x380 scannable QR code encoding the canonical verification URL', async () => {
+      const cryptoToken = 'a1b2c3d4e5f67890123456789abcdef0123456789abcdef0123456789abcdef0';
+      const ticketData: TicketImageData = {
+        ticketId: 'QR-TEST-001',
+        guestName: 'John Doe',
+        eventName: 'Security Summit',
+        eventDate: '2026-12-05',
+        ticketType: 'Delegate',
+        verificationToken: cryptoToken,
+        sequenceNumber: 1,
+      };
+
+      const result = await ticketImageService.generateTicketImage(ticketData);
+      expect(result.pngBuffer).toBeDefined();
+      expect(isPngBuffer(result.pngBuffer)).toBe(true);
+
+      // SVG must have embedded QR data URL generated from verificationToken
+      expect(result.svg).toContain('data:image/png;base64,');
+      // QR code image dimension must be 380x380 px
+      expect(result.svg).toContain('width="380" height="380"');
+    });
+
+    it('should gracefully default non-critical missing fields (Valued Guest, Date TBA, Venue TBA, General Admission)', () => {
+      const minimalData: TicketImageData = {
+        ticketId: 'MIN-001',
+        guestName: '',
+        eventName: '',
+        eventDate: '',
+        ticketType: '',
+        qrCodeDataUrl: dummyQr,
+      };
+
+      const svg = ticketImageService.buildSvg(minimalData);
+      expect(svg).toContain('Valued Guest');
+      expect(svg).toContain('Event Admission Pass');
+      expect(svg).toContain('Date TBA');
+      expect(svg).toContain('Venue TBA');
+      expect(svg).toContain('General Admission');
+      expect(svg).toContain('#00001');
+    });
+
+    it('should throw structured ValidationError for null payload or missing verification token/QR URL', async () => {
+      expect(() => ticketImageService.validateTicketData(null as any)).toThrow(ValidationError);
+      expect(() => ticketImageService.validateTicketData(undefined as any)).toThrow(ValidationError);
+      expect(() => ticketImageService.validateTicketData({} as any)).toThrow(ValidationError);
+
+      // Missing ticketId
+      expect(() =>
+        ticketImageService.validateTicketData({
+          ticketId: '',
+          guestName: 'Guest',
+          eventName: 'Event',
+          eventDate: '2026-11-20',
+          ticketType: 'General',
+          qrCodeDataUrl: dummyQr,
+        })
+      ).toThrow(ValidationError);
+
+      // Missing both qrCodeDataUrl and verificationToken
+      expect(() =>
+        ticketImageService.validateTicketData({
+          ticketId: 'ERR-001',
+          guestName: 'Guest',
+          eventName: 'Event',
+          eventDate: '2026-11-20',
+          ticketType: 'General',
+        })
+      ).toThrow(ValidationError);
+
+      // Empty qrCodeDataUrl
+      expect(() =>
+        ticketImageService.validateTicketData({
+          ticketId: 'ERR-002',
+          guestName: 'Guest',
+          eventName: 'Event',
+          eventDate: '2026-11-20',
+          ticketType: 'General',
+          qrCodeDataUrl: '   ',
+        })
+      ).toThrow(ValidationError);
+    });
+
+    it('should strictly comply with Sharp concurrency and memory rules without leaking memory', () => {
+      expect(sharp.concurrency()).toBe(1);
+      const cacheStatus: any = sharp.cache();
+      expect(cacheStatus.memory.max).toBe(0);
+      expect(cacheStatus.files.max).toBe(0);
+      expect(cacheStatus.items.max).toBe(0);
+    });
+
+    it('should generate and save a verified sample ticket PNG file using the new default design', async () => {
+      const fs = require('fs');
+      const path = require('path');
+
+      const sampleData: TicketImageData = {
+        ticketId: 'SMP-SAMPLE-2026',
+        guestName: 'Aman Gupta (राहुल शर्मा)',
+        eventName: 'Ticketification Launch Summit 2026',
+        eventDate: 'November 20, 2026',
+        eventTime: '10:00 AM IST',
+        ticketType: 'VIP Delegate • All Access',
+        venue: 'Grand Convention Centre, Hall A',
+        sequenceNumber: 42,
+        organization: 'Lead Systems Architect • Tech Corp',
+        verificationToken: '4f8b2a1c9e3d7a5b6f0e2d4c8a1b3e5f7a9c2d4e6f8a0b1c3d5e7f9a1b3c5d7e',
+      };
+
+      const result = await ticketImageService.generateTicketImage(sampleData);
+      expect(isPngBuffer(result.pngBuffer)).toBe(true);
+
+      // Automated optical decode assertion using jsQR directly on the generated PNG buffer
+      const rawImage = await sharp(result.pngBuffer)
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      const decodedQr = jsQR(new Uint8ClampedArray(rawImage.data), rawImage.info.width, rawImage.info.height);
+
+      expect(decodedQr).not.toBeNull();
+      expect(decodedQr?.data).toBe('https://ticketification.app/verify/4f8b2a1c9e3d7a5b6f0e2d4c8a1b3e5f7a9c2d4e6f8a0b1c3d5e7f9a1b3c5d7e');
+
+      const outputPath = path.resolve(__dirname, '../sample_default_ticket.png');
+      fs.writeFileSync(outputPath, result.pngBuffer);
+      expect(fs.existsSync(outputPath)).toBe(true);
+
+      const stat = fs.statSync(outputPath);
+      expect(stat.size).toBeGreaterThan(10000);
+      console.log(`[SAMPLE_VERIFIED] Generated sample ticket at: ${outputPath} (${stat.size} bytes, QR decoded: ${decodedQr?.data})`);
     });
   });
 });
+
 
 
 

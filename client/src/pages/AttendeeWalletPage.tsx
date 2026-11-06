@@ -2,13 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Wallet,
-  QrCode,
-  Download,
-  Calendar,
-  MapPin,
-  ShieldCheck,
   CheckCircle2,
-  Users,
   Code2,
   AlertCircle,
   Loader2,
@@ -16,6 +10,7 @@ import {
   Compass,
   RefreshCw,
 } from 'lucide-react';
+import { SlidingDrawerPassCard } from '../components/events/SlidingDrawerPassCard';
 import { attendeeApi, AttendeeWalletItem, AttendeeTeamData } from '../api/attendee';
 import { ticketsApi, triggerBlobDownload } from '../api/tickets';
 import QRCode from 'qrcode';
@@ -317,145 +312,16 @@ export const AttendeeWalletPage: React.FC = () => {
           </div>
         ) : (
           /* Passes Grid (Responsive 1 col mobile, 2 cols tablet/desktop) */
-          <AnimatedGroup staggerDelay={70} className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
-          {filteredWallet.map((pass) => {
-            const isHackathon = ['HACKATHON', 'COMPETITION', 'COLLEGE_EVENT'].includes(
-              pass.eventType.toUpperCase()
-            );
-
-            return (
-              <div
-                key={pass.credentialId}
-                className="rounded-2xl bg-white border border-stone-200/90 hover:border-stone-900 transition-all shadow-xs hover:shadow-md flex flex-col justify-between overflow-hidden group relative"
-              >
-                {/* Perforation edge notches */}
-                <div className="ticket-perforation-left" />
-                <div className="ticket-perforation-right" />
-
-                {/* Top Header with Category & Status */}
-                <div className="p-4 px-5 border-b border-stone-100 bg-stone-50/70 flex items-center justify-between">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant="neutral" size="sm">
-                      {pass.eventType.replace('_', ' ')}
-                    </Badge>
-                    <span className="text-xs font-mono font-bold text-stone-500">
-                      {pass.formattedId}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5">
-                    <Badge
-                      variant={
-                        pass.status === 'ACTIVE'
-                          ? 'emerald'
-                          : pass.status === 'CHECKED_IN'
-                          ? 'sky'
-                          : 'neutral'
-                      }
-                      size="sm"
-                    >
-                      <ShieldCheck className="w-3 h-3" />
-                      <span>{pass.status}</span>
-                    </Badge>
-                  </div>
-                </div>
-
-                {/* Pass Body */}
-                <div className="p-5 space-y-4 flex-1">
-                  <div>
-                    <h3 className="text-base sm:text-lg font-bold text-zinc-900 group-hover:text-black transition-colors">
-                      {pass.eventName}
-                    </h3>
-                    <p className="text-xs text-stone-500 mt-0.5">
-                      {pass.credentialTerminology} • {pass.holder.category || 'Attendee'}
-                    </p>
-                  </div>
-
-                  {/* Schedule & Venue Meta */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-stone-600 bg-stone-50 p-3 rounded-xl border border-stone-100">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-3.5 h-3.5 text-stone-500 shrink-0" />
-                      <span className="truncate">
-                        {pass.schedule?.startAt
-                          ? new Date(pass.schedule.startAt).toLocaleDateString()
-                          : 'Date TBA'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <MapPin className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-                      <span className="truncate">
-                        {pass.venue?.city || pass.venue?.name || 'Venue TBA'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Holder Info */}
-                  <div className="text-xs text-stone-500 border-t border-stone-100 pt-3 flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-stone-400 block">
-                        Pass Holder
-                      </span>
-                      <span className="text-zinc-900 font-semibold">{pass.holder.name}</span>
-                    </div>
-                    {pass.holder.organization && (
-                      <div className="text-right">
-                        <span className="text-[10px] uppercase font-bold text-stone-400 block">
-                          Organization
-                        </span>
-                        <span className="text-zinc-700 font-medium">{pass.holder.organization}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Pass Actions Footer */}
-                <div className="p-3.5 sm:p-4 bg-stone-50/70 border-t border-stone-200/90 flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setSelectedPassForQr(pass)}
-                      iconLeft={<QrCode className="w-3.5 h-3.5 text-stone-700" />}
-                    >
-                      View QR
-                    </Button>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDownloadPass(pass)}
-                      disabled={downloadingPassId === pass.credentialId}
-                      iconLeft={<Download className="w-3.5 h-3.5 text-stone-500" />}
-                    >
-                      {downloadingPassId === pass.credentialId ? 'Downloading...' : 'Pass PNG'}
-                    </Button>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {isHackathon && (
-                      <Button
-                        variant="neutral"
-                        size="sm"
-                        onClick={() => openTeamWorkspace(pass)}
-                        iconLeft={<Users className="w-3.5 h-3.5 text-stone-700" />}
-                      >
-                        Team Hub
-                      </Button>
-                    )}
-
-                    <button
-                      onClick={() => setCancelPassTarget(pass)}
-                      title="Cancel Registration"
-                      className="p-2 rounded-xl text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                      aria-label="Cancel Registration"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          <AnimatedGroup staggerDelay={70} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredWallet.map((pass) => (
+            <SlidingDrawerPassCard
+              key={pass.credentialId}
+              pass={pass}
+              onDownload={handleDownloadPass}
+              isDownloading={downloadingPassId === pass.credentialId}
+              onOpenTeamWorkspace={openTeamWorkspace}
+            />
+          ))}
         </AnimatedGroup>
       )}
 

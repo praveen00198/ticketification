@@ -41,10 +41,12 @@ export function initFonts(): string | null {
   // Ensure fonts.conf exists with the exact absolute path to the resolved fonts directory
   const fontsConfPath = path.join(resolvedFontsDir, 'fonts.conf');
   try {
+    const winFontsDir = process.env.WINDIR ? path.join(process.env.WINDIR, 'Fonts') : 'C:\\Windows\\Fonts';
+    const winDirXml = process.platform === 'win32' && fs.existsSync(winFontsDir) ? `\n  <dir>${winFontsDir}</dir>` : '';
     const fontsConfXml = `<?xml version="1.0"?>
 <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
 <fontconfig>
-  <dir>${resolvedFontsDir}</dir>
+  <dir>${resolvedFontsDir}</dir>${winDirXml}
   <dir>/usr/share/fonts</dir>
   <dir>/usr/local/share/fonts</dir>
   <dir>~/.fonts</dir>
