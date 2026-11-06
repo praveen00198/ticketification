@@ -11,8 +11,10 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { SlidingDrawerPassCard } from '../components/events/SlidingDrawerPassCard';
+import { DigitalEventPass } from '../components/events/DigitalEventPass';
 import { attendeeApi, AttendeeWalletItem, AttendeeTeamData } from '../api/attendee';
 import { ticketsApi, triggerBlobDownload } from '../api/tickets';
+import { renderWalletPassToBlob } from '../utils/passRenderer';
 import QRCode from 'qrcode';
 import { Button, Badge, Modal, EmptyEventsState, Input, InView, AnimatedGroup } from '../components/ui';
 
@@ -31,13 +33,44 @@ export const AttendeeWalletPage: React.FC = () => {
   const handleDownloadPass = async (pass: AttendeeWalletItem) => {
     try {
       setDownloadingPassId(pass.credentialId);
-      const { blob, fileName } = await ticketsApi.downloadTicket(pass.credentialId, pass.eventId);
-      triggerBlobDownload(blob, fileName || `${pass.formattedId}.png`);
-    } catch (err: any) {
-      console.error('[AttendeeWallet] Failed to download pass:', err);
-      if (pass.asset?.publicUrl) {
-        window.open(pass.asset.publicUrl, '_blank');
+
+      let downloadedBlob: Blob | null = null;
+      let targetFileName: string | undefined;
+
+      // 1. Attempt backend high-resolution PNG download via apiClient
+      try {
+        const { blob, fileName } = await ticketsApi.downloadTicket(pass.credentialId, pass.eventId);
+        if (blob && blob.size > 0) {
+          downloadedBlob = blob;
+          targetFileName = fileName;
+        }
+      } catch (apiErr) {
+        console.warn('[AttendeeWallet] Backend ticket download failed, checking alternatives:', apiErr);
       }
+
+      // 2. If backend download had an asset publicUrl, try fetching
+      if (!downloadedBlob && pass.asset?.publicUrl) {
+        try {
+          const publicRes = await fetch(pass.asset.publicUrl);
+          if (publicRes.ok) {
+            downloadedBlob = await publicRes.blob();
+          }
+        } catch (_) {}
+      }
+
+      // 3. Guaranteed Fallback: High-resolution client-side pass canvas generation
+      if (!downloadedBlob) {
+        downloadedBlob = await renderWalletPassToBlob(pass);
+      }
+
+      if (downloadedBlob) {
+        const safeName = (pass.holder?.name || 'Pass').replace(/[/\\?%*:|"<>]/g, '_').trim();
+        const fallbackName = `${safeName}-Event-Pass.png`;
+        triggerBlobDownload(downloadedBlob, targetFileName || fallbackName);
+      }
+    } catch (err: any) {
+      console.error('[AttendeeWallet] All pass download strategies failed:', err);
+      alert('Unable to download pass at this time. Please try printing or refresh the page.');
     } finally {
       setDownloadingPassId(null);
     }
@@ -320,43 +353,39 @@ export const AttendeeWalletPage: React.FC = () => {
               onDownload={handleDownloadPass}
               isDownloading={downloadingPassId === pass.credentialId}
               onOpenTeamWorkspace={openTeamWorkspace}
+              onInspectPass={(p) => setSelectedPassForQr(p)}
             />
           ))}
         </AnimatedGroup>
       )}
 
-      {/* QR Inspection Modal */}
+      {/* Full Editorial Pass Inspection Modal */}
       <Modal
         isOpen={Boolean(selectedPassForQr)}
         onClose={() => setSelectedPassForQr(null)}
-        title={selectedPassForQr?.eventName}
-        description={`${selectedPassForQr?.credentialTerminology} • ${selectedPassForQr?.formattedId}`}
-        maxWidth="sm"
+        title="Official Event Pass"
+        description="Tamper-proof admission credential with gate turnstile QR code"
+        maxWidth="md"
       >
-        <div className="text-center space-y-4">
-          {/* High-Contrast QR Code container */}
-          <div className="p-4 bg-white rounded-2xl border border-stone-200/90 inline-block mx-auto min-w-[220px] min-h-[220px] flex items-center justify-center shadow-xs">
-            {qrDataUrl ? (
-              <img
-                src={qrDataUrl}
-                alt="Pass Entry QR"
-                className="w-[200px] h-[200px] block mx-auto rounded-lg"
-              />
-            ) : (
-              <Loader2 className="w-8 h-8 animate-spin text-stone-400" />
-            )}
+        {selectedPassForQr && (
+          <div className="py-2 flex justify-center">
+            <DigitalEventPass
+              eventName={selectedPassForQr.eventName}
+              eventType={selectedPassForQr.eventType}
+              categoryName={selectedPassForQr.categoryName}
+              schedule={selectedPassForQr.schedule}
+              venue={selectedPassForQr.venue}
+              holderName={selectedPassForQr.holder?.name || 'Valued Guest'}
+              teamName={selectedPassForQr.teamName || (selectedPassForQr as any).team?.name}
+              verificationToken={selectedPassForQr.verificationToken}
+              qrDataUrl={qrDataUrl}
+              showLanyardSlot={true}
+              showActions={true}
+              onDownload={() => handleDownloadPass(selectedPassForQr)}
+              isDownloading={downloadingPassId === selectedPassForQr.credentialId}
+            />
           </div>
-
-          <div className="space-y-1 text-xs">
-            <p className="font-bold text-zinc-900">{selectedPassForQr?.holder.name}</p>
-            <p className="text-[11px] font-mono text-stone-400 truncate max-w-xs mx-auto">
-              Token: {selectedPassForQr?.verificationToken.slice(0, 16)}...
-            </p>
-            <div className="p-2.5 bg-stone-100 border border-stone-200 rounded-xl text-[11px] text-stone-800 font-semibold mt-2">
-              Present this QR code at the event gate turnstile for admission.
-            </div>
-          </div>
-        </div>
+        )}
       </Modal>
 
       {/* Hackathon Teaming Workspace Modal */}

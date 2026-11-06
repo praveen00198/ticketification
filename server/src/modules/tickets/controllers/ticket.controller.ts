@@ -149,6 +149,35 @@ export class TicketController {
     }
   }
 
+  async exportTicketsExcel(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) throw new AuthenticationError();
+
+      const rawEventId = req.params.eventId || req.query.eventId;
+      if (!rawEventId) {
+        throw new ValidationError('Event ID is required to export ticket spreadsheet');
+      }
+      const eventId = validateEventIdParam(rawEventId);
+
+      const rawTicketIds = req.query.ticketIds as string | undefined;
+      const ticketIds = rawTicketIds
+        ? rawTicketIds.split(',').map((s) => s.trim()).filter(Boolean)
+        : undefined;
+
+      const result = await ticketService.generateTicketsExcel(eventId, req.user.id, ticketIds);
+
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      );
+      res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
+      res.setHeader('Content-Length', result.buffer.length.toString());
+      res.send(result.buffer);
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async deleteOrRevokeTicket(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) throw new AuthenticationError();

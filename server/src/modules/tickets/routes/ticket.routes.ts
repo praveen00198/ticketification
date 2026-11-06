@@ -19,6 +19,10 @@ router.get('/events/:eventId/export-zip', (req, res, next) =>
   ticketController.exportTicketsZip(req, res, next)
 );
 
+router.get('/events/:eventId/export-excel', (req, res, next) =>
+  ticketController.exportTicketsExcel(req, res, next)
+);
+
 router.get('/events/:eventId', (req, res, next) =>
   ticketController.getAllTickets(req, res, next)
 );
@@ -34,6 +38,10 @@ router.delete('/events/:eventId/tickets/:ticketId', (req, res, next) =>
 // Fallback direct routes
 router.get('/export-zip', (req, res, next) =>
   ticketController.exportTicketsZip(req, res, next)
+);
+
+router.get('/export-excel', (req, res, next) =>
+  ticketController.exportTicketsExcel(req, res, next)
 );
 
 router.post('/generate', (req, res, next) =>

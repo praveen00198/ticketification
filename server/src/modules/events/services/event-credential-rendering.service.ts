@@ -12,6 +12,10 @@ import {
   ITemplateField,
 } from '../../../db/mongo/models/event-credential-template.model';
 import { AppError } from '../../../middlewares/error.middleware';
+import {
+  ticketImageService,
+  TicketImageData,
+} from '../../tickets/services/ticket-image.service';
 
 import { memoryBudgetGovernor } from '../../../utils/memory-budget-governor';
 
@@ -200,15 +204,12 @@ export class EventCredentialRenderingService {
     const textElements: string[] = [];
 
     for (const field of fields) {
-      if (!field.visible || field.key === 'qr') continue;
+      if (!field.visible || field.key === 'qr' || field.key === 'sequence') continue;
 
       let value = '';
       switch (field.key) {
         case 'name':
           value = data.name || 'ATTENDEE NAME';
-          break;
-        case 'sequence':
-          value = data.sequence || 'PASS-00001';
           break;
         case 'role':
           value = (data.role || 'PARTICIPANT').toUpperCase();
@@ -243,7 +244,7 @@ export class EventCredentialRenderingService {
         ? fontFamily
         : `'Noto Sans Devanagari', ${fontFamily}, sans-serif`;
       const fontWeight = field.fontWeight || 'bold';
-      const color = field.color || '#FFFFFF';
+      const color = field.color || '#0F172A';
 
       // If it's a role badge, render a decorative pill background box behind it
       if (field.key === 'role') {
@@ -297,6 +298,25 @@ export class EventCredentialRenderingService {
   ): Promise<Buffer> {
     // Check and yield if memory is under pressure on Render 512MB RAM
     await memoryBudgetGovernor.yieldIfConstrained(50);
+
+    // If using the default template (no custom background image), generate via TicketImageService
+    if (!template?.backgroundStoragePath && ticketImageService) {
+      const ticketData: TicketImageData = {
+        ticketId: data.sequence || 'PASS-00001',
+        guestName: data.name || 'Valued Guest',
+        eventName: data.eventName || 'Event Pass',
+        eventDate: data.date || 'Date TBA',
+        ticketType: data.role || 'General Admission',
+        verificationToken: data.verificationToken,
+        qrCodeDataUrl: data.qrPayload && data.qrPayload.startsWith('data:image') ? data.qrPayload : undefined,
+        venue: data.venue || 'Venue TBA',
+        organization: data.custom,
+      };
+      const rendered = await ticketImageService.generateTicketImage(ticketData);
+      if (this.isPngBuffer(rendered.pngBuffer)) {
+        return rendered.pngBuffer;
+      }
+    }
 
     const width = template.dimensions?.width || 1620;
     const height = template.dimensions?.height || 2025;

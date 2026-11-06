@@ -92,29 +92,15 @@ export const ticketsApi = {
     return await res.blob();
   },
 
-  async downloadTicket(ticketId: string, eventId?: string): Promise<{ blob: Blob; fileName?: string }> {
-    const token = getStoredAuthToken();
-    const endpoint = eventId
-      ? `${API_BASE_URL}/tickets/events/${eventId}/tickets/${ticketId}/download`
-      : `${API_BASE_URL}/tickets/${ticketId}/download`;
-
-    const res = await fetch(endpoint, {
-      method: 'GET',
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+  async downloadTicketsExcel(eventId: string, ticketIds?: string[]): Promise<{ blob: Blob; fileName?: string }> {
+    const query = ticketIds && ticketIds.length > 0 ? `?ticketIds=${encodeURIComponent(ticketIds.join(','))}` : '';
+    const res = await apiClient.get<Blob>(`/tickets/events/${eventId}/export-excel${query}`, {
+      responseType: 'blob',
     });
 
-    if (!res.ok) {
-      let errMsg = 'Failed to download ticket';
-      try {
-        const errJson = await res.json();
-        errMsg = errJson.error?.message || errJson.message || errMsg;
-      } catch (_) {}
-      throw new Error(errMsg);
-    }
-
-    const disposition = res.headers.get('Content-Disposition');
+    const disposition = res.headers
+      ? res.headers['content-disposition'] || (res.headers as any)['Content-Disposition']
+      : undefined;
     let fileName: string | undefined;
     if (disposition && disposition.includes('filename=')) {
       const match = disposition.match(/filename="?([^";]+)"?/);
@@ -123,8 +109,30 @@ export const ticketsApi = {
       }
     }
 
-    const blob = await res.blob();
-    return { blob, fileName };
+    return { blob: res.data, fileName };
+  },
+
+  async downloadTicket(ticketId: string, eventId?: string): Promise<{ blob: Blob; fileName?: string }> {
+    const endpoint = eventId
+      ? `/tickets/events/${eventId}/tickets/${ticketId}/download`
+      : `/tickets/${ticketId}/download`;
+
+    const res = await apiClient.get<Blob>(endpoint, {
+      responseType: 'blob',
+    });
+
+    const disposition = res.headers
+      ? res.headers['content-disposition'] || (res.headers as any)['Content-Disposition']
+      : undefined;
+    let fileName: string | undefined;
+    if (disposition && disposition.includes('filename=')) {
+      const match = disposition.match(/filename="?([^";]+)"?/);
+      if (match && match[1]) {
+        fileName = match[1];
+      }
+    }
+
+    return { blob: res.data, fileName };
   },
 
   async revokeTicket(ticketId: string, eventId: string, reason?: string): Promise<{ id: string; status: string; message: string }> {

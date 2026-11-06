@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import archiver from 'archiver';
+import * as xlsx from 'xlsx';
+import config from '../../../config/env';
 import { ticketRepository, TicketRepository, TicketFilterOptions } from '../repositories/ticket.repository';
 import { guestRepository, GuestRepository } from '../../guests/repositories/guest.repository';
 import { eventRepository, EventRepository } from '../../events/repositories/event.repository';
@@ -112,6 +114,120 @@ export class TicketService {
 
     // ── LIFECYCLE POINT 3: Immediately before ticket generation starts ──
     tracker.start('generation_start');
+
+    // 0. Support MongoDB canonical events
+    if (mongoose.connection.readyState === 1 && mongoose.Types.ObjectId.isValid(eventId)) {
+      const mongoEv = await EventModel.findById(eventId);
+      if (mongoEv) {
+        const isOwner =
+          mongoEv.ownerSupabaseId === userId ||
+          String(mongoEv.ownerId) === userId ||
+          String(mongoEv.ownerSupabaseId) === userId;
+
+        if (!isOwner) {
+          const member = await EventMemberModel.findOne({
+            eventId: mongoEv._id,
+            status: 'ACTIVE',
+            role: { $in: ['HOST', 'COORDINATOR'] } as any,
+          } as any);
+          if (!member) {
+            throw new NotFoundError('Event not found or unauthorized');
+          }
+        }
+
+        const templateConfig = getTemplateById(templateId);
+        let templateBuffer: Buffer | null = null;
+        if (templateConfig && templateConfig.id === DEFAULT_TEMPLATE_ID && typeof this.imageServ.getDefaultTemplateBuffer === 'function') {
+          templateBuffer = this.imageServ.getDefaultTemplateBuffer();
+        }
+        if (!templateBuffer && templateConfig && typeof this.imageServ.resolveTemplateBuffer === 'function') {
+          templateBuffer = await this.imageServ.resolveTemplateBuffer(templateConfig.filename);
+        }
+
+        const credentials = await EventCredentialModel.find({
+          eventId: new mongoose.Types.ObjectId(eventId),
+        }).sort({ sequenceNumber: 1 }).exec();
+
+        if (credentials.length === 0) {
+          throw new ValidationError('No guests found for this event. Please import guests first.');
+        }
+
+        const pendingCredentials = credentials.filter((c) => !c.asset?.publicUrl);
+        if (pendingCredentials.length === 0) {
+          return {
+            message: `All ${credentials.length} guests already have valid tickets generated.`,
+            generatedCount: 0,
+            totalGuests: credentials.length,
+          };
+        }
+
+        if (pendingCredentials.length > 50) {
+          throw new ValidationError(
+            `Synchronous ticket generation is limited to 50 guests (found ${pendingCredentials.length} pending). Please dispatch an asynchronous bulk render job via POST /api/events/:eventId/jobs/bulk-render.`
+          );
+        }
+
+        if (!this.storageServ.isConfigured()) {
+          throw new StorageError(
+            'Supabase Storage is not configured. Please ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are configured in the environment.'
+          );
+        }
+
+        const safePrefix =
+          (mongoEv.name || 'EVT').trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase() || 'EVT';
+        const eventDateStr = ((mongoEv as any).date && (mongoEv as any).date !== '2026-10-10')
+          ? (mongoEv as any).date
+          : (mongoEv.schedule?.startAt ? new Date(mongoEv.schedule.startAt).toLocaleDateString() : 'Date TBA');
+
+        let generatedCount = 0;
+        for (const cred of pendingCredentials) {
+          const qrDataUrl = await this.qrServ.generateQrDataUrl(cred.verificationToken);
+          const seqStr = (cred.sequenceNumber || 1).toString().padStart(5, '0');
+          const displayId = cred.formattedId || `${safePrefix}-${seqStr}`;
+
+          const ticketData: TicketImageData = {
+            ticketId: displayId,
+            guestName: cred.holder?.name || 'Valued Guest',
+            eventName: mongoEv.name || 'Event',
+            eventDate: eventDateStr,
+            ticketType: cred.credentialType || 'General Admission',
+            qrCodeDataUrl: qrDataUrl,
+            organization: cred.holder?.organization || undefined,
+            phone: cred.holder?.phone || undefined,
+          };
+
+          const storagePath = cred.asset?.storagePath || `events/${eventId}/tickets/ticket-${displayId}.png`;
+          const rendered = await this.imageServ.generateTicketImage(ticketData);
+          if (!rendered || !isPngBuffer(rendered.pngBuffer)) {
+            throw new StorageError(`Rendered ticket failed PNG binary validation for ticket ${displayId}`);
+          }
+
+          const uploadResult = await this.storageServ.uploadTicketImage(
+            storagePath,
+            rendered.pngBuffer,
+            'image/png'
+          );
+
+          await EventCredentialModel.updateOne(
+            { _id: cred._id },
+            {
+              $set: {
+                'asset.publicUrl': uploadResult.publicUrl,
+                'asset.storagePath': uploadResult.storagePath,
+                'asset.renderedAt': new Date(),
+              },
+            }
+          );
+          generatedCount++;
+        }
+
+        return {
+          message: `Successfully generated and uploaded ${generatedCount} PNG ticket(s) to Supabase Storage.`,
+          generatedCount,
+          totalGuests: credentials.length,
+        };
+      }
+    }
 
     const event = await this.eventRepo.findByIdAndOwner(eventId, userId);
     if (!event) {
@@ -855,6 +971,26 @@ export class TicketService {
           // Registration check error
         }
       }
+
+      // Direct credential lookup on EventRegistration
+      if (!isAuthorized && mongoose.connection.readyState === 1 && mongoose.Types.ObjectId.isValid(ticketId)) {
+        try {
+          const credReg = await EventRegistrationModel.findOne({
+            credentialId: new mongoose.Types.ObjectId(ticketId),
+          }).exec();
+
+          if (credReg) {
+            const matchesUser =
+              (credReg.userSupabaseId && credReg.userSupabaseId === auth.userId) ||
+              (credReg.userId && credReg.userId.toString() === auth.userId) ||
+              (credReg.attendeeDetails?.email && auth.userEmail && credReg.attendeeDetails.email.toLowerCase().trim() === auth.userEmail.toLowerCase().trim());
+
+            if (matchesUser && credReg.status !== 'CANCELLED' && (credReg.status as string) !== 'REJECTED') {
+              isAuthorized = true;
+            }
+          }
+        } catch {}
+      }
     }
 
     if (!isAuthorized) {
@@ -915,55 +1051,31 @@ export class TicketService {
           const cred = await EventCredentialModel.findById(resolved.ticketId).exec();
           if (cred) {
             const mongoEvent = await EventModel.findById(resolved.eventId).exec();
-            let template: any = await EventCredentialTemplateModel.findOne({
-              eventId: resolved.eventId,
-              isDefault: true,
-            }).exec();
-            if (!template) {
-              template = await EventCredentialTemplateModel.findOne({
-                eventId: resolved.eventId,
-              }).exec();
-            }
-            if (!template) {
-              await mongoEventCredentialTemplateRepository.seedGlobalPresetsIfEmpty();
-              template = await mongoEventCredentialTemplateRepository.findDefaultByEventId(resolved.eventId);
-            }
-            if (!template) {
-              template = new EventCredentialTemplateModel({
-                name: 'Standard Pass Template',
-                presetId: 'HACKATHON_PASS',
-                dimensions: { width: 1620, height: 2025 },
-                fields: [
-                  { key: 'name', label: 'Attendee Name', x: 810, y: 1490, textAlign: 'center', visible: true, fontSize: 76 },
-                  { key: 'sequence', label: 'Pass Sequence', x: 810, y: 1600, textAlign: 'center', visible: true, fontSize: 42 },
-                  { key: 'role', label: 'Badge Role', x: 810, y: 1680, textAlign: 'center', visible: true, fontSize: 48 },
-                  { key: 'eventName', label: 'Event Name', x: 810, y: 400, textAlign: 'center', visible: true, fontSize: 64 },
-                  { key: 'date', label: 'Event Date', x: 810, y: 480, textAlign: 'center', visible: true, fontSize: 36 },
-                  { key: 'venue', label: 'Event Venue', x: 810, y: 540, textAlign: 'center', visible: true, fontSize: 36 },
-                  { key: 'qr', label: 'QR Code', x: 604, y: 960, width: 412, height: 412, visible: true },
-                ],
-              });
-            }
+            const qrDataUrl = await this.qrServ.generateQrDataUrl(cred.verificationToken);
+            const safePrefix =
+              (mongoEvent?.name || 'EVT').trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase() || 'EVT';
+            const seqStr = (cred.sequenceNumber || 1).toString().padStart(5, '0');
+            const displayId = cred.formattedId || `${safePrefix}-${seqStr}`;
 
-            const renderData: CredentialRenderData = {
-              name: cred.holder?.name || 'Valued Guest',
-              sequence: cred.formattedId || resolved.displayId,
-              verificationToken: cred.verificationToken,
-              qrPayload: `https://ticketification.app/verify/${cred.verificationToken}`,
-              role: (cred.holder?.category || cred.credentialType || 'PARTICIPANT').toUpperCase(),
-              eventName: mongoEvent?.name || 'Event',
-              date: mongoEvent?.schedule?.startAt
-                ? new Date(mongoEvent.schedule.startAt).toLocaleDateString()
-                : 'Date TBA',
-              venue: mongoEvent?.venue?.name || mongoEvent?.venue?.city || 'Main Arena',
+            const ticketData: TicketImageData = {
+              ticketId: displayId,
+              guestName: cred.holder?.name || 'Valued Guest',
+              eventName: mongoEvent?.name || 'Event Pass',
+              eventDate: ((mongoEvent as any)?.date && (mongoEvent as any).date !== '2026-10-10')
+                ? (mongoEvent as any).date
+                : (mongoEvent?.schedule?.startAt ? new Date(mongoEvent.schedule.startAt).toLocaleDateString() : 'Date TBA'),
+              ticketType: cred.credentialType || cred.holder?.category || 'General Admission',
+              qrCodeDataUrl: qrDataUrl,
+              organization: cred.holder?.organization || undefined,
+              phone: cred.holder?.phone || undefined,
             };
 
-            const renderedBuffer = await eventCredentialRenderingService.renderCredentialBuffer(template, renderData);
-            if (isPngBuffer(renderedBuffer)) {
-              fileBuffer = renderedBuffer;
+            const renderRes = await this.imageServ.generateTicketImage(ticketData);
+            if (renderRes?.pngBuffer && isPngBuffer(renderRes.pngBuffer)) {
+              fileBuffer = renderRes.pngBuffer;
               try {
-                const storagePath = resolved.candidatePaths[0] || `events/${resolved.eventId}/credentials/${cred._id}.png`;
-                const uploadRes = await this.storageServ.uploadTicketImage(storagePath, renderedBuffer);
+                const storagePath = resolved.candidatePaths[0] || `events/${resolved.eventId}/tickets/ticket-${displayId}.png`;
+                const uploadRes = await this.storageServ.uploadTicketImage(storagePath, renderRes.pngBuffer);
                 cred.asset = {
                   storagePath: uploadRes.storagePath,
                   publicUrl: uploadRes.publicUrl,
@@ -1016,6 +1128,43 @@ export class TicketService {
           console.error('[TicketService] Postgres on-demand rendering error:', pgRenderErr);
         }
       }
+
+      // 3. Guaranteed High-Resolution Sharp Rendering Fallback via TicketImageService
+      if (!fileBuffer && this.imageServ && typeof this.imageServ.generateTicketImage === 'function') {
+        try {
+          const cred = mongoose.connection.readyState === 1 && mongoose.Types.ObjectId.isValid(resolved.ticketId)
+            ? await EventCredentialModel.findById(resolved.ticketId).exec()
+            : null;
+          if (cred) {
+            const mongoEvent = cred.eventId
+              ? await EventModel.findById(cred.eventId).exec()
+              : null;
+            const ticketData: TicketImageData = {
+              ticketId: resolved.displayId,
+              guestName: cred.holder?.name || resolved.fileName.replace(/\.png$/, ''),
+              eventName: mongoEvent?.name || 'Event Pass',
+              eventDate: mongoEvent?.schedule?.startAt
+                ? new Date(mongoEvent.schedule.startAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                : 'Date TBA',
+              ticketType: cred.holder?.category || cred.credentialType || 'General Admission',
+              verificationToken: cred.verificationToken,
+              venue: mongoEvent?.venue?.city || mongoEvent?.venue?.name || 'Venue TBA',
+              organization: cred.holder?.organization || undefined,
+              teamName: (cred as any)?.teamName || (cred.holder as any)?.teamName || undefined,
+            };
+            const generated = await this.imageServ.generateTicketImage(ticketData);
+            if (isPngBuffer(generated.pngBuffer)) {
+              fileBuffer = generated.pngBuffer;
+              try {
+                const storagePath = resolved.candidatePaths[0] || `events/${resolved.eventId}/credentials/${cred._id}.png`;
+                await this.storageServ.uploadTicketImage(storagePath, generated.pngBuffer);
+              } catch {}
+            }
+          }
+        } catch (imgErr) {
+          console.error('[TicketService] Direct TicketImageService fallback error:', imgErr);
+        }
+      }
     }
 
     if (!fileBuffer || !isPngBuffer(fileBuffer)) {
@@ -1065,9 +1214,10 @@ export class TicketService {
   async streamTicketsZip(eventId: string, userId: string, streamOut: NodeJS.WritableStream, ticketIds?: string[]): Promise<void> {
     let eventName = 'EVT';
     let isMongoEvent = false;
+    let mongoEvent: any = null;
 
     if (mongoose.Types.ObjectId.isValid(eventId)) {
-      const mongoEvent = await EventModel.findById(eventId);
+      mongoEvent = await EventModel.findById(eventId);
       if (mongoEvent) {
         isMongoEvent = true;
         const isOwner =
@@ -1177,15 +1327,47 @@ export class TicketService {
               ].filter(Boolean) as string[];
 
               let fileBuffer: Buffer | null = null;
-              for (const p of candidatePaths) {
+
+              // Priority 1: Render on-demand using TicketImageService
+              if (this.imageServ && typeof this.imageServ.generateTicketImage === 'function') {
                 try {
-                  const buf = await this.storageServ.downloadTicketImage(p);
-                  if (isPngBuffer(buf)) {
-                    fileBuffer = buf;
-                    break;
+                  const ev = t.event || (await this.eventRepo.findById(eventId));
+                  const qrDataUrl = await this.qrServ.generateQrDataUrl(t.ticket?.verificationToken || t.verificationToken);
+                  const ticketData: TicketImageData = {
+                    ticketId: displayId,
+                    guestName: guestName || 'Valued Guest',
+                    eventName: ev?.name || eventName,
+                    eventDate: ((ev as any)?.date && (ev as any).date !== '2026-10-10')
+                      ? (ev as any).date
+                      : ((ev as any)?.schedule?.startAt ? new Date((ev as any).schedule.startAt).toLocaleDateString() : 'Date TBA'),
+                    ticketType: t.ticketType?.label || t.ticketType?.name || (isWorker ? 'Event Staff' : 'General Admission'),
+                    qrCodeDataUrl: qrDataUrl,
+                    verificationToken: t.ticket?.verificationToken || t.verificationToken,
+                    venue: (ev as any)?.venue?.city || (ev as any)?.venue?.name || 'Venue TBA',
+                  };
+                  const renderRes = await this.imageServ.generateTicketImage(ticketData);
+                  if (renderRes?.pngBuffer && isPngBuffer(renderRes.pngBuffer)) {
+                    fileBuffer = renderRes.pngBuffer;
+                    const storagePath = candidatePaths[0] || `events/${eventId}/tickets/ticket-${displayId}.png`;
+                    this.storageServ.uploadTicketImage(storagePath, renderRes.pngBuffer, 'image/png').catch(() => {});
                   }
-                } catch {
-                  // try next path
+                } catch (pgRenderErr) {
+                  console.warn('[TicketService] PG pass on-demand render fallback to storage:', pgRenderErr);
+                }
+              }
+
+              // Priority 2: Fallback to existing storage asset
+              if (!fileBuffer) {
+                for (const p of candidatePaths) {
+                  try {
+                    const buf = await this.storageServ.downloadTicketImage(p);
+                    if (isPngBuffer(buf)) {
+                      fileBuffer = buf;
+                      break;
+                    }
+                  } catch {
+                    // try next path
+                  }
                 }
               }
 
@@ -1229,59 +1411,64 @@ export class TicketService {
             totalDiscovered++;
 
             let fileBuffer: Buffer | null = null;
-            if (cred.asset?.storagePath) {
+
+            // 1. Priority: Render on-demand using TicketImageService to guarantee the new Default Editorial Design
+            if (this.imageServ && typeof this.imageServ.generateTicketImage === 'function') {
+              try {
+                const seqStr = (cred.sequenceNumber || 1).toString().padStart(5, '0');
+                const displayId = cred.formattedId || `${safePrefix}-${seqStr}`;
+                const eventDateStr =
+                  ((mongoEvent as any)?.date && (mongoEvent as any).date !== '2026-10-10')
+                    ? (mongoEvent as any).date
+                    : (mongoEvent?.schedule?.startAt
+                        ? new Date(mongoEvent.schedule.startAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                        : 'Date TBA');
+
+                const ticketData: TicketImageData = {
+                  ticketId: displayId,
+                  guestName: cred.holder?.name || 'Valued Guest',
+                  eventName: mongoEvent?.name || eventName || 'Event Pass',
+                  eventDate: eventDateStr,
+                  ticketType: cred.credentialType || cred.holder?.category || 'General Admission',
+                  verificationToken: cred.verificationToken,
+                  venue: mongoEvent?.venue?.city || mongoEvent?.venue?.name || 'Venue TBA',
+                  organization: cred.holder?.organization || undefined,
+                  phone: cred.holder?.phone || undefined,
+                  teamName: (cred as any)?.teamName || (cred.holder as any)?.teamName || undefined,
+                };
+
+                const renderRes = await this.imageServ.generateTicketImage(ticketData);
+                if (renderRes?.pngBuffer && isPngBuffer(renderRes.pngBuffer)) {
+                  fileBuffer = renderRes.pngBuffer;
+
+                  // Asynchronously refresh the cached asset in Supabase Storage and DB
+                  const storagePath = cred.asset?.storagePath || `events/${eventId}/credentials/${cred._id}.png`;
+                  this.storageServ.uploadTicketImage(storagePath, renderRes.pngBuffer, 'image/png')
+                    .then((uploadRes) => {
+                      EventCredentialModel.updateOne(
+                        { _id: cred._id },
+                        {
+                          $set: {
+                            'asset.publicUrl': uploadRes.publicUrl,
+                            'asset.storagePath': uploadRes.storagePath,
+                            'asset.renderedAt': new Date(),
+                          },
+                        }
+                      ).exec().catch(() => {});
+                    })
+                    .catch(() => {});
+                }
+              } catch (renderErr) {
+                console.warn('[TicketService] On-demand render in ZIP export failed, falling back to storage:', renderErr);
+              }
+            }
+
+            // 2. Fallback: Download existing storage asset if on-demand generation failed
+            if (!fileBuffer && cred.asset?.storagePath) {
               try {
                 const buf = await this.storageServ.downloadTicketImage(cred.asset.storagePath);
                 if (isPngBuffer(buf)) {
                   fileBuffer = buf;
-                }
-              } catch {}
-            }
-
-            if (!fileBuffer && mongoose.connection.readyState === 1) {
-              try {
-                let template: any = await EventCredentialTemplateModel.findOne({
-                  eventId,
-                  isDefault: true,
-                }).exec();
-                if (!template) {
-                  template = await EventCredentialTemplateModel.findOne({ eventId }).exec();
-                }
-                if (!template) {
-                  await mongoEventCredentialTemplateRepository.seedGlobalPresetsIfEmpty();
-                  template = await mongoEventCredentialTemplateRepository.findDefaultByEventId(eventId);
-                }
-                if (!template) {
-                  template = new EventCredentialTemplateModel({
-                    name: 'Standard Pass Template',
-                    presetId: 'HACKATHON_PASS',
-                    dimensions: { width: 1620, height: 2025 },
-                    fields: [
-                      { key: 'name', label: 'Attendee Name', x: 810, y: 1490, textAlign: 'center', visible: true, fontSize: 76 },
-                      { key: 'sequence', label: 'Pass Sequence', x: 810, y: 1600, textAlign: 'center', visible: true, fontSize: 42 },
-                      { key: 'role', label: 'Badge Role', x: 810, y: 1680, textAlign: 'center', visible: true, fontSize: 48 },
-                      { key: 'eventName', label: 'Event Name', x: 810, y: 400, textAlign: 'center', visible: true, fontSize: 64 },
-                      { key: 'date', label: 'Event Date', x: 810, y: 480, textAlign: 'center', visible: true, fontSize: 36 },
-                      { key: 'venue', label: 'Event Venue', x: 810, y: 540, textAlign: 'center', visible: true, fontSize: 36 },
-                      { key: 'qr', label: 'QR Code', x: 604, y: 960, width: 412, height: 412, visible: true },
-                    ],
-                  });
-                }
-
-                const renderData: CredentialRenderData = {
-                  name: cred.holder?.name || 'Valued Guest',
-                  sequence: cred.formattedId || 'PASS-00001',
-                  verificationToken: cred.verificationToken,
-                  qrPayload: `https://ticketification.app/verify/${cred.verificationToken}`,
-                  role: (cred.holder?.category || cred.credentialType || 'PARTICIPANT').toUpperCase(),
-                  eventName,
-                  date: 'Date TBA',
-                  venue: 'Main Arena',
-                };
-
-                const rendered = await eventCredentialRenderingService.renderCredentialBuffer(template, renderData);
-                if (isPngBuffer(rendered)) {
-                  fileBuffer = rendered;
                 }
               } catch {}
             }
@@ -1343,6 +1530,186 @@ export class TicketService {
         } catch {}
       }
     }
+  }
+
+  /**
+   * Generate an Excel (.xlsx) workbook containing complete guest details and ticket image URLs.
+   */
+  async generateTicketsExcel(
+    eventId: string,
+    userId: string,
+    ticketIds?: string[]
+  ): Promise<{ buffer: Buffer; fileName: string; count: number }> {
+    let eventName = 'Event';
+    let isMongoEvent = false;
+
+    if (mongoose.connection.readyState === 1 && mongoose.Types.ObjectId.isValid(eventId)) {
+      const mongoEvent = await EventModel.findById(eventId);
+      if (mongoEvent) {
+        isMongoEvent = true;
+        const isOwner =
+          mongoEvent.ownerSupabaseId === userId ||
+          String(mongoEvent.ownerId) === userId ||
+          String(mongoEvent.ownerSupabaseId) === userId;
+
+        if (!isOwner) {
+          const member = await EventMemberModel.findOne({
+            eventId: mongoEvent._id,
+            status: 'ACTIVE',
+            role: { $in: ['HOST', 'COORDINATOR'] } as any,
+          } as any);
+          if (!member) {
+            throw new NotFoundError('Event not found or unauthorized');
+          }
+        }
+        eventName = mongoEvent.name || 'Event';
+      }
+    }
+
+    if (!isMongoEvent) {
+      const event = await this.eventRepo.findByIdAndOwner(eventId, userId);
+      if (!event) {
+        throw new NotFoundError('Event not found or unauthorized');
+      }
+      eventName = event.name || 'Event';
+    }
+
+    // Fetch all tickets for this event (up to 50,000)
+    const { tickets } = await this.getTicketsByEvent(eventId, userId, { limit: 50000 });
+
+    let targetTickets: any[] = tickets;
+    if (ticketIds && ticketIds.length > 0) {
+      const idSet = new Set(ticketIds);
+      targetTickets = tickets.filter((t) => idSet.has(t.id));
+    }
+
+    const safePrefix =
+      (eventName || 'EVT').trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase() || 'EVT';
+    const baseUrl = (config.env.appUrl || 'http://localhost:5173').replace(/\/+$/, '');
+
+    const hasPhone = targetTickets.some((t) => Boolean(t.guest?.phone && t.guest.phone.trim()));
+    const hasEmail = targetTickets.some((t) => Boolean(t.guest?.email && t.guest.email.trim()));
+
+    // When both contact and email exist, or neither exists, provide separate columns for both
+    const showBoth = (hasPhone && hasEmail) || (!hasPhone && !hasEmail);
+    const showOnlyPhone = hasPhone && !hasEmail;
+
+    const rows = targetTickets.map((t) => {
+      const guest = t.guest || {};
+      const name =
+        guest.name && guest.name !== 'UNASSIGNED'
+          ? guest.name
+          : (t.ticketType?.name === 'WORKER' ? 'Event Staff' : 'Valued Guest');
+
+      const phone = (guest.phone || '').trim();
+      const email = (guest.email || '').trim();
+
+      const ticketUrl =
+        t.assetUrl && t.assetUrl.startsWith('http')
+          ? t.assetUrl
+          : `${baseUrl}/api/tickets/events/${eventId}/tickets/${t.id}/download`;
+
+      if (showBoth) {
+        return {
+          'Name': name,
+          'Contact': phone || '-',
+          'Email': email || '-',
+          'Ticket URL': ticketUrl,
+        };
+      }
+
+      if (showOnlyPhone) {
+        return {
+          'Name': name,
+          'Contact': phone || '-',
+          'Ticket URL': ticketUrl,
+        };
+      }
+
+      return {
+        'Name': name,
+        'Email': email || '-',
+        'Ticket URL': ticketUrl,
+      };
+    });
+
+    const emptyHeaders = showBoth
+      ? ['Name', 'Contact', 'Email', 'Ticket URL']
+      : showOnlyPhone
+      ? ['Name', 'Contact', 'Ticket URL']
+      : ['Name', 'Email', 'Ticket URL'];
+
+    const worksheet =
+      rows.length > 0
+        ? xlsx.utils.json_to_sheet(rows)
+        : xlsx.utils.aoa_to_sheet([emptyHeaders]);
+
+    // Generous column widths so data is easily readable
+    if (showBoth) {
+      worksheet['!cols'] = [
+        { wch: 30 }, // Name
+        { wch: 22 }, // Contact
+        { wch: 36 }, // Email
+        { wch: 80 }, // Ticket URL
+      ];
+    } else if (showOnlyPhone) {
+      worksheet['!cols'] = [
+        { wch: 30 }, // Name
+        { wch: 25 }, // Contact
+        { wch: 80 }, // Ticket URL
+      ];
+    } else {
+      worksheet['!cols'] = [
+        { wch: 30 }, // Name
+        { wch: 36 }, // Email
+        { wch: 80 }, // Ticket URL
+      ];
+    }
+
+    // Format text cells and hyperlinks
+    rows.forEach((r: any, idx) => {
+      const rowIdx = idx + 2; // 1-based, row 1 is header
+      if (showBoth) {
+        const contactRef = `B${rowIdx}`;
+        if (worksheet[contactRef]) {
+          worksheet[contactRef].t = 's';
+          worksheet[contactRef].z = '@';
+        }
+        const urlCellRef = `D${rowIdx}`;
+        if (worksheet[urlCellRef] && r['Ticket URL']) {
+          worksheet[urlCellRef].l = { Target: r['Ticket URL'], Tooltip: 'Click to open ticket' };
+        }
+      } else {
+        if (showOnlyPhone) {
+          const contactRef = `B${rowIdx}`;
+          if (worksheet[contactRef]) {
+            worksheet[contactRef].t = 's';
+            worksheet[contactRef].z = '@';
+          }
+        }
+        const urlCellRef = `C${rowIdx}`;
+        if (worksheet[urlCellRef] && r['Ticket URL']) {
+          worksheet[urlCellRef].l = { Target: r['Ticket URL'], Tooltip: 'Click to open ticket' };
+        }
+      }
+    });
+
+    const workbook = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(workbook, worksheet, 'Tickets Roster');
+
+    const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    const cleanEventName =
+      eventName
+        .trim()
+        .replace(/[^a-zA-Z0-9_-]/g, '_')
+        .replace(/_+/g, '_') || 'Event';
+    const fileName = `${cleanEventName}-${ticketIds && ticketIds.length > 0 ? 'Selected-' : ''}Tickets-Roster.xlsx`;
+
+    return {
+      buffer,
+      fileName,
+      count: rows.length,
+    };
   }
 
   /**

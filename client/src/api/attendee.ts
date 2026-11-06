@@ -38,6 +38,8 @@ export interface AttendeeWalletItem {
     publicUrl?: string | null;
     mimeType: string;
   };
+  categoryName?: string;
+  teamName?: string;
   registeredAt?: string;
 }
 

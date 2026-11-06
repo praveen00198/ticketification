@@ -8,7 +8,6 @@ import {
   RefreshCw,
   AlertCircle,
   FileSpreadsheet,
-  QrCode,
   Download,
   Calendar,
   Sparkles,
@@ -23,6 +22,8 @@ import {
 } from 'lucide-react';
 import { TICKET_TEMPLATES, DEFAULT_TEMPLATE_ID } from '../utils/ticketTemplates';
 import { EmptyEventsState } from '../components/ui';
+import DigitalEventPass from '../components/events/DigitalEventPass';
+import { renderTicketListItemToBlob } from '../utils/passRenderer';
 
 export const TicketList: React.FC = () => {
   const navigate = useNavigate();
@@ -48,61 +49,13 @@ export const TicketList: React.FC = () => {
   // Selection and Revocation State
   const [selectedTicketIds, setSelectedTicketIds] = useState<Set<string>>(new Set());
   const [downloadingSelectedZip, setDownloadingSelectedZip] = useState(false);
+  const [downloadingExcel, setDownloadingExcel] = useState(false);
+  const [downloadingSelectedExcel, setDownloadingSelectedExcel] = useState(false);
   const [ticketToRevoke, setTicketToRevoke] = useState<TicketListItem | null>(null);
   const [revoking, setRevoking] = useState(false);
 
   // Preview Modal
   const [selectedTicket, setSelectedTicket] = useState<TicketListItem | null>(null);
-
-  const convertSvgUrlToPngBlob = async (url: string, width = 1620, height = 2025): Promise<Blob> => {
-    const res = await fetch(url);
-    const text = await res.text();
-
-    // If the fetched asset is already a genuine binary PNG, return it as blob directly
-    if (text.charCodeAt(0) === 0x89 && text.charCodeAt(1) === 0x50 && text.charCodeAt(2) === 0x4e && text.charCodeAt(3) === 0x47) {
-      const rawRes = await fetch(url);
-      return await rawRes.blob();
-    }
-
-    return new Promise((resolve, reject) => {
-      const svgBlob = new Blob([text], { type: 'image/svg+xml;charset=utf-8' });
-      const blobUrl = URL.createObjectURL(svgBlob);
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-
-      img.onload = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) {
-            URL.revokeObjectURL(blobUrl);
-            return resolve(svgBlob);
-          }
-          ctx.drawImage(img, 0, 0, width, height);
-          URL.revokeObjectURL(blobUrl);
-          canvas.toBlob((pngBlob) => {
-            if (pngBlob) {
-              resolve(pngBlob);
-            } else {
-              resolve(svgBlob);
-            }
-          }, 'image/png');
-        } catch (e) {
-          URL.revokeObjectURL(blobUrl);
-          reject(e);
-        }
-      };
-
-      img.onerror = (e) => {
-        URL.revokeObjectURL(blobUrl);
-        reject(e);
-      };
-
-      img.src = blobUrl;
-    });
-  };
 
   const handleDownloadSingleTicket = async (t: TicketListItem) => {
     if (!currentEvent) return;
@@ -123,12 +76,40 @@ export const TicketList: React.FC = () => {
           : null;
       const fallbackFilename = cleanGuestName ? `${cleanGuestName}-${displayId}.png` : `${displayId}.png`;
 
-      const { blob, fileName } = await ticketsApi.downloadTicket(t.id, currentEvent.id);
-      triggerBlobDownload(blob, fileName || fallbackFilename);
-    } catch (_err) {
-      if (t.assetUrl) {
-        window.open(t.assetUrl, '_blank');
+      // 1. Try server download endpoint first
+      try {
+        const { blob, fileName } = await ticketsApi.downloadTicket(t.id, currentEvent.id);
+        if (blob && blob.size > 100) {
+          triggerBlobDownload(blob, fileName || fallbackFilename);
+          setMessage(`Pass for ${t.guest?.name || displayId} downloaded successfully`);
+          return;
+        }
+      } catch (serverErr) {
+        console.warn('Server download endpoint failed, falling back to storage / client canvas:', serverErr);
       }
+
+      // 2. Try direct assetUrl if available
+      if (t.assetUrl && t.assetUrl.startsWith('http')) {
+        try {
+          const res = await fetch(t.assetUrl);
+          if (res.ok) {
+            const blob = await res.blob();
+            if (blob && blob.size > 100) {
+              triggerBlobDownload(blob, fallbackFilename);
+              setMessage(`Pass for ${t.guest?.name || displayId} downloaded from storage`);
+              return;
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 3. Guaranteed client-side high-resolution Canvas rendering fallback (1200x1500 PNG)
+      const canvasBlob = await renderTicketListItemToBlob(t, currentEvent);
+      triggerBlobDownload(canvasBlob, fallbackFilename);
+      setMessage(`Pass for ${t.guest?.name || displayId} generated and downloaded`);
+    } catch (err: any) {
+      console.error('Failed to download ticket:', err);
+      setError(err.message || 'Failed to download ticket');
     } finally {
       setDownloadingTicketId(null);
     }
@@ -155,14 +136,173 @@ export const TicketList: React.FC = () => {
     if (!currentEvent || selectedTicketIds.size === 0) return;
     try {
       setDownloadingSelectedZip(true);
-      const blob = await ticketsApi.downloadTicketsZip(currentEvent.id, Array.from(selectedTicketIds));
+      setError(null);
       const prefix = (currentEvent.name || 'TKT').substring(0, 3).toUpperCase();
-      triggerBlobDownload(blob, `${prefix}-selected-tickets.zip`);
+
+      try {
+        const blob = await ticketsApi.downloadTicketsZip(currentEvent.id, Array.from(selectedTicketIds));
+        if (blob && blob.size > 200) {
+          triggerBlobDownload(blob, `${prefix}-selected-tickets.zip`);
+          setMessage(`Successfully downloaded ${selectedTicketIds.size} selected ticket(s) as ZIP archive`);
+          return;
+        }
+      } catch (srvErr) {
+        console.warn('Server selected ZIP export failed, falling back to client-side packaging:', srvErr);
+      }
+
+      // Client-side fallback using JSZip and Canvas renderer
+      const JSZipModule = await import('jszip');
+      const JSZip = JSZipModule.default || (JSZipModule as any);
+      const zip = new JSZip();
+      const targetTickets = tickets.filter((t) => selectedTicketIds.has(t.id));
+
+      for (const t of targetTickets) {
+        const seqStr = t.sequenceNumber.toString().padStart(5, '0');
+        const displayId = `${prefix}-${seqStr}`;
+        const cleanGuestName =
+          t.guest?.name && t.guest.name !== 'UNASSIGNED'
+            ? t.guest.name
+                .replace(/[/\\?%*:|"<>.]+/g, ' ')
+                .trim()
+                .replace(/[^a-zA-Z0-9\s_-]/g, '')
+                .replace(/[\s_]+/g, '-')
+                .replace(/-+/g, '-')
+                .replace(/^-+|-+$/g, '')
+            : null;
+        const ticketFileName = cleanGuestName ? `${cleanGuestName}-${displayId}.png` : `${displayId}.png`;
+
+        try {
+          const blob = await renderTicketListItemToBlob(t, currentEvent);
+          zip.file(ticketFileName, blob);
+        } catch (_) {
+          if (t.assetUrl) {
+            try {
+              const directRes = await fetch(t.assetUrl);
+              const rawBlob = await directRes.blob();
+              zip.file(ticketFileName, rawBlob);
+            } catch {}
+          }
+        }
+      }
+
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      triggerBlobDownload(zipBlob, `${prefix}-selected-tickets.zip`);
       setMessage(`Successfully downloaded ${selectedTicketIds.size} selected ticket(s) as ZIP archive`);
     } catch (err: any) {
       setError(err.message || 'Failed to download selected tickets');
     } finally {
       setDownloadingSelectedZip(false);
+    }
+  };
+
+  const handleExportExcel = async (selectedOnly = false) => {
+    if (!currentEvent) return;
+    const isSelected = selectedOnly && selectedTicketIds.size > 0;
+    try {
+      if (isSelected) {
+        setDownloadingSelectedExcel(true);
+      } else {
+        setDownloadingExcel(true);
+      }
+      setError(null);
+
+      const targetIds = isSelected ? Array.from(selectedTicketIds) : undefined;
+      const safeEventName = (currentEvent.name || 'Event')
+        .trim()
+        .replace(/[^a-zA-Z0-9_-]/g, '_')
+        .replace(/_+/g, '_');
+      const fallbackFileName = `${safeEventName}-${isSelected ? 'Selected-' : ''}Tickets-Roster.xlsx`;
+
+      try {
+        const { blob, fileName } = await ticketsApi.downloadTicketsExcel(currentEvent.id, targetIds);
+        if (blob && blob.size > 100) {
+          triggerBlobDownload(blob, fileName || fallbackFileName);
+          setMessage(
+            `Successfully exported ${isSelected ? `${selectedTicketIds.size} selected` : 'all'} ticket roster records to Excel`
+          );
+          return;
+        }
+      } catch (serverErr) {
+        console.warn('Server-side Excel export failed, using client fallback:', serverErr);
+      }
+
+      // Client-side fallback: Build CSV from loaded ticket data so host is never blocked
+      const sourceList = isSelected
+        ? tickets.filter((t) => selectedTicketIds.has(t.id))
+        : tickets;
+
+      if (sourceList.length === 0) {
+        throw new Error('No tickets available to export');
+      }
+
+      const hasPhone = sourceList.some((t) => Boolean(t.guest?.phone && t.guest.phone.trim()));
+      const hasEmail = sourceList.some((t) => Boolean(t.guest?.email && t.guest.email.trim()));
+      const showBoth = (hasPhone && hasEmail) || (!hasPhone && !hasEmail);
+      const showOnlyPhone = hasPhone && !hasEmail;
+
+      const headers = showBoth
+        ? ['Name', 'Contact', 'Email', 'Ticket URL']
+        : showOnlyPhone
+        ? ['Name', 'Contact', 'Ticket URL']
+        : ['Name', 'Email', 'Ticket URL'];
+
+      const rows = sourceList.map((t) => {
+        const guest = t.guest || {};
+        const name =
+          guest.name && guest.name !== 'UNASSIGNED'
+            ? guest.name
+            : (t.ticketType?.name === 'WORKER' ? 'Event Staff' : 'Valued Guest');
+
+        const phone = (guest.phone || '').trim();
+        const email = (guest.email || '').trim();
+
+        const ticketUrl =
+          t.assetUrl && t.assetUrl.startsWith('http')
+            ? t.assetUrl
+            : `${window.location.origin}/api/tickets/events/${currentEvent.id}/tickets/${t.id}/download`;
+
+        if (showBoth) {
+          return [
+            name,
+            phone ? `\t${phone}` : '-',
+            email || '-',
+            ticketUrl,
+          ];
+        }
+
+        if (showOnlyPhone) {
+          return [
+            name,
+            phone ? `\t${phone}` : '-',
+            ticketUrl,
+          ];
+        }
+
+        return [
+          name,
+          email || '-',
+          ticketUrl,
+        ];
+      });
+
+      const csvContent =
+        '\uFEFF' +
+        [
+          headers.map((h) => `"${h.replace(/"/g, '""')}"`).join(','),
+          ...rows.map((r) => r.map((cell) => `"${String(cell || '').replace(/"/g, '""')}"`).join(',')),
+        ].join('\r\n');
+
+      const csvBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      triggerBlobDownload(csvBlob, fallbackFileName.replace(/\.xlsx$/, '.csv'));
+      setMessage(`Exported ${sourceList.length} ticket roster records as CSV (fallback)`);
+    } catch (err: any) {
+      setError(err.message || 'Failed to export ticket spreadsheet');
+    } finally {
+      if (isSelected) {
+        setDownloadingSelectedExcel(false);
+      } else {
+        setDownloadingExcel(false);
+      }
     }
   };
 
@@ -253,7 +393,6 @@ export const TicketList: React.FC = () => {
       }
 
       for (const t of ticketList) {
-        if (!t.assetUrl) continue;
         const seqStr = t.sequenceNumber.toString().padStart(5, '0');
         const prefix = (currentEvent.name || 'TKT').substring(0, 3).toUpperCase();
         const displayId = `${prefix}-${seqStr}`;
@@ -270,12 +409,16 @@ export const TicketList: React.FC = () => {
         const ticketFileName = cleanGuestName ? `${cleanGuestName}-${displayId}.png` : `${displayId}.png`;
 
         try {
-          const pngBlob = await convertSvgUrlToPngBlob(t.assetUrl);
+          const pngBlob = await renderTicketListItemToBlob(t, currentEvent);
           zip.file(ticketFileName, pngBlob);
         } catch (_) {
-          const directRes = await fetch(t.assetUrl);
-          const rawBlob = await directRes.blob();
-          zip.file(ticketFileName, rawBlob);
+          if (t.assetUrl) {
+            try {
+              const directRes = await fetch(t.assetUrl);
+              const rawBlob = await directRes.blob();
+              zip.file(ticketFileName, rawBlob);
+            } catch {}
+          }
         }
       }
 
@@ -383,23 +526,43 @@ export const TicketList: React.FC = () => {
         {/* Action Buttons */}
         <div className="flex items-center gap-2.5 flex-wrap">
           {(totalCount > 0 || tickets.length > 0) && (
-            <button
-              onClick={handleDownloadZip}
-              disabled={downloadingZip}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-zinc-50 text-zinc-800 text-xs font-bold rounded-xl border border-zinc-300 transition-all shadow-sm disabled:opacity-50"
-            >
-              {downloadingZip ? (
-                <>
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-brand-600" />
-                  <span>Preparing ZIP...</span>
-                </>
-              ) : (
-                <>
-                  <Download className="w-3.5 h-3.5 text-brand-600" />
-                  <span>Download All (ZIP)</span>
-                </>
-              )}
-            </button>
+            <>
+              <button
+                onClick={handleDownloadZip}
+                disabled={downloadingZip}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-zinc-50 text-zinc-800 text-xs font-bold rounded-xl border border-zinc-300 transition-all shadow-sm disabled:opacity-50"
+              >
+                {downloadingZip ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-brand-600" />
+                    <span>Preparing ZIP...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-3.5 h-3.5 text-brand-600" />
+                    <span>Download All (ZIP)</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={() => handleExportExcel(false)}
+                disabled={downloadingExcel}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-emerald-50 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-300 transition-all shadow-sm disabled:opacity-50"
+              >
+                {downloadingExcel ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                    <span>Exporting Excel...</span>
+                  </>
+                ) : (
+                  <>
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Export Excel</span>
+                  </>
+                )}
+              </button>
+            </>
           )}
 
           <button
@@ -513,6 +676,23 @@ export const TicketList: React.FC = () => {
                 <>
                   <Download className="w-3.5 h-3.5" />
                   <span>Download Selected (ZIP)</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={() => handleExportExcel(true)}
+              disabled={downloadingSelectedExcel}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-sm transition-colors disabled:opacity-50"
+            >
+              {downloadingSelectedExcel ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Exporting Selected...</span>
+                </>
+              ) : (
+                <>
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  <span>Export Selected (Excel)</span>
                 </>
               )}
             </button>
@@ -671,37 +851,52 @@ export const TicketList: React.FC = () => {
       {/* Ticket Preview Modal */}
       {selectedTicket && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white border border-surface-border w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95">
+          <div className="bg-white border border-surface-border w-full max-w-lg rounded-2xl shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-surface-border pb-3">
               <div>
-                <h3 className="text-sm font-bold text-zinc-900">Ticket #{selectedTicket.sequenceNumber.toString().padStart(5, '0')}</h3>
+                <h3 className="text-sm font-bold text-zinc-900">
+                  {selectedTicket.guest?.name && selectedTicket.guest.name !== 'UNASSIGNED'
+                    ? selectedTicket.guest.name
+                    : `Ticket #${selectedTicket.sequenceNumber.toString().padStart(5, '0')}`}
+                </h3>
                 <span className="text-[11px] text-zinc-500">{currentEvent.name}</span>
               </div>
               <button
                 onClick={() => setSelectedTicket(null)}
-                className="text-zinc-400 hover:text-zinc-700 text-xs font-bold"
+                className="text-zinc-400 hover:text-zinc-700 text-xs font-bold p-1 rounded-lg hover:bg-zinc-100 transition-colors"
               >
                 ✕
               </button>
             </div>
 
-            {selectedTicket.assetUrl ? (
-              <div className="rounded-xl overflow-hidden border border-zinc-200 bg-zinc-50 flex justify-center p-2">
-                <img
-                  src={selectedTicket.assetUrl}
-                  alt="Ticket Preview"
-                  className="max-h-96 w-auto object-contain rounded-lg"
-                />
-              </div>
-            ) : (
-              <div className="p-8 text-center bg-zinc-50 rounded-xl border border-zinc-200">
-                <QrCode className="w-12 h-12 text-brand-600 mx-auto mb-2" />
-                <div className="text-xs font-bold text-zinc-900">Token:</div>
-                <div className="text-[10px] font-mono text-zinc-600 break-all mt-1">
-                  {selectedTicket.verificationToken}
-                </div>
-              </div>
-            )}
+            <div className="max-h-[68vh] overflow-y-auto p-1 flex justify-center bg-stone-100/70 rounded-2xl border border-stone-200/80 shadow-inner">
+              <DigitalEventPass
+                eventName={currentEvent.name}
+                eventType={(currentEvent as any).category || (currentEvent as any).eventType || 'General Event'}
+                categoryName={selectedTicket.ticketType?.label || selectedTicket.guest?.category || 'General Admission'}
+                schedule={
+                  (currentEvent as any).schedule || {
+                    startAt: currentEvent.date ? `${currentEvent.date}${currentEvent.time ? `T${currentEvent.time}` : ''}` : null,
+                  }
+                }
+                venue={
+                  typeof (currentEvent as any).venue === 'object' && (currentEvent as any).venue !== null
+                    ? (currentEvent as any).venue
+                    : { name: typeof currentEvent.venue === 'string' ? currentEvent.venue : 'Main Venue' }
+                }
+                holderName={
+                  selectedTicket.guest?.name && selectedTicket.guest.name !== 'UNASSIGNED'
+                    ? selectedTicket.guest.name
+                    : (selectedTicket.ticketType?.name === 'WORKER' ? 'Event Staff' : 'Valued Guest')
+                }
+                organization={selectedTicket.guest?.organization}
+                verificationToken={selectedTicket.verificationToken}
+                onDownload={() => handleDownloadSingleTicket(selectedTicket)}
+                isDownloading={downloadingTicketId === selectedTicket.id}
+                showActions={false}
+                showLanyardSlot={true}
+              />
+            </div>
 
             <div className="pt-2 flex justify-between items-center gap-2">
               <a

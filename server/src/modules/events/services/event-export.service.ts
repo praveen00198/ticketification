@@ -175,15 +175,7 @@ export class EventExportService {
         try {
           let imageBuffer: Buffer | null = null;
 
-          if (cred.asset?.storagePath) {
-            try {
-              imageBuffer = await this.storageService.downloadTicketImage(cred.asset.storagePath);
-            } catch {
-              imageBuffer = null;
-            }
-          }
-
-          if (!imageBuffer && defaultTemplate) {
+          if (defaultTemplate) {
             try {
               imageBuffer = await this.renderService.renderCredentialBuffer(
                 defaultTemplate,
@@ -200,6 +192,14 @@ export class EventExportService {
                 identifier: cred.formattedId,
                 error: `Rendering failed: ${renderErr.message}`,
               });
+            }
+          }
+
+          if (!imageBuffer && cred.asset?.storagePath) {
+            try {
+              imageBuffer = await this.storageService.downloadTicketImage(cred.asset.storagePath);
+            } catch {
+              imageBuffer = null;
             }
           }
 

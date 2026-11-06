@@ -5,10 +5,11 @@ import {
   TicketImageData,
 } from '../src/modules/tickets/services/ticket-image.service';
 import { qrService } from '../src/modules/tickets/services/qr.service';
-import { TicketService } from '../src/modules/tickets/services/ticket.service';
+import { TicketService, ticketService } from '../src/modules/tickets/services/ticket.service';
 import { NotFoundError, ValidationError } from '../src/middlewares/error.middleware';
 import sharp from 'sharp';
 import jsQR from 'jsqr';
+import * as xlsx from 'xlsx';
 
 describe('Phase 4: Ticket Generation & PNG Rendering Pipeline', () => {
   jest.setTimeout(45000);
@@ -513,13 +514,13 @@ describe('Phase 4: Ticket Generation & PNG Rendering Pipeline', () => {
       // Clean light background & card
       expect(svg).toContain('#FAFAF9');
       expect(svg).toContain('#F4F4F5');
-      // Formatted sequence ID
-      expect(svg).toContain('#00042');
+      // No visible sequence ID or dynamic status on downloaded static ticket
+      expect(svg).not.toContain('#00042');
+      expect(svg).not.toContain('STATUS: ACTIVE');
       // High-contrast QR container and instructions
-      expect(svg).toContain('Scan at entry gate for instant verification');
+      expect(svg).toContain('Present this QR code at the entry gate turnstile for admission');
       expect(svg).toContain('SECURE TAMPER-PROOF ACCESS CREDENTIAL');
       expect(svg).toContain('Powered by Ticketification • Official Event Pass');
-      expect(svg).toContain('STATUS: ACTIVE');
     });
 
     it('should strictly enforce invariant FR-TCK-3: internal ticket ID and crypto token are NEVER visibly printed', () => {
@@ -541,8 +542,9 @@ describe('Phase 4: Ticket Generation & PNG Rendering Pipeline', () => {
       expect(svg).not.toContain('SECRET-INTERNAL-DB-UUID-99999');
       // Must NOT contain raw cryptographic verification token in text
       expect(svg).not.toContain(cryptoToken);
-      // But DOES contain human-friendly sequence number
-      expect(svg).toContain('#00015');
+      // Strictly enforces no visible sequence or pass ID on visible ticket
+      expect(svg).not.toContain('#00015');
+      expect(svg).not.toContain('STATUS: ACTIVE');
     });
 
     it('should generate high-contrast 380x380 scannable QR code encoding the canonical verification URL', async () => {
@@ -583,7 +585,8 @@ describe('Phase 4: Ticket Generation & PNG Rendering Pipeline', () => {
       expect(svg).toContain('Date TBA');
       expect(svg).toContain('Venue TBA');
       expect(svg).toContain('General Admission');
-      expect(svg).toContain('#00001');
+      // Pass ID / internal sequence is intentionally not displayed on visible ticket per editorial design decision
+      expect(svg).not.toContain('#00001');
     });
 
     it('should throw structured ValidationError for null payload or missing verification token/QR URL', async () => {
@@ -672,6 +675,68 @@ describe('Phase 4: Ticket Generation & PNG Rendering Pipeline', () => {
       const stat = fs.statSync(outputPath);
       expect(stat.size).toBeGreaterThan(10000);
       console.log(`[SAMPLE_VERIFIED] Generated sample ticket at: ${outputPath} (${stat.size} bytes, QR decoded: ${decodedQr?.data})`);
+    });
+  });
+
+  describe('Excel Export Pipeline (generateTicketsExcel)', () => {
+    it('should generate valid .xlsx binary workbook with guest details and ticket URLs', async () => {
+      const mockEventId = 'mock-event-123';
+      const mockUserId = 'user-owner-123';
+
+      const getTicketsSpy = jest.spyOn(ticketService as any, 'getTicketsByEvent').mockResolvedValueOnce({
+        tickets: [
+          {
+            id: 'tkt-001',
+            sequenceNumber: 1,
+            verificationToken: 'token-abc-123',
+            status: 'ACTIVE',
+            usagePolicy: 'SINGLE_USE',
+            assetUrl: 'https://xyz.supabase.co/storage/v1/object/public/ticket-images/events/test.png',
+            createdAt: new Date(),
+            guest: {
+              name: 'John Doe',
+              email: 'john@example.com',
+              phone: '+91 9876543210',
+              organization: 'Acme Corp',
+              designation: 'Engineer',
+              category: 'VIP',
+            },
+            ticketType: { name: 'VIP' },
+          },
+        ],
+        total: 1,
+      });
+
+      const eventRepoSpy = jest.spyOn((ticketService as any).eventRepo, 'findByIdAndOwner').mockResolvedValueOnce({
+        id: mockEventId,
+        name: 'Tech Innovation Summit 2026',
+      });
+
+      const result = await ticketService.generateTicketsExcel(mockEventId, mockUserId);
+
+      expect(result).toBeDefined();
+      expect(result.count).toBe(1);
+      expect(result.fileName).toContain('Tech_Innovation_Summit_2026');
+      expect(result.fileName).toMatch(/\.xlsx$/);
+      expect(Buffer.isBuffer(result.buffer)).toBe(true);
+      expect(result.buffer.length).toBeGreaterThan(5000);
+
+      const workbook = xlsx.read(result.buffer, { type: 'buffer' });
+      expect(workbook.SheetNames).toContain('Tickets Roster');
+      const sheet = workbook.Sheets['Tickets Roster'];
+      const data: any[] = xlsx.utils.sheet_to_json(sheet);
+      expect(data.length).toBe(1);
+      expect(data[0]['Name']).toBe('John Doe');
+      expect(data[0]['Contact']).toBe('+91 9876543210');
+      expect(data[0]['Email']).toBe('john@example.com');
+      expect(data[0]['Ticket URL']).toBe('https://xyz.supabase.co/storage/v1/object/public/ticket-images/events/test.png');
+      expect(data[0]['Category']).toBeUndefined();
+      expect(data[0]['Status']).toBeUndefined();
+      expect(data[0]['Ticket No']).toBeUndefined();
+      expect(data[0]['Phone / Email']).toBeUndefined();
+
+      getTicketsSpy.mockRestore();
+      eventRepoSpy.mockRestore();
     });
   });
 });

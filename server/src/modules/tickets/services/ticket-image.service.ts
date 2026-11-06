@@ -374,9 +374,6 @@ export class TicketImageService {
       ? escapeXml(data.teamName.trim())
       : null;
 
-    const teamOrCategoryLabel = safeTeamName ? 'TEAM / COHORT' : (safeOrganization ? 'ORGANIZATION' : 'ACCESS TIER');
-    const teamOrCategoryValue = safeTeamName || safeOrganization || safeTicketType;
-
     const safeQrCodeUrl = data.qrCodeDataUrl || '';
 
     const embeddedFontFace = this.fontBase64
@@ -395,6 +392,7 @@ export class TicketImageService {
       : `@import url('https://fonts.googleapis.com/css2?family=Mukta:wght@700;800&amp;family=Noto+Sans+Devanagari:wght@700;800;900&amp;display=swap');`;
 
     const badgeTextWidth = Math.max(220, safeTicketType.length * 15 + 56);
+    const attendeeY = safeTeamName ? 640 : 540;
 
     let eventTitleSvg = '';
     if (eventNameLines.length === 1) {
@@ -477,7 +475,7 @@ export class TicketImageService {
   <!-- 4. Lanyard Punch Slot (Physical Badge Aesthetic) -->
   <rect x="710" y="115" width="200" height="34" rx="17" fill="#F4F4F5" stroke="#E2E8F0" stroke-width="2"/>
 
-  <!-- 5. Header: Official Credential Pill, Tier Badge & Sequence Identifier -->
+  <!-- 5. Header: Official Credential Pill, Tier Badge & Brand Watermark -->
   <g transform="translate(160, 175)">
     <!-- Pill 1: Official Credential -->
     <rect width="280" height="46" rx="23" fill="#ECFDF5" stroke="#A7F3D0" stroke-width="2"/>
@@ -489,7 +487,7 @@ export class TicketImageService {
       <text x="${badgeTextWidth / 2}" y="30" text-anchor="middle" class="font-sans" font-size="20" font-weight="700" fill="#059669">${safeTicketType}</text>
     </g>
   </g>
-  <text x="1460" y="208" text-anchor="end" class="font-mono" font-size="26" font-weight="700" fill="#64748B">${safeSequenceId}</text>
+  <text x="1460" y="206" text-anchor="end" class="font-sans" font-size="20" font-weight="800" fill="#94A3B8" letter-spacing="3">TICKETIFICATION</text>
 
   <!-- 6. Event Title -->
   ${eventTitleSvg}
@@ -506,17 +504,18 @@ export class TicketImageService {
     <text x="700" y="38" class="font-sans" font-size="26" font-weight="800" fill="#0F172A">${safeVenue}</text>
   </g>
 
-  <!-- 8. Team / Organization / Cohort Block -->
+  <!-- 8. Team / Cohort Block (Only rendered when teamName exists) -->
+  ${safeTeamName ? `
   <g transform="translate(160, 530)">
-    <text x="0" y="0" class="font-sans" font-size="16" font-weight="700" fill="#64748B" letter-spacing="1.5">${teamOrCategoryLabel}</text>
-    <text x="0" y="42" class="font-sans" font-size="34" font-weight="800" fill="#0F172A">${teamOrCategoryValue}</text>
-  </g>
+    <text x="0" y="0" class="font-sans" font-size="16" font-weight="700" fill="#64748B" letter-spacing="1.5">TEAM / COHORT</text>
+    <text x="0" y="42" class="font-sans" font-size="34" font-weight="800" fill="#0F172A">${safeTeamName}</text>
+  </g>` : ''}
 
   <!-- 9. Attendee Information Section (Hero Element) -->
-  <g transform="translate(160, 640)">
+  <g transform="translate(160, ${attendeeY})">
     <text x="0" y="0" class="font-sans" font-size="16" font-weight="700" fill="#64748B" letter-spacing="1.5">ATTENDEE NAME</text>
     <text x="0" y="58" class="font-devanagari" font-size="${guestFontSize}" font-weight="800" fill="#0F172A">${safeGuestName}</text>
-    ${safeOrganization && safeOrganization !== teamOrCategoryValue ? `<text x="0" y="102" class="font-sans" font-size="22" font-weight="600" fill="#475569">${safeOrganization}</text>` : ''}
+    ${safeOrganization && safeOrganization !== safeTeamName ? `<text x="0" y="102" class="font-sans" font-size="22" font-weight="600" fill="#475569">${safeOrganization}</text>` : ''}
   </g>
 
   <!-- 10. Perforation Line with Edge Notches (Stub Separation) -->
@@ -540,13 +539,12 @@ export class TicketImageService {
   </g>
 
   <!-- 12. Instructions & Verification Footnote -->
-  <text x="810" y="1515" text-anchor="middle" class="font-sans" font-size="24" font-weight="600" fill="#475569">Scan at entry gate for instant verification</text>
+  <text x="810" y="1515" text-anchor="middle" class="font-sans" font-size="24" font-weight="600" fill="#475569">Present this QR code at the entry gate turnstile for admission</text>
   <text x="810" y="1555" text-anchor="middle" class="font-mono" font-size="18" font-weight="600" fill="#94A3B8" letter-spacing="2">SECURE TAMPER-PROOF ACCESS CREDENTIAL</text>
 
-  <!-- 13. Bottom Divider & Footer -->
+  <!-- 13. Bottom Divider & Footer (No Status, No Pass ID) -->
   <line x1="160" y1="1640" x2="1460" y2="1640" stroke="#F1F5F9" stroke-width="2"/>
-  <text x="160" y="1690" class="font-sans" font-size="20" font-weight="600" fill="#94A3B8">Powered by Ticketification • Official Event Pass</text>
-  <text x="1460" y="1690" text-anchor="end" class="font-sans" font-size="20" font-weight="700" fill="#059669">● STATUS: ACTIVE</text>
+  <text x="810" y="1690" text-anchor="middle" class="font-sans" font-size="20" font-weight="600" fill="#94A3B8">Powered by Ticketification • Official Event Pass</text>
 </svg>`;
   }
 
