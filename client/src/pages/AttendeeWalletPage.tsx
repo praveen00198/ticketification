@@ -37,25 +37,30 @@ export const AttendeeWalletPage: React.FC = () => {
       let downloadedBlob: Blob | null = null;
       let targetFileName: string | undefined;
 
-      // 1. Attempt backend high-resolution PNG download via apiClient
-      try {
-        const { blob, fileName } = await ticketsApi.downloadTicket(pass.credentialId, pass.eventId);
-        if (blob && blob.size > 0) {
-          downloadedBlob = blob;
-          targetFileName = fileName;
-        }
-      } catch (apiErr) {
-        console.warn('[AttendeeWallet] Backend ticket download failed, checking alternatives:', apiErr);
-      }
-
-      // 2. If backend download had an asset publicUrl, try fetching
-      if (!downloadedBlob && pass.asset?.publicUrl) {
+      // 1. Direct high-speed download from Supabase Storage CDN (zero server load)
+      if (pass.asset?.publicUrl && pass.asset.publicUrl.startsWith('http')) {
         try {
           const publicRes = await fetch(pass.asset.publicUrl);
           if (publicRes.ok) {
-            downloadedBlob = await publicRes.blob();
+            const blob = await publicRes.blob();
+            if (blob && blob.size > 100) {
+              downloadedBlob = blob;
+            }
           }
         } catch (_) {}
+      }
+
+      // 2. Fallback: Backend download via apiClient
+      if (!downloadedBlob) {
+        try {
+          const { blob, fileName } = await ticketsApi.downloadTicket(pass.credentialId, pass.eventId);
+          if (blob && blob.size > 0) {
+            downloadedBlob = blob;
+            targetFileName = fileName;
+          }
+        } catch (apiErr) {
+          console.warn('[AttendeeWallet] Backend ticket download failed, checking canvas fallback:', apiErr);
+        }
       }
 
       // 3. Guaranteed Fallback: High-resolution client-side pass canvas generation

@@ -652,7 +652,7 @@ export class TicketService {
             verificationToken: c.verificationToken,
             status: c.status,
             usagePolicy: c.usagePolicy || 'SINGLE_USE',
-            assetUrl: c.asset?.publicUrl || null,
+            assetUrl: c.asset?.publicUrl || (c.asset?.renderedAt && c.asset?.storagePath ? this.storageServ.getPublicUrl(c.asset.storagePath) : null),
             createdAt: c.createdAt,
             guest: {
               id: c._id.toString(),
@@ -1157,7 +1157,19 @@ export class TicketService {
               fileBuffer = generated.pngBuffer;
               try {
                 const storagePath = resolved.candidatePaths[0] || `events/${resolved.eventId}/credentials/${cred._id}.png`;
-                await this.storageServ.uploadTicketImage(storagePath, generated.pngBuffer);
+                const uploadRes = await this.storageServ.uploadTicketImage(storagePath, generated.pngBuffer);
+                if (uploadRes?.publicUrl) {
+                  await EventCredentialModel.updateOne(
+                    { _id: cred._id },
+                    {
+                      $set: {
+                        'asset.publicUrl': uploadRes.publicUrl,
+                        'asset.storagePath': uploadRes.storagePath,
+                        'asset.renderedAt': new Date(),
+                      },
+                    }
+                  ).exec().catch(() => {});
+                }
               } catch {}
             }
           }
@@ -1412,8 +1424,18 @@ export class TicketService {
 
             let fileBuffer: Buffer | null = null;
 
-            // 1. Priority: Render on-demand using TicketImageService to guarantee the new Default Editorial Design
-            if (this.imageServ && typeof this.imageServ.generateTicketImage === 'function') {
+            // 1. Priority: Download pre-rendered ticket PNG from Supabase Storage (zero CPU load, fast streaming)
+            if (cred.asset?.storagePath && this.storageServ.isConfigured()) {
+              try {
+                const buf = await this.storageServ.downloadTicketImage(cred.asset.storagePath);
+                if (isPngBuffer(buf)) {
+                  fileBuffer = buf;
+                }
+              } catch {}
+            }
+
+            // 2. Fallback: Only render on-demand if the ticket image was not found in storage
+            if (!fileBuffer && this.imageServ && typeof this.imageServ.generateTicketImage === 'function') {
               try {
                 const seqStr = (cred.sequenceNumber || 1).toString().padStart(5, '0');
                 const displayId = cred.formattedId || `${safePrefix}-${seqStr}`;
@@ -1459,18 +1481,8 @@ export class TicketService {
                     .catch(() => {});
                 }
               } catch (renderErr) {
-                console.warn('[TicketService] On-demand render in ZIP export failed, falling back to storage:', renderErr);
+                console.warn('[TicketService] On-demand fallback render in ZIP export failed:', renderErr);
               }
-            }
-
-            // 2. Fallback: Download existing storage asset if on-demand generation failed
-            if (!fileBuffer && cred.asset?.storagePath) {
-              try {
-                const buf = await this.storageServ.downloadTicketImage(cred.asset.storagePath);
-                if (isPngBuffer(buf)) {
-                  fileBuffer = buf;
-                }
-              } catch {}
             }
 
             if (fileBuffer && isPngBuffer(fileBuffer)) {
@@ -1542,9 +1554,10 @@ export class TicketService {
   ): Promise<{ buffer: Buffer; fileName: string; count: number }> {
     let eventName = 'Event';
     let isMongoEvent = false;
+    let mongoEvent: any = null;
 
     if (mongoose.connection.readyState === 1 && mongoose.Types.ObjectId.isValid(eventId)) {
-      const mongoEvent = await EventModel.findById(eventId);
+      mongoEvent = await EventModel.findById(eventId);
       if (mongoEvent) {
         isMongoEvent = true;
         const isOwner =
@@ -1586,6 +1599,60 @@ export class TicketService {
     const safePrefix =
       (eventName || 'EVT').trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase() || 'EVT';
     const baseUrl = (config.env.appUrl || 'http://localhost:5173').replace(/\/+$/, '');
+
+    // Ensure all tickets have authentic, direct Supabase Storage public URLs before building spreadsheet
+    if (isMongoEvent && this.storageServ.isConfigured()) {
+      for (const t of targetTickets) {
+        if (!t.assetUrl || !t.assetUrl.startsWith('http')) {
+          try {
+            const cred = await EventCredentialModel.findById(t.id).exec();
+            if (cred) {
+              const seqStr = (cred.sequenceNumber || 1).toString().padStart(5, '0');
+              const displayId = cred.formattedId || `${safePrefix}-${seqStr}`;
+              const eventDateStr = ((mongoEvent as any)?.date && (mongoEvent as any).date !== '2026-10-10')
+                ? (mongoEvent as any).date
+                : (mongoEvent?.schedule?.startAt
+                    ? new Date(mongoEvent.schedule.startAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                    : 'Date TBA');
+              const qrDataUrl = await this.qrServ.generateQrDataUrl(cred.verificationToken);
+              const ticketData: TicketImageData = {
+                ticketId: displayId,
+                guestName: cred.holder?.name || 'Valued Guest',
+                eventName: mongoEvent?.name || eventName || 'Event Pass',
+                eventDate: eventDateStr,
+                ticketType: cred.credentialType || cred.holder?.category || 'General Admission',
+                verificationToken: cred.verificationToken,
+                qrCodeDataUrl: qrDataUrl,
+                venue: mongoEvent?.venue?.city || mongoEvent?.venue?.name || 'Venue TBA',
+                organization: cred.holder?.organization || undefined,
+                phone: cred.holder?.phone || undefined,
+              };
+
+              const rendered = await this.imageServ.generateTicketImage(ticketData);
+              if (rendered?.pngBuffer && isPngBuffer(rendered.pngBuffer)) {
+                const storagePath = cred.asset?.storagePath || `events/${eventId}/credentials/${displayId}.png`;
+                const uploadRes = await this.storageServ.uploadTicketImage(storagePath, rendered.pngBuffer, 'image/png');
+                if (uploadRes?.publicUrl) {
+                  await EventCredentialModel.updateOne(
+                    { _id: cred._id },
+                    {
+                      $set: {
+                        'asset.publicUrl': uploadRes.publicUrl,
+                        'asset.storagePath': uploadRes.storagePath,
+                        'asset.renderedAt': new Date(),
+                      },
+                    }
+                  );
+                  t.assetUrl = uploadRes.publicUrl;
+                }
+              }
+            }
+          } catch (e: any) {
+            console.warn(`[generateTicketsExcel] Failed to generate missing asset for ${t.id}:`, e.message);
+          }
+        }
+      }
+    }
 
     const hasPhone = targetTickets.some((t) => Boolean(t.guest?.phone && t.guest.phone.trim()));
     const hasEmail = targetTickets.some((t) => Boolean(t.guest?.email && t.guest.email.trim()));

@@ -19,6 +19,9 @@ import { EventModel } from '../../../db/mongo/models/event.model';
 import { EventMemberModel } from '../../../db/mongo/models/event-member.model';
 import { EventCredentialModel } from '../../../db/mongo/models/event-credential.model';
 import { mongoEventCredentialRepository } from '../../events/repositories/mongo-event-credential.repository';
+import { qrService } from '../../tickets/services/qr.service';
+import { ticketImageService, TicketImageData, isPngBuffer } from '../../tickets/services/ticket-image.service';
+import { supabaseStorageService } from '../../tickets/services/supabase-storage.service';
 import {
   HeaderAnalysisResult,
   ValidateImportDTO,
@@ -735,6 +738,14 @@ export class GuestImportService {
             ? new mongoose.Types.ObjectId(event.ownerId)
             : new mongoose.Types.ObjectId());
 
+      const eventDateStr =
+        ((event as any).date && (event as any).date !== '2026-10-10')
+          ? (event as any).date
+          : (event.schedule?.startAt
+              ? new Date(event.schedule.startAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+              : 'Date TBA');
+      const venueStr = (event as any).venue?.city || (event as any).venue?.name || 'Venue TBA';
+
       let insertedCount = 0;
       for (const row of guestsToInsert) {
         const seq = await mongoEventCredentialRepository.getNextSequenceNumber(eventId);
@@ -743,6 +754,41 @@ export class GuestImportService {
         const verificationToken = crypto.randomBytes(32).toString('hex');
         const slug = (row.name || 'attendee').toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
         const storagePath = `events/${eventId}/credentials/${slug}-${formattedId}.png`;
+
+        let publicUrl: string | null = null;
+        let renderedAt: Date | null = null;
+
+        // Immediately generate and store authentic PNG ticket in Supabase Storage upon guest import
+        if (supabaseStorageService.isConfigured()) {
+          try {
+            const qrDataUrl = await qrService.generateQrDataUrl(verificationToken);
+            const ticketData: TicketImageData = {
+              ticketId: formattedId,
+              guestName: row.name || 'Valued Guest',
+              eventName: event.name || 'Event Pass',
+              eventDate: eventDateStr,
+              ticketType: row.category || 'General Admission',
+              verificationToken,
+              qrCodeDataUrl: qrDataUrl,
+              venue: venueStr,
+              organization: row.organization || undefined,
+              phone: row.phone || undefined,
+            };
+
+            const rendered = await ticketImageService.generateTicketImage(ticketData);
+            if (rendered?.pngBuffer && isPngBuffer(rendered.pngBuffer)) {
+              const uploadRes = await supabaseStorageService.uploadTicketImage(
+                storagePath,
+                rendered.pngBuffer,
+                'image/png'
+              );
+              publicUrl = uploadRes.publicUrl;
+              renderedAt = new Date();
+            }
+          } catch (genErr: any) {
+            console.warn(`[GuestImportService] Immediate ticket rendering/upload failed for ${formattedId}:`, genErr.message);
+          }
+        }
 
         await EventCredentialModel.create({
           eventId: new mongoose.Types.ObjectId(eventId),
@@ -764,8 +810,8 @@ export class GuestImportService {
           },
           asset: {
             storagePath,
-            publicUrl: null,
-            renderedAt: null,
+            publicUrl,
+            renderedAt,
             mimeType: 'image/png',
           },
           metadata: row.metadata || {},

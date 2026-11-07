@@ -776,8 +776,8 @@ export class EventJobQueueService {
         const checkJob = await this.jobRepo.findById(job._id.toString());
         if (checkJob?.status === 'CANCELLED') return;
 
-        // Skip if already rendered (e.g. from prior partial attempt)
-        if (cred.asset?.storagePath) {
+        // Skip if already rendered and saved in Supabase
+        if (cred.asset?.publicUrl && cred.asset?.renderedAt) {
           processedCount++;
           continue;
         }

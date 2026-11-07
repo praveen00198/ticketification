@@ -167,6 +167,22 @@ export class SupabaseStorageService {
   }
 
   /**
+   * Resolve public URL for a given storage path directly from Supabase.
+   */
+  getPublicUrl(storagePath: string): string | null {
+    if (!this.client || !storagePath) return null;
+    let cleanPath = storagePath.replace(/^\/+/, '');
+    if (cleanPath.startsWith('http://') || cleanPath.startsWith('https://')) {
+      return cleanPath;
+    }
+    if (cleanPath.startsWith(`${this.bucket}/`)) {
+      cleanPath = cleanPath.substring(this.bucket.length + 1);
+    }
+    const { data } = this.client.storage.from(this.bucket).getPublicUrl(cleanPath);
+    return data?.publicUrl || null;
+  }
+
+  /**
    * Download a ticket asset buffer from Supabase Storage.
    */
   async downloadTicketImage(storagePath: string): Promise<Buffer> {

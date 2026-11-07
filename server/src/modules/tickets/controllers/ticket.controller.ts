@@ -109,16 +109,15 @@ export class TicketController {
         scopedEventId,
       };
 
-      if (wantsRedirect || wantsUrl) {
-        const presigned = await ticketService.getPresignedTicketDownloadUrl(ticketId, authContext);
-        if (presigned) {
-          if (wantsUrl) {
-            res.json({ success: true, downloadUrl: presigned.url, fileName: presigned.fileName });
-            return;
-          }
-          res.redirect(302, presigned.url);
+      // Optimize downloading: redirect directly to Supabase Storage CDN to completely avoid proxying binaries through Node
+      const presigned = await ticketService.getPresignedTicketDownloadUrl(ticketId, authContext);
+      if (presigned) {
+        if (wantsUrl) {
+          res.json({ success: true, downloadUrl: presigned.url, fileName: presigned.fileName });
           return;
         }
+        res.redirect(302, presigned.url);
+        return;
       }
 
       const result = await ticketService.downloadTicket(ticketId, authContext);

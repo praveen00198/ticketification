@@ -76,7 +76,24 @@ export const TicketList: React.FC = () => {
           : null;
       const fallbackFilename = cleanGuestName ? `${cleanGuestName}-${displayId}.png` : `${displayId}.png`;
 
-      // 1. Try server download endpoint first
+      // 1. Direct high-speed download from Supabase Storage CDN (bypasses server completely, zero server CPU/RAM)
+      if (t.assetUrl && t.assetUrl.startsWith('http')) {
+        try {
+          const res = await fetch(t.assetUrl);
+          if (res.ok) {
+            const blob = await res.blob();
+            if (blob && blob.size > 100) {
+              triggerBlobDownload(blob, fallbackFilename);
+              setMessage(`Pass for ${t.guest?.name || displayId} downloaded from Supabase storage`);
+              return;
+            }
+          }
+        } catch (fetchErr) {
+          console.warn('Direct storage CDN download failed, trying server fallback:', fetchErr);
+        }
+      }
+
+      // 2. Server download endpoint fallback
       try {
         const { blob, fileName } = await ticketsApi.downloadTicket(t.id, currentEvent.id);
         if (blob && blob.size > 100) {
@@ -85,22 +102,7 @@ export const TicketList: React.FC = () => {
           return;
         }
       } catch (serverErr) {
-        console.warn('Server download endpoint failed, falling back to storage / client canvas:', serverErr);
-      }
-
-      // 2. Try direct assetUrl if available
-      if (t.assetUrl && t.assetUrl.startsWith('http')) {
-        try {
-          const res = await fetch(t.assetUrl);
-          if (res.ok) {
-            const blob = await res.blob();
-            if (blob && blob.size > 100) {
-              triggerBlobDownload(blob, fallbackFilename);
-              setMessage(`Pass for ${t.guest?.name || displayId} downloaded from storage`);
-              return;
-            }
-          }
-        } catch (_) {}
+        console.warn('Server download endpoint failed, falling back to client canvas:', serverErr);
       }
 
       // 3. Guaranteed client-side high-resolution Canvas rendering fallback (1200x1500 PNG)
@@ -171,17 +173,26 @@ export const TicketList: React.FC = () => {
             : null;
         const ticketFileName = cleanGuestName ? `${cleanGuestName}-${displayId}.png` : `${displayId}.png`;
 
-        try {
-          const blob = await renderTicketListItemToBlob(t, currentEvent);
-          zip.file(ticketFileName, blob);
-        } catch (_) {
-          if (t.assetUrl) {
-            try {
-              const directRes = await fetch(t.assetUrl);
+        let blobAdded = false;
+        // Prioritize fetching pre-rendered image directly from Supabase Storage CDN
+        if (t.assetUrl && t.assetUrl.startsWith('http')) {
+          try {
+            const directRes = await fetch(t.assetUrl);
+            if (directRes.ok) {
               const rawBlob = await directRes.blob();
-              zip.file(ticketFileName, rawBlob);
-            } catch {}
-          }
+              if (rawBlob && rawBlob.size > 100) {
+                zip.file(ticketFileName, rawBlob);
+                blobAdded = true;
+              }
+            }
+          } catch {}
+        }
+
+        if (!blobAdded) {
+          try {
+            const blob = await renderTicketListItemToBlob(t, currentEvent);
+            zip.file(ticketFileName, blob);
+          } catch {}
         }
       }
 
@@ -408,17 +419,26 @@ export const TicketList: React.FC = () => {
             : null;
         const ticketFileName = cleanGuestName ? `${cleanGuestName}-${displayId}.png` : `${displayId}.png`;
 
-        try {
-          const pngBlob = await renderTicketListItemToBlob(t, currentEvent);
-          zip.file(ticketFileName, pngBlob);
-        } catch (_) {
-          if (t.assetUrl) {
-            try {
-              const directRes = await fetch(t.assetUrl);
+        let blobAdded = false;
+        // Prioritize fetching pre-rendered image directly from Supabase Storage CDN
+        if (t.assetUrl && t.assetUrl.startsWith('http')) {
+          try {
+            const directRes = await fetch(t.assetUrl);
+            if (directRes.ok) {
               const rawBlob = await directRes.blob();
-              zip.file(ticketFileName, rawBlob);
-            } catch {}
-          }
+              if (rawBlob && rawBlob.size > 100) {
+                zip.file(ticketFileName, rawBlob);
+                blobAdded = true;
+              }
+            }
+          } catch {}
+        }
+
+        if (!blobAdded) {
+          try {
+            const pngBlob = await renderTicketListItemToBlob(t, currentEvent);
+            zip.file(ticketFileName, pngBlob);
+          } catch {}
         }
       }
 

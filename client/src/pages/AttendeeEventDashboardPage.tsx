@@ -136,8 +136,25 @@ export const AttendeeEventDashboardPage: React.FC = () => {
       setDownloading(true);
       const credId = credential._id || credential.id || credential.credentialId || credential.formattedId;
       const formattedId = credential.formattedId || credential.credentialId || `pass-${eventId}`;
+      const targetFilename = `${formattedId}.png`;
+
+      // 1. Direct high-speed download from Supabase Storage CDN (zero server load)
+      if (credential?.asset?.publicUrl && credential.asset.publicUrl.startsWith('http')) {
+        try {
+          const directRes = await fetch(credential.asset.publicUrl);
+          if (directRes.ok) {
+            const blob = await directRes.blob();
+            if (blob && blob.size > 100) {
+              triggerBlobDownload(blob, targetFilename);
+              return;
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 2. Server download endpoint fallback
       const { blob, fileName } = await ticketsApi.downloadTicket(credId, eventId);
-      triggerBlobDownload(blob, fileName || `${formattedId}.png`);
+      triggerBlobDownload(blob, fileName || targetFilename);
     } catch (err) {
       console.error('Failed to download pass:', err);
       if (credential?.asset?.publicUrl) {

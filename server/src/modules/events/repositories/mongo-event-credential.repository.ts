@@ -590,7 +590,7 @@ export class MongoEventCredentialRepository {
         throw new Error('[DatabaseDisconnected] Cannot process unrendered credentials while database is disconnected');
       }
       const { credentials } = await this.findByEvent(eventId, { limit: 10000 });
-      let unrendered = credentials.filter((c: any) => !c.asset?.storagePath);
+      let unrendered = credentials.filter((c: any) => !c.asset?.publicUrl || !c.asset?.renderedAt);
       if (lastId) {
         const lastIdStr = lastId.toString();
         unrendered = unrendered.filter((c: any) => (c._id?.toString() || '') > lastIdStr);
@@ -601,9 +601,11 @@ export class MongoEventCredentialRepository {
     const query: any = {
       eventId: new mongoose.Types.ObjectId(eventId),
       $or: [
-        { 'asset.storagePath': { $exists: false } },
-        { 'asset.storagePath': null },
-        { 'asset.storagePath': '' },
+        { 'asset.publicUrl': { $exists: false } },
+        { 'asset.publicUrl': null },
+        { 'asset.publicUrl': '' },
+        { 'asset.renderedAt': { $exists: false } },
+        { 'asset.renderedAt': null },
       ],
     };
 
