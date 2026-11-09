@@ -312,9 +312,11 @@ export class EventCredentialRenderingService {
         venue: data.venue || 'Venue TBA',
         organization: data.custom,
       };
-      const rendered = await ticketImageService.generateTicketImage(ticketData);
-      if (this.isPngBuffer(rendered.pngBuffer)) {
-        return rendered.pngBuffer;
+      let rendered: any = await ticketImageService.generateTicketImage(ticketData);
+      const pngBuffer = rendered?.pngBuffer;
+      rendered = null;
+      if (this.isPngBuffer(pngBuffer)) {
+        return pngBuffer;
       }
     }
 
@@ -393,25 +395,64 @@ export class EventCredentialRenderingService {
   /**
    * Renders genuine PNG asset and uploads to Supabase Storage at:
    * events/{eventId}/credentials/{credentialId}.png
+   *
+   * If reuseExistingStorageAsset is enabled (default: true) and the asset
+   * already exists in Supabase Storage, Sharp rasterization and upload are skipped,
+   * reusing the existing storage asset with zero buffer allocation.
    */
   public async renderAndUploadAsset(
     eventId: string,
     credentialId: string,
     template: IEventCredentialTemplateDocument,
-    data: CredentialRenderData
-  ): Promise<{ storagePath: string; publicUrl: string }> {
-    const pngBuffer = await this.renderCredentialBuffer(template, data);
-    const storagePath = `events/${eventId}/credentials/${credentialId}.png`;
+    data: CredentialRenderData,
+    options?: { reuseExistingStorageAsset?: boolean }
+  ): Promise<{ storagePath: string; publicUrl: string; reused?: boolean }> {
+    const storagePath = typeof (this.storageService as any).buildCredentialStoragePath === 'function'
+      ? (this.storageService as any).buildCredentialStoragePath(eventId, credentialId)
+      : `events/${eventId}/credentials/${credentialId}.png`;
 
+    const shouldReuse = options?.reuseExistingStorageAsset !== false;
+
+    // 1. Storage Pre-Check: Skip Sharp if asset already exists in Supabase Storage
+    if (shouldReuse && this.storageService.isConfigured()) {
+      try {
+        const exists = await this.storageService.checkObjectExists(storagePath);
+        if (exists) {
+          const publicUrl = this.storageService.getPublicUrl(storagePath);
+          if (publicUrl) {
+            // Sharp rasterization completely skipped! Zero buffer allocation.
+            return {
+              storagePath,
+              publicUrl,
+              reused: true,
+            };
+          }
+        }
+      } catch (err: any) {
+        console.warn(
+          `[EventCredentialRenderingService] Pre-check failed for ${storagePath}, proceeding with render:`,
+          err?.message || err
+        );
+      }
+    }
+
+    // 2. Perform Sharp rasterization ONLY if asset does not exist or reuse is disabled
+    let pngBuffer: Buffer | null = await this.renderCredentialBuffer(template, data);
+
+    // 3. Upload to Supabase Storage
     const uploadRes = await this.storageService.uploadTicketImage(
       storagePath,
       pngBuffer,
       'image/png'
     );
 
+    // 4. Explicitly release binary buffer immediately after upload to allow GC
+    pngBuffer = null;
+
     return {
       storagePath: uploadRes.storagePath,
       publicUrl: uploadRes.publicUrl,
+      reused: false,
     };
   }
 }

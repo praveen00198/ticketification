@@ -3,6 +3,7 @@ import {
   EventCredentialModel,
   IEventCredentialDocument,
   CredentialStatus,
+  CredentialRenderStatus,
   ICredentialHolder,
 } from '../../../db/mongo/models/event-credential.model';
 import { EventSequenceCounterModel } from '../../../db/mongo/models/event-sequence-counter.model';
@@ -13,6 +14,17 @@ export interface CredentialQueryFilters {
   search?: string;
   limit?: number;
   offset?: number;
+}
+
+export interface RenderAssetData {
+  storagePath: string;
+  publicUrl: string;
+  renderedAt?: Date;
+  mimeType?: string;
+  dimensions?: { width: number; height: number };
+  fileSize?: number;
+  fileSizeBytes?: number;
+  [key: string]: any;
 }
 
 export class MongoEventCredentialRepository {
@@ -62,6 +74,12 @@ export class MongoEventCredentialRepository {
    */
   async upsertMany(items: Partial<IEventCredentialDocument>[]): Promise<IEventCredentialDocument[]> {
     if (items.length === 0) return [];
+
+    items.forEach((doc) => {
+      if (!doc.renderStatus) {
+        doc.renderStatus = 'PENDING';
+      }
+    });
 
     if (mongoose.connection.readyState !== 1) {
       return EventCredentialModel.insertMany(items) as unknown as Promise<IEventCredentialDocument[]>;
@@ -142,11 +160,12 @@ export class MongoEventCredentialRepository {
 
   /**
    * Find credential by 64-character verification token across all events.
+   * Uses lean projection without .populate() to optimize high-throughput scan paths.
    */
   async findByVerificationToken(token: string): Promise<IEventCredentialDocument | null> {
     if (!token || token.length !== 64) return null;
     return EventCredentialModel.findOne({ verificationToken: token })
-      .populate('eventId', 'name eventType credentialTerminology venue schedule')
+      .select('eventId sequenceNumber formattedId verificationToken credentialType terminology usagePolicy status holder asset firstCheckedInAt lastCheckedInAt checkInCount revokedAt revokedReason')
       .lean() as any;
   }
 
@@ -551,7 +570,34 @@ export class MongoEventCredentialRepository {
   }
 
   /**
+   * Helper to construct canonical query matching unrendered credentials.
+   * Matches credentials belonging to eventId where renderStatus is not COMPLETED
+   * and asset publicUrl or renderedAt is missing/null/empty.
+   */
+  protected buildUnrenderedQuery(eventId: string | mongoose.Types.ObjectId): Record<string, any> {
+    return {
+      eventId: new mongoose.Types.ObjectId(eventId),
+      renderStatus: { $ne: 'COMPLETED' },
+      $or: [
+        { 'asset.publicUrl': { $exists: false } },
+        { 'asset.publicUrl': null },
+        { 'asset.publicUrl': '' },
+        { 'asset.renderedAt': { $exists: false } },
+        { 'asset.renderedAt': null },
+      ],
+    };
+  }
+
+  /**
+   * Helper predicate for in-memory unrendered credential checks in test mode.
+   */
+  protected isCredentialUnrendered(c: any): boolean {
+    return c.renderStatus !== 'COMPLETED' && (!c.asset?.publicUrl || !c.asset?.renderedAt);
+  }
+
+  /**
    * Count all unrendered credentials for an event (without 200/500 query cap).
+   * Harmonized with findUnrenderedBatch.
    */
   async countUnrenderedByEvent(eventId: string): Promise<number> {
     if (!mongoose.Types.ObjectId.isValid(eventId)) return 0;
@@ -561,22 +607,16 @@ export class MongoEventCredentialRepository {
         throw new Error('[DatabaseDisconnected] Cannot process unrendered credentials while database is disconnected');
       }
       const { credentials } = await this.findByEvent(eventId, { limit: 10000 });
-      return credentials.filter((c: any) => !c.asset?.storagePath).length;
+      return credentials.filter((c: any) => this.isCredentialUnrendered(c)).length;
     }
 
-    return EventCredentialModel.countDocuments({
-      eventId: new mongoose.Types.ObjectId(eventId),
-      $or: [
-        { 'asset.storagePath': { $exists: false } },
-        { 'asset.storagePath': null },
-        { 'asset.storagePath': '' },
-      ],
-    }).exec();
+    return EventCredentialModel.countDocuments(this.buildUnrenderedQuery(eventId)).exec();
   }
 
   /**
    * Cursor-based batch pagination for unrendered credentials.
    * Loads at most `limit` records per batch using deterministic _id pagination.
+   * Harmonized with countUnrenderedByEvent.
    */
   async findUnrenderedBatch(
     eventId: string,
@@ -590,7 +630,7 @@ export class MongoEventCredentialRepository {
         throw new Error('[DatabaseDisconnected] Cannot process unrendered credentials while database is disconnected');
       }
       const { credentials } = await this.findByEvent(eventId, { limit: 10000 });
-      let unrendered = credentials.filter((c: any) => !c.asset?.publicUrl || !c.asset?.renderedAt);
+      let unrendered = credentials.filter((c: any) => this.isCredentialUnrendered(c));
       if (lastId) {
         const lastIdStr = lastId.toString();
         unrendered = unrendered.filter((c: any) => (c._id?.toString() || '') > lastIdStr);
@@ -598,16 +638,7 @@ export class MongoEventCredentialRepository {
       return unrendered.slice(0, limit);
     }
 
-    const query: any = {
-      eventId: new mongoose.Types.ObjectId(eventId),
-      $or: [
-        { 'asset.publicUrl': { $exists: false } },
-        { 'asset.publicUrl': null },
-        { 'asset.publicUrl': '' },
-        { 'asset.renderedAt': { $exists: false } },
-        { 'asset.renderedAt': null },
-      ],
-    };
+    const query: any = this.buildUnrenderedQuery(eventId);
 
     if (lastId && mongoose.Types.ObjectId.isValid(lastId)) {
       query._id = { $gt: new mongoose.Types.ObjectId(lastId) };
@@ -619,6 +650,270 @@ export class MongoEventCredentialRepository {
       .sort({ _id: 1 })
       .limit(safeLimit)
       .exec();
+  }
+
+  /**
+   * Atomically claim an unrendered ticket lease for a worker.
+   * Matches tickets that are PENDING, FAILED, legacy unrendered, or have an expired PROCESSING lease.
+   */
+  async claimUnrenderedTicketLease(
+    eventId: string,
+    workerId: string,
+    leaseMs: number = 60000
+  ): Promise<IEventCredentialDocument | null> {
+    if (!mongoose.Types.ObjectId.isValid(eventId) || !workerId) return null;
+
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + leaseMs);
+
+    if (this.getDbReadyState() !== 1) {
+      if (process.env.NODE_ENV !== 'test') {
+        throw new Error('[DatabaseDisconnected] Cannot claim ticket lease while database is disconnected');
+      }
+      const { credentials } = await this.findByEvent(eventId, { limit: 10000 });
+      const candidate = (credentials as any[]).find((c: any) => {
+        if (c.renderStatus === 'COMPLETED') return false;
+        const isPending = !c.renderStatus || c.renderStatus === 'PENDING' || c.renderStatus === 'FAILED';
+        const isExpired =
+          c.renderStatus === 'PROCESSING' &&
+          (!c.renderingLockExpiresAt || new Date(c.renderingLockExpiresAt) <= now);
+        const isMissingAsset = !c.asset?.publicUrl || !c.asset?.renderedAt;
+        return (isPending || isExpired) && isMissingAsset;
+      });
+
+      if (!candidate) return null;
+
+      candidate.renderStatus = 'PROCESSING';
+      candidate.renderingLockedBy = workerId;
+      candidate.renderingLockExpiresAt = expiresAt;
+      if (candidate.renderAttempts !== undefined) {
+        candidate.renderAttempts = (candidate.renderAttempts || 0) + 1;
+      }
+      if (typeof candidate.save === 'function') {
+        await candidate.save();
+      }
+      return candidate;
+    }
+
+    const query: any = {
+      eventId: new mongoose.Types.ObjectId(eventId),
+      renderStatus: { $ne: 'COMPLETED' },
+      $or: [
+        { renderStatus: 'PENDING' },
+        {
+          renderStatus: { $exists: false },
+          $or: [
+            { 'asset.publicUrl': { $exists: false } },
+            { 'asset.publicUrl': null },
+            { 'asset.publicUrl': '' },
+          ],
+        },
+        { renderStatus: 'FAILED' },
+        {
+          renderStatus: 'PROCESSING',
+          $or: [
+            { renderingLockExpiresAt: { $lte: now } },
+            { renderingLockExpiresAt: null },
+            { renderingLockExpiresAt: { $exists: false } },
+          ],
+        },
+      ],
+    };
+
+    return EventCredentialModel.findOneAndUpdate(
+      query,
+      {
+        $set: {
+          renderStatus: 'PROCESSING',
+          renderingLockedBy: workerId,
+          renderingLockExpiresAt: expiresAt,
+          renderError: null,
+        },
+        $inc: { renderAttempts: 1 },
+      },
+      {
+        returnDocument: 'after',
+        sort: { sequenceNumber: 1, _id: 1 },
+      }
+    ).exec();
+  }
+
+  /**
+   * Reclaim abandoned ticket rendering leases whose lease expiration plus grace period has passed.
+   * Resets renderStatus to PENDING and clears worker locks.
+   */
+  async reclaimAbandonedTicketLeases(
+    eventId: string,
+    leaseGraceMs: number = 0
+  ): Promise<number> {
+    if (!mongoose.Types.ObjectId.isValid(eventId)) return 0;
+
+    const cutoff = new Date(Date.now() - Math.max(0, leaseGraceMs));
+
+    if (this.getDbReadyState() !== 1) {
+      if (process.env.NODE_ENV !== 'test') {
+        throw new Error('[DatabaseDisconnected] Cannot reclaim ticket leases while database is disconnected');
+      }
+      const { credentials } = await this.findByEvent(eventId, { limit: 10000 });
+      let reclaimed = 0;
+      for (const cred of credentials as any[]) {
+        if (
+          cred.renderStatus === 'PROCESSING' &&
+          (!cred.renderingLockExpiresAt || new Date(cred.renderingLockExpiresAt) <= cutoff)
+        ) {
+          cred.renderStatus = 'PENDING';
+          cred.renderingLockedBy = null;
+          cred.renderingLockExpiresAt = null;
+          if (typeof cred.save === 'function') await cred.save();
+          reclaimed++;
+        }
+      }
+      return reclaimed;
+    }
+
+    const filter: any = {
+      eventId: new mongoose.Types.ObjectId(eventId),
+      renderStatus: 'PROCESSING',
+      $or: [
+        { renderingLockExpiresAt: { $lte: cutoff } },
+        { renderingLockExpiresAt: null },
+        { renderingLockExpiresAt: { $exists: false } },
+      ],
+    };
+
+    const update = {
+      $set: {
+        renderStatus: 'PENDING',
+        renderingLockedBy: null,
+        renderingLockExpiresAt: null,
+      },
+    };
+
+    const result = await EventCredentialModel.updateMany(filter, update).exec();
+    return result.modifiedCount || 0;
+  }
+
+  /**
+   * Atomically mark a credential as COMPLETED with its uploaded storage asset metadata.
+   * Releases worker lock and sets renderStatus to COMPLETED.
+   */
+  async markRenderCompleted(
+    credentialId: string,
+    assetData: RenderAssetData
+  ): Promise<IEventCredentialDocument | null> {
+    if (!mongoose.Types.ObjectId.isValid(credentialId)) {
+      throw new Error(`Invalid credentialId: ${credentialId}`);
+    }
+    if (!assetData || !assetData.storagePath || !assetData.publicUrl) {
+      throw new Error('storagePath and publicUrl are required to mark render completed');
+    }
+
+    const renderedAt = assetData.renderedAt || new Date();
+
+    if (this.getDbReadyState() !== 1) {
+      if (process.env.NODE_ENV !== 'test') {
+        throw new Error('[DatabaseDisconnected] Cannot mark render completed while database is disconnected');
+      }
+      const cred = await EventCredentialModel.findById(credentialId);
+      if (cred) {
+        cred.renderStatus = 'COMPLETED';
+        cred.renderError = null;
+        cred.renderingLockedBy = null;
+        cred.renderingLockExpiresAt = null;
+        cred.asset = {
+          storagePath: assetData.storagePath,
+          publicUrl: assetData.publicUrl,
+          renderedAt,
+          mimeType: assetData.mimeType || 'image/png',
+          dimensions: assetData.dimensions || null,
+          fileSizeBytes:
+            assetData.fileSizeBytes !== undefined
+              ? assetData.fileSizeBytes
+              : assetData.fileSize !== undefined
+              ? assetData.fileSize
+              : null,
+        };
+        if (typeof cred.save === 'function') await cred.save();
+      }
+      return cred;
+    }
+
+    const update: any = {
+      $set: {
+        renderStatus: 'COMPLETED',
+        renderError: null,
+        renderingLockedBy: null,
+        renderingLockExpiresAt: null,
+        'asset.storagePath': assetData.storagePath,
+        'asset.publicUrl': assetData.publicUrl,
+        'asset.renderedAt': renderedAt,
+        'asset.mimeType': assetData.mimeType || 'image/png',
+      },
+    };
+
+    const fileSize =
+      assetData.fileSizeBytes !== undefined ? assetData.fileSizeBytes : assetData.fileSize;
+    if (fileSize !== undefined && fileSize !== null) {
+      update.$set['asset.fileSizeBytes'] = fileSize;
+    }
+    if (assetData.dimensions) {
+      update.$set['asset.dimensions'] = assetData.dimensions;
+    }
+
+    return EventCredentialModel.findByIdAndUpdate(
+      credentialId,
+      update,
+      { returnDocument: 'after' }
+    ).exec();
+  }
+
+  /**
+   * Atomically mark a credential as FAILED with error details and release worker lock.
+   */
+  async markRenderFailed(
+    credentialId: string,
+    error: string
+  ): Promise<IEventCredentialDocument | null> {
+    if (!mongoose.Types.ObjectId.isValid(credentialId)) {
+      throw new Error(`Invalid credentialId: ${credentialId}`);
+    }
+
+    const sanitizedError = (error || 'Rendering failed').slice(0, 1000);
+
+    if (this.getDbReadyState() !== 1) {
+      if (process.env.NODE_ENV !== 'test') {
+        throw new Error('[DatabaseDisconnected] Cannot mark render failed while database is disconnected');
+      }
+      const cred = await EventCredentialModel.findById(credentialId);
+      if (cred) {
+        cred.renderStatus = 'FAILED';
+        cred.renderError = sanitizedError;
+        cred.renderingLockedBy = null;
+        cred.renderingLockExpiresAt = null;
+        if (!cred.metadata) cred.metadata = {};
+        cred.metadata.lastRenderError = sanitizedError.slice(0, 500);
+        cred.metadata.renderFailedAt = new Date();
+        if (typeof cred.save === 'function') await cred.save();
+      }
+      return cred;
+    }
+
+    const update = {
+      $set: {
+        renderStatus: 'FAILED',
+        renderError: sanitizedError,
+        renderingLockedBy: null,
+        renderingLockExpiresAt: null,
+        'metadata.lastRenderError': sanitizedError.slice(0, 500),
+        'metadata.renderFailedAt': new Date(),
+      },
+    };
+
+    return EventCredentialModel.findByIdAndUpdate(
+      credentialId,
+      update,
+      { returnDocument: 'after' }
+    ).exec();
   }
 }
 

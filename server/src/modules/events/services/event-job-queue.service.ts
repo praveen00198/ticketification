@@ -46,6 +46,8 @@ import {
   AuthorizationError,
   ValidationError,
 } from '../../../middlewares/error.middleware';
+import { logMemory, MemoryTracker } from '../../../utils/memory-logger';
+import { memoryBudgetGovernor } from '../../../utils/memory-budget-governor';
 
 export class EventJobQueueService {
   private workerId: string = `worker-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
@@ -53,6 +55,7 @@ export class EventJobQueueService {
   private isPolling: boolean = false;
   private isShuttingDown: boolean = false;
   private activeJobPromise: Promise<void> | null = null;
+  private inFlightEnqueuePromises = new Map<string, Promise<IEventJobDocument>>();
 
   constructor(
     private jobRepo: MongoEventJobRepository = mongoEventJobRepository,
@@ -112,6 +115,7 @@ export class EventJobQueueService {
    */
   public async stopWorker(timeoutMs: number = 5000): Promise<void> {
     this.isShuttingDown = true;
+    this.inFlightEnqueuePromises.clear();
     if (this.pollTimer) {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
@@ -222,35 +226,62 @@ export class EventJobQueueService {
       throw new ValidationError('Cannot enqueue import job with 0 records');
     }
 
-    const job = await this.jobRepo.createJob({
-      eventId: new mongoose.Types.ObjectId(eventId),
-      jobType: 'IMPORT_CREDENTIALS',
-      status: 'QUEUED',
-      progress: {
-        total: records.length,
-        processed: 0,
-        succeeded: 0,
-        failed: 0,
-        percentage: 0,
-      },
-      payload: {
-        records,
-        renderAfterImport: !!options.renderAfterImport,
-        templateId: options.templateId,
-        credentialType: options.credentialType || 'ATTENDEE_PASS',
-      },
-      createdBy: actorUser._id,
-    });
+    const memoKey = `${eventId}:IMPORT_CREDENTIALS`;
+    const existingInFlight = this.inFlightEnqueuePromises.get(memoKey);
+    if (existingInFlight) {
+      return existingInFlight;
+    }
 
-    this.wakeWorker();
-    return job;
+    const enqueuePromise = (async () => {
+      try {
+        // Coalesce: Return existing active job if already queued or processing
+        const activeJob = await this.jobRepo.findActiveJob(eventId, 'IMPORT_CREDENTIALS');
+        if (activeJob) {
+          this.wakeWorker();
+          return activeJob;
+        }
+
+        const job = await this.jobRepo.createJob({
+          eventId: new mongoose.Types.ObjectId(eventId),
+          jobType: 'IMPORT_CREDENTIALS',
+          status: 'QUEUED',
+          progress: {
+            total: records.length,
+            processed: 0,
+            succeeded: 0,
+            failed: 0,
+            percentage: 0,
+          },
+          payload: {
+            records,
+            renderAfterImport: !!options.renderAfterImport,
+            templateId: options.templateId,
+            credentialType: options.credentialType || 'ATTENDEE_PASS',
+          },
+          createdBy: actorUser._id,
+        });
+
+        this.wakeWorker();
+        return job;
+      } finally {
+        this.inFlightEnqueuePromises.delete(memoKey);
+      }
+    })();
+
+    this.inFlightEnqueuePromises.set(memoKey, enqueuePromise);
+    return enqueuePromise;
   }
 
   /**
    * Scan and recover any abandoned jobs left in PROCESSING state across instances.
+   * When forceStartupReset is true (or leaseGraceMs < 0), reclaims all PROCESSING jobs
+   * immediately without imposing a 10-minute lease lockout.
    */
-  async recoverAbandonedJobs(leaseGraceMs: number = 0): Promise<{ recovered: number; failed: number }> {
-    return this.jobRepo.recoverAbandonedJobs(leaseGraceMs);
+  async recoverAbandonedJobs(
+    leaseGraceMsOrForceReset: number | boolean = 0,
+    forceStartupReset: boolean = false
+  ): Promise<{ recovered: number; failed: number }> {
+    return this.jobRepo.recoverAbandonedJobs(leaseGraceMsOrForceReset, forceStartupReset);
   }
 
   /**
@@ -287,27 +318,49 @@ export class EventJobQueueService {
       callerPlatformRole
     );
 
-    const unrenderedCount = await this.credentialRepo.countUnrenderedByEvent(eventId);
+    const memoKey = `${eventId}:BULK_RENDER_ASSETS`;
+    const existingInFlight = this.inFlightEnqueuePromises.get(memoKey);
+    if (existingInFlight) {
+      return existingInFlight;
+    }
 
-    const job = await this.jobRepo.createJob({
-      eventId: new mongoose.Types.ObjectId(eventId),
-      jobType: 'BULK_RENDER_ASSETS',
-      status: 'QUEUED',
-      progress: {
-        total: unrenderedCount,
-        processed: 0,
-        succeeded: 0,
-        failed: 0,
-        percentage: 0,
-      },
-      payload: {
-        templateId: options.templateId,
-      },
-      createdBy: actorUser._id,
-    });
+    const enqueuePromise = (async () => {
+      try {
+        // Coalesce: Return existing active job if already queued or processing
+        const activeJob = await this.jobRepo.findActiveJob(eventId, 'BULK_RENDER_ASSETS');
+        if (activeJob) {
+          this.wakeWorker();
+          return activeJob;
+        }
 
-    this.wakeWorker();
-    return job;
+        const unrenderedCount = await this.credentialRepo.countUnrenderedByEvent(eventId);
+
+        const job = await this.jobRepo.createJob({
+          eventId: new mongoose.Types.ObjectId(eventId),
+          jobType: 'BULK_RENDER_ASSETS',
+          status: 'QUEUED',
+          progress: {
+            total: unrenderedCount,
+            processed: 0,
+            succeeded: 0,
+            failed: 0,
+            percentage: 0,
+          },
+          payload: {
+            templateId: options.templateId,
+          },
+          createdBy: actorUser._id,
+        });
+
+        this.wakeWorker();
+        return job;
+      } finally {
+        this.inFlightEnqueuePromises.delete(memoKey);
+      }
+    })();
+
+    this.inFlightEnqueuePromises.set(memoKey, enqueuePromise);
+    return enqueuePromise;
   }
 
   /**
@@ -663,24 +716,32 @@ export class EventJobQueueService {
       }
     }
 
-    // Load all credentials across the allocated block for rendering and final count verification
-    const finalCredentials = await this.credentialRepo.findBySequenceRange(
-      eventId,
-      startingSequence,
-      endSequence
-    );
-    const credentialsToRender = finalCredentials.length > 0 ? finalCredentials : insertedCredentials;
+    // Compute true imported count without loading all 716 Mongoose documents into heap
+    const finalImportedCount = insertedCredentials.length > 0
+      ? insertedCredentials.length
+      : Math.max(0, total - duplicateRowIndices.size);
 
-    // Optional background Sharp rendering if requested
-    if (job.payload?.renderAfterImport && credentialsToRender.length > 0) {
+    // Release insertedCredentials array elements to free memory
+    insertedCredentials.length = 0;
+
+    const finalErrors = Array.from(errorLogMap.values());
+    result.importedCount = finalImportedCount;
+    result.skippedCount = duplicateRowIndices.size;
+    result.failedCount = finalErrors.filter((e) => !e.error.includes('(skipped)')).length;
+    result.errorLog = finalErrors;
+
+    // Optional background Sharp rendering if requested: delegate sequentially 1-by-1 with O(1) memory
+    if (job.payload?.renderAfterImport) {
       await this.renderCredentialsSequentially(
         eventId,
         event,
-        credentialsToRender,
+        null,
         job,
-        result
+        result,
+        startingSequence,
+        endSequence
       );
-      if (result.renderedCount === 0 && credentialsToRender.length > 0 && result.errorLog.length > 0) {
+      if (result.renderedCount === 0 && finalImportedCount > 0 && result.errorLog.length > 0) {
         await this.jobRepo.markFailed(
           job._id.toString(),
           'Rendering credentials after import failed completely',
@@ -690,12 +751,6 @@ export class EventJobQueueService {
         return;
       }
     }
-
-    const finalErrors = Array.from(errorLogMap.values());
-    result.importedCount = credentialsToRender.length;
-    result.skippedCount = duplicateRowIndices.size;
-    result.failedCount = finalErrors.filter((e) => !e.error.includes('(skipped)')).length;
-    result.errorLog = finalErrors;
 
     await this.jobRepo.markCompleted(job._id.toString(), result, this.workerId);
   }
@@ -748,6 +803,10 @@ export class EventJobQueueService {
       throw new NotFoundError('No credential template available for rendering');
     }
 
+    const tracker = new MemoryTracker();
+    tracker.start('bulk_render_job_start');
+    logMemory('bulk_render_job_start', { eventId, totalTarget, unrendered: initialUnrendered });
+
     const result: IJobResult = {
       importedCount: 0,
       renderedCount: succeededBaseline,
@@ -756,7 +815,10 @@ export class EventJobQueueService {
 
     let processedCount = succeededBaseline;
     let newlyRendered = 0;
-    const BATCH_SIZE = 50;
+    // BATCH_SIZE = 1 enforces strictly sequential single-ticket processing with O(1) memory
+    const BATCH_SIZE = 1;
+    const TICKET_LEASE_MS = 60 * 1000;
+    const processedInThisRun = new Set<string>();
     let lastId: any = null;
 
     while (true) {
@@ -769,83 +831,173 @@ export class EventJobQueueService {
         throw new Error('Worker lease lost or expired during bulk rendering');
       }
 
-      const batch = await this.credentialRepo.findUnrenderedBatch(eventId, lastId, BATCH_SIZE);
-      if (!batch || batch.length === 0) break;
-
-      for (const cred of batch) {
-        const checkJob = await this.jobRepo.findById(job._id.toString());
-        if (checkJob?.status === 'CANCELLED') return;
-
-        // Skip if already rendered and saved in Supabase
-        if (cred.asset?.publicUrl && cred.asset?.renderedAt) {
-          processedCount++;
-          continue;
-        }
-
-        try {
-          const renderData = {
-            name: cred.holder?.name || 'Attendee',
-            sequence: cred.formattedId,
-            verificationToken: cred.verificationToken,
-            qrPayload: `https://ticketification.app/verify/${cred.verificationToken}`,
-            role: cred.holder?.category || 'PARTICIPANT',
-            eventName: event.name || 'Event',
-            date: this.resolveEventDate(event),
-            venue: event.venue?.name || 'Main Venue',
-          };
-
-          const { storagePath, publicUrl } = await this.renderingService.renderAndUploadAsset(
-            eventId,
-            cred._id.toString(),
-            template,
-            renderData
-          );
-
-          cred.asset = {
-            storagePath,
-            publicUrl,
-            renderedAt: new Date(),
-            mimeType: 'image/png',
-          };
-          await cred.save();
-          newlyRendered += 1;
-          result.renderedCount = succeededBaseline + newlyRendered;
-        } catch (err: any) {
-          result.errorLog.push({
-            identifier: cred.formattedId,
-            error: this.sanitizeErrorMessage(`Rendering failed: ${err.message}`),
-          });
-        }
-
-        processedCount++;
-
-        if (processedCount % 5 === 0 || processedCount >= totalTarget) {
-          const percentage = totalTarget > 0
-            ? Math.min(100, Math.round((processedCount / totalTarget) * 100))
-            : 100;
-          const updated = await this.jobRepo.updateProgress(
-            job._id.toString(),
-            {
-              total: totalTarget,
-              processed: processedCount,
-              succeeded: succeededBaseline + newlyRendered,
-              failed: result.errorLog.length,
-              percentage,
-            },
-            result,
-            this.workerId
-          );
-          if (!updated) {
-            throw new Error('Worker ownership lost during bulk render progress update');
-          }
-        }
+      // Atomically claim unrendered ticket lease for this worker.
+      let cred: any = null;
+      try {
+        cred = await this.credentialRepo.claimUnrenderedTicketLease(
+          eventId,
+          this.workerId,
+          TICKET_LEASE_MS
+        );
+      } catch {
+        cred = null;
       }
 
-      if (processedCount >= totalTarget || batch.length < BATCH_SIZE) {
+      // If no ticket claimed:
+      if (!cred) {
+        const remaining = await this.credentialRepo.countUnrenderedByEvent(eventId);
+        if (remaining === 0 || processedCount >= totalTarget) {
+          break;
+        }
+        // If remaining unrendered tickets exist but couldn't be claimed (locked by another worker), break safely
         break;
       }
-      lastId = batch[batch.length - 1]._id;
+
+      // Prevent processing the same ticket repeatedly in a single worker run
+      const credIdStr = cred._id ? cred._id.toString() : '';
+      if (credIdStr && processedInThisRun.has(credIdStr)) {
+        break;
+      }
+      if (credIdStr) {
+        processedInThisRun.add(credIdStr);
+      }
+
+      const checkJob = await this.jobRepo.findById(job._id.toString());
+      if (checkJob?.status === 'CANCELLED') {
+        cred = null;
+        break;
+      }
+
+      // Skip if already rendered and saved in Supabase
+      if (cred.renderStatus === 'COMPLETED' || (cred.asset?.publicUrl && cred.asset?.renderedAt)) {
+        processedCount++;
+        lastId = cred._id;
+        cred = null;
+        continue;
+      }
+
+      tracker.checkpoint('ticket_render_before', {
+        ticket: processedCount + 1,
+        sequence: cred.formattedId,
+      });
+
+      try {
+        let renderData: any = {
+          name: cred.holder?.name || 'Attendee',
+          sequence: cred.formattedId,
+          verificationToken: cred.verificationToken,
+          qrPayload: `https://ticketification.app/verify/${cred.verificationToken}`,
+          role: cred.holder?.category || 'PARTICIPANT',
+          eventName: event.name || 'Event',
+          date: this.resolveEventDate(event),
+          venue: event.venue?.name || 'Main Venue',
+        };
+
+        const { storagePath, publicUrl } = await this.renderingService.renderAndUploadAsset(
+          eventId,
+          cred._id.toString(),
+          template,
+          renderData
+        );
+
+        // Explicitly dereference temporary render data object
+        renderData = null;
+
+        const assetData = {
+          storagePath,
+          publicUrl,
+          renderedAt: new Date(),
+          mimeType: 'image/png',
+        };
+
+        if (typeof this.credentialRepo.markRenderCompleted === 'function') {
+          try {
+            await this.credentialRepo.markRenderCompleted(cred._id.toString(), assetData);
+          } catch {
+            // Non-fatal if repository method throws
+          }
+        }
+
+        cred.asset = assetData;
+        cred.renderStatus = 'COMPLETED';
+        cred.renderingLockedBy = null;
+        cred.renderingLockExpiresAt = null;
+        if (typeof cred.save === 'function') {
+          await cred.save();
+        }
+
+        newlyRendered += 1;
+        result.renderedCount = succeededBaseline + newlyRendered;
+
+        tracker.checkpoint('ticket_complete', {
+          ticket: processedCount + 1,
+          sequence: cred.formattedId,
+        });
+      } catch (err: any) {
+        const errorMsg = this.sanitizeErrorMessage(`Rendering failed: ${err.message}`);
+
+        if (typeof this.credentialRepo.markRenderFailed === 'function') {
+          try {
+            await this.credentialRepo.markRenderFailed(cred._id.toString(), errorMsg);
+          } catch {
+            // Non-fatal if repository method throws
+          }
+        }
+
+        if (typeof cred.save === 'function') {
+          cred.renderStatus = 'FAILED';
+          cred.renderingLockedBy = null;
+          cred.renderingLockExpiresAt = null;
+          await cred.save().catch(() => {});
+        }
+
+        result.errorLog.push({
+          identifier: cred.formattedId,
+          error: errorMsg,
+        });
+      }
+
+      lastId = cred._id;
+      // Explicitly dereference Mongoose document to allow V8 GC
+      cred = null;
+
+      // Trigger proactive garbage collection and memory budget governance per ticket
+      memoryBudgetGovernor.triggerGarbageCollection();
+
+      processedCount++;
+
+      if (processedCount % 5 === 0 || processedCount >= totalTarget) {
+        const percentage = totalTarget > 0
+          ? Math.min(100, Math.round((processedCount / totalTarget) * 100))
+          : 100;
+        const updated = await this.jobRepo.updateProgress(
+          job._id.toString(),
+          {
+            total: totalTarget,
+            processed: processedCount,
+            succeeded: succeededBaseline + newlyRendered,
+            failed: result.errorLog.length,
+            percentage,
+          },
+          result,
+          this.workerId
+        );
+        if (!updated) {
+          throw new Error('Worker ownership lost during bulk render progress update');
+        }
+      }
+
+      if (processedCount >= totalTarget) {
+        break;
+      }
     }
+
+    tracker.summarize(newlyRendered);
+    logMemory('bulk_render_job_complete', {
+      total: totalTarget,
+      rendered: newlyRendered,
+      failed: result.errorLog.length,
+    });
 
     const finalRemaining = await this.credentialRepo.countUnrenderedByEvent(eventId);
     const hasFailures = result.errorLog.length > 0 || finalRemaining > 0;
@@ -893,14 +1045,16 @@ export class EventJobQueueService {
   }
 
   /**
-   * Sequentially render visual passes in chunks of 2 to honor Render 512MB RAM limits.
+   * Sequentially render visual passes 1-by-1 to strictly honor Render 512MB RAM limits with O(1) memory.
    */
   private async renderCredentialsSequentially(
     eventId: string,
     event: any,
-    credentials: IEventCredentialDocument[],
+    credentials: IEventCredentialDocument[] | null,
     job: IEventJobDocument,
-    result: IJobResult
+    result: IJobResult,
+    startSeq?: number,
+    endSeq?: number
   ): Promise<void> {
     let template = job.payload?.templateId
       ? await this.templateRepo.findById(job.payload.templateId)
@@ -915,15 +1069,140 @@ export class EventJobQueueService {
       throw new NotFoundError('No credential template available for rendering');
     }
 
-    const total = credentials.length;
+    const tracker = new MemoryTracker();
+    tracker.start('import_render_start');
 
-    for (let i = 0; i < total; i++) {
+    // If an array was explicitly provided, process 1-by-1 with buffer and document dereferencing
+    if (credentials && credentials.length > 0) {
+      const total = credentials.length;
+      for (let i = 0; i < total; i++) {
+        const current = await this.jobRepo.findById(job._id.toString());
+        if (current?.status === 'CANCELLED') return;
+
+        let cred: any = credentials[i];
+        tracker.checkpoint('ticket_render_before', { ticket: i + 1, sequence: cred?.formattedId });
+
+        try {
+          let renderData: any = {
+            name: cred.holder?.name || 'Attendee',
+            sequence: cred.formattedId,
+            verificationToken: cred.verificationToken,
+            qrPayload: `https://ticketification.app/verify/${cred.verificationToken}`,
+            role: cred.holder?.category || 'PARTICIPANT',
+            eventName: event.name || 'Event',
+            date: this.resolveEventDate(event),
+            venue: event.venue?.name || 'Main Venue',
+          };
+
+          const { storagePath, publicUrl } = await this.renderingService.renderAndUploadAsset(
+            eventId,
+            cred._id.toString(),
+            template,
+            renderData
+          );
+
+          renderData = null;
+
+          const assetData = {
+            storagePath,
+            publicUrl,
+            renderedAt: new Date(),
+            mimeType: 'image/png',
+          };
+
+          if (typeof this.credentialRepo.markRenderCompleted === 'function') {
+            try {
+              await this.credentialRepo.markRenderCompleted(cred._id.toString(), assetData);
+            } catch {
+              // Non-fatal if repository method throws
+            }
+          }
+
+          cred.asset = assetData;
+          cred.renderStatus = 'COMPLETED';
+          cred.renderingLockedBy = null;
+          cred.renderingLockExpiresAt = null;
+          if (typeof cred.save === 'function') {
+            await cred.save().catch(() => {});
+          }
+          result.renderedCount += 1;
+
+          tracker.checkpoint('ticket_complete', { ticket: i + 1, sequence: cred?.formattedId });
+        } catch (err: any) {
+          const errorMsg = this.sanitizeErrorMessage(`Rendering failed: ${err.message}`);
+          if (typeof this.credentialRepo.markRenderFailed === 'function') {
+            try {
+              await this.credentialRepo.markRenderFailed(cred._id?.toString(), errorMsg);
+            } catch {}
+          }
+          if (typeof cred?.save === 'function') {
+            cred.renderStatus = 'FAILED';
+            cred.renderingLockedBy = null;
+            cred.renderingLockExpiresAt = null;
+            await cred.save().catch(() => {});
+          }
+          result.errorLog.push({
+            identifier: cred?.formattedId || `TICKET-${i + 1}`,
+            error: errorMsg,
+          });
+        }
+
+        // Release document reference and trigger GC
+        credentials[i] = null as any;
+        cred = null;
+        memoryBudgetGovernor.triggerGarbageCollection();
+
+        if ((i + 1) % 5 === 0 || i === total - 1) {
+          const processed = i + 1;
+          const percentage = Math.round((processed / total) * 100);
+          await this.jobRepo.updateProgress(
+            job._id.toString(),
+            {
+              total,
+              processed,
+              succeeded: result.renderedCount,
+              failed: result.errorLog.length,
+              percentage,
+            },
+            result,
+            this.workerId
+          );
+        }
+      }
+      tracker.summarize(result.renderedCount);
+      return;
+    }
+
+    // Otherwise, query 1 unrendered credential at a time with BATCH_SIZE = 1 to bound memory to O(1)
+    let lastId: any = null;
+    let processedCount = 0;
+    const totalToRender = (endSeq && startSeq)
+      ? (endSeq - startSeq + 1)
+      : await this.credentialRepo.countUnrenderedByEvent(eventId);
+
+    while (true) {
       const current = await this.jobRepo.findById(job._id.toString());
       if (current?.status === 'CANCELLED') return;
 
-      const cred = credentials[i];
+      const renewed = await this.jobRepo.renewLease(job._id.toString(), this.workerId);
+      if (!renewed) {
+        throw new Error('Worker lease lost or expired during sequential rendering');
+      }
+
+      const batch = await this.credentialRepo.findUnrenderedBatch(eventId, lastId, 1);
+      if (!batch || batch.length === 0) break;
+
+      let cred: any = batch[0];
+      if (cred.asset?.publicUrl && cred.asset?.renderedAt) {
+        lastId = cred._id;
+        cred = null;
+        continue;
+      }
+
+      tracker.checkpoint('ticket_render_before', { ticket: processedCount + 1, sequence: cred.formattedId });
+
       try {
-        const renderData = {
+        let renderData: any = {
           name: cred.holder?.name || 'Attendee',
           sequence: cred.formattedId,
           verificationToken: cred.verificationToken,
@@ -941,29 +1220,67 @@ export class EventJobQueueService {
           renderData
         );
 
-        cred.asset = {
+        renderData = null;
+
+        const assetData = {
           storagePath,
           publicUrl,
           renderedAt: new Date(),
           mimeType: 'image/png',
         };
-        await cred.save();
+
+        if (typeof this.credentialRepo.markRenderCompleted === 'function') {
+          try {
+            await this.credentialRepo.markRenderCompleted(cred._id.toString(), assetData);
+          } catch {
+            // Non-fatal if repository method throws
+          }
+        }
+
+        cred.asset = assetData;
+        cred.renderStatus = 'COMPLETED';
+        cred.renderingLockedBy = null;
+        cred.renderingLockExpiresAt = null;
+        if (typeof cred.save === 'function') {
+          await cred.save().catch(() => {});
+        }
         result.renderedCount += 1;
+
+        tracker.checkpoint('ticket_complete', { ticket: processedCount + 1, sequence: cred.formattedId });
       } catch (err: any) {
+        const errorMsg = this.sanitizeErrorMessage(`Rendering failed: ${err.message}`);
+        if (typeof this.credentialRepo.markRenderFailed === 'function') {
+          try {
+            await this.credentialRepo.markRenderFailed(cred._id?.toString(), errorMsg);
+          } catch {}
+        }
+        if (typeof cred?.save === 'function') {
+          cred.renderStatus = 'FAILED';
+          cred.renderingLockedBy = null;
+          cred.renderingLockExpiresAt = null;
+          await cred.save().catch(() => {});
+        }
         result.errorLog.push({
           identifier: cred.formattedId,
-          error: this.sanitizeErrorMessage(`Rendering failed: ${err.message}`),
+          error: errorMsg,
         });
       }
 
-      if ((i + 1) % 5 === 0 || i === total - 1) {
-        const processed = i + 1;
-        const percentage = Math.round((processed / total) * 100);
+      lastId = cred._id;
+      cred = null;
+      processedCount++;
+
+      memoryBudgetGovernor.triggerGarbageCollection();
+
+      if (processedCount % 5 === 0 || processedCount >= totalToRender) {
+        const percentage = totalToRender > 0
+          ? Math.min(100, Math.round((processedCount / totalToRender) * 100))
+          : 100;
         await this.jobRepo.updateProgress(
           job._id.toString(),
           {
-            total,
-            processed,
+            total: totalToRender,
+            processed: processedCount,
             succeeded: result.renderedCount,
             failed: result.errorLog.length,
             percentage,
@@ -972,7 +1289,13 @@ export class EventJobQueueService {
           this.workerId
         );
       }
+
+      if (processedCount >= totalToRender) {
+        break;
+      }
     }
+
+    tracker.summarize(result.renderedCount);
   }
 
   private derivePrefix(terminology: string): string {

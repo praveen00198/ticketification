@@ -2,7 +2,21 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useEvent } from '../context/EventContext';
 import { QrScanner } from '../components/scanner/QrScanner';
-import { verifyApi, VerificationResponse } from '../api/verify';
+import {
+  verifyApi,
+  scanTicketWithOfflineQueue,
+  VerificationResponse,
+} from '../api/verify';
+import {
+  getPendingCount,
+  getPendingScans,
+  deleteOfflineScan,
+  markSyncing,
+  markPending,
+  getOrCreateDeviceId,
+  OfflineScanRecord,
+} from '../services/offlineScanQueue';
+import { triggerScannerFeedback } from '../utils/scannerFeedback';
 import {
   CheckCircle2,
   AlertTriangle,
@@ -15,6 +29,8 @@ import {
   RotateCcw,
   UserPlus,
   RefreshCw,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import { Button, Badge, Card, InView, EmptyEventsState } from '../components/ui';
 
@@ -39,6 +55,14 @@ export const ScannerPage: React.FC = () => {
   const [recentCheckins, setRecentCheckins] = useState<any[]>([]);
   const [checkinCount, setCheckinCount] = useState<number>(0);
 
+  // Offline queue and sync state
+  const [offlineQueueCount, setOfflineQueueCount] = useState<number>(0);
+  const [isOnline, setIsOnline] = useState<boolean>(
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+
   const fetchRecentCheckins = useCallback(async () => {
     if (!currentEvent) return;
     try {
@@ -52,6 +76,106 @@ export const ScannerPage: React.FC = () => {
     fetchRecentCheckins();
   }, [fetchRecentCheckins]);
 
+  /**
+   * Synchronize pending scans stored in IndexedDB with the backend.
+   * Records are removed from IndexedDB strictly upon confirmed server acknowledgement.
+   */
+  const syncPendingOfflineScans = useCallback(async () => {
+    if (!currentEvent || isSyncing) return;
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+
+    let pendingBatch: OfflineScanRecord[] = [];
+    setIsSyncing(true);
+    try {
+      pendingBatch = await getPendingScans(currentEvent.id, 25);
+      if (pendingBatch.length === 0) {
+        setOfflineQueueCount(0);
+        return;
+      }
+
+      await markSyncing(pendingBatch.map((p) => p.id));
+      const deviceScannerId = getOrCreateDeviceId();
+
+      const batchPayload = pendingBatch.map((p) => ({
+        scanEventId: p.id,
+        idempotencyKey: p.id,
+        token: p.token,
+        scannedAt: p.clientTimestamp,
+        gate: p.gate,
+        workerName: p.workerName,
+      }));
+
+      const syncRes = await verifyApi.syncOfflineScans(
+        currentEvent.id,
+        deviceScannerId,
+        batchPayload
+      );
+
+      if (syncRes && syncRes.results) {
+        let acknowledgedCount = 0;
+        const unacknowledgedIds: string[] = [];
+
+        for (const r of syncRes.results) {
+          // Invariant: Delete IndexedDB record ONLY upon confirmed server acknowledgement
+          if (r.acknowledged) {
+            await deleteOfflineScan(r.scanEventId);
+            acknowledgedCount++;
+          } else {
+            unacknowledgedIds.push(r.scanEventId);
+          }
+        }
+
+        if (unacknowledgedIds.length > 0) {
+          await markPending(unacknowledgedIds, 'Unacknowledged by server');
+        }
+
+        setSyncFeedback(`Successfully synchronized ${acknowledgedCount} offline check-in(s).`);
+        setTimeout(() => setSyncFeedback(null), 5000);
+        await fetchRecentCheckins();
+      }
+    } catch (syncErr: any) {
+      console.warn('[ScannerPage] Batch sync error:', syncErr);
+      if (pendingBatch.length > 0) {
+        await markPending(pendingBatch.map((p) => p.id), syncErr?.message || 'Sync failed');
+      }
+    } finally {
+      const count = await getPendingCount(currentEvent.id);
+      setOfflineQueueCount(count);
+      setIsSyncing(false);
+    }
+  }, [currentEvent, isSyncing, fetchRecentCheckins]);
+
+  // Online / offline listeners & initial queue count hydration
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      syncPendingOfflineScans();
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    if (currentEvent) {
+      getPendingCount(currentEvent.id)
+        .then((count) => {
+          setOfflineQueueCount(count);
+          if (count > 0 && (typeof navigator === 'undefined' || navigator.onLine)) {
+            syncPendingOfflineScans();
+          }
+        })
+        .catch(() => {});
+    }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [currentEvent, syncPendingOfflineScans]);
+
   const handleScanSuccess = async (scannedPayload: string) => {
     let token = scannedPayload.trim();
     if (token.includes('/verify/')) {
@@ -59,6 +183,8 @@ export const ScannerPage: React.FC = () => {
       token = parts[parts.length - 1];
     }
     token = token.split('?')[0].split('#')[0].replace(/\/+$/, '').trim();
+
+    if (verifying) return;
 
     setScannedToken(token);
     setVerifying(true);
@@ -68,14 +194,29 @@ export const ScannerPage: React.FC = () => {
     setWorkerNameInput('');
 
     try {
-      const res = await verifyApi.scanTicket(token, currentEvent?.id);
+      const res = await scanTicketWithOfflineQueue(
+        token,
+        currentEvent?.id,
+        undefined,
+        'Main Gate'
+      );
       setScanResult(res);
 
       if (res.status === 'VALID' || res.status === 'VALID_WORKER') {
+        triggerScannerFeedback('SUCCESS');
         setCheckInSuccess(res.message);
         await fetchRecentCheckins();
+      } else if (res.status === 'PENDING_SYNC') {
+        triggerScannerFeedback('PENDING_SYNC');
+        const count = await getPendingCount(currentEvent?.id);
+        setOfflineQueueCount(count);
+      } else if (res.status === 'UNASSIGNED_WORKER') {
+        triggerScannerFeedback('PROMPT');
+      } else {
+        triggerScannerFeedback('ERROR');
       }
     } catch (err: any) {
+      triggerScannerFeedback('ERROR');
       setScanResult({
         status: 'INVALID',
         message: err.message || 'Invalid or unrecognized QR token.',
@@ -97,16 +238,27 @@ export const ScannerPage: React.FC = () => {
     setCheckingIn(true);
     setCheckInError(null);
     try {
-      const res = await verifyApi.scanTicket(
+      const res = await scanTicketWithOfflineQueue(
         scannedToken,
         currentEvent.id,
-        workerNameInput.trim()
+        workerNameInput.trim(),
+        'Main Gate'
       );
 
       setScanResult(res);
-      setCheckInSuccess(res.message);
-      await fetchRecentCheckins();
+      if (res.status === 'VALID' || res.status === 'VALID_WORKER') {
+        triggerScannerFeedback('SUCCESS');
+        setCheckInSuccess(res.message);
+        await fetchRecentCheckins();
+      } else if (res.status === 'PENDING_SYNC') {
+        triggerScannerFeedback('PENDING_SYNC');
+        const count = await getPendingCount(currentEvent.id);
+        setOfflineQueueCount(count);
+      } else {
+        triggerScannerFeedback('ERROR');
+      }
     } catch (err: any) {
+      triggerScannerFeedback('ERROR');
       setCheckInError(err.message || 'Check-in failed.');
     } finally {
       setCheckingIn(false);
@@ -151,6 +303,18 @@ export const ScannerPage: React.FC = () => {
               <span className="text-xs font-semibold text-stone-600 truncate">
                 Event: <span className="text-zinc-900 font-bold">{currentEvent.name}</span>
               </span>
+              <span className="text-xs text-stone-300">•</span>
+              {isOnline ? (
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                  <Wifi className="w-3 h-3 text-emerald-600" />
+                  <span>Online</span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-300 animate-pulse">
+                  <WifiOff className="w-3 h-3 text-amber-600" />
+                  <span>Offline Mode</span>
+                </span>
+              )}
             </div>
             <h1 className="text-xl sm:text-2xl font-extrabold text-zinc-900 tracking-tight">
               QR Ticket Verification & Entry
@@ -160,7 +324,21 @@ export const ScannerPage: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 flex-wrap">
+            {offlineQueueCount > 0 && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={syncPendingOfflineScans}
+                loading={isSyncing}
+                disabled={isSyncing || !isOnline}
+                iconLeft={<RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />}
+                className="border-amber-300 text-amber-900 bg-amber-50 hover:bg-amber-100"
+              >
+                {isSyncing ? 'Syncing...' : `Sync Queue (${offlineQueueCount})`}
+              </Button>
+            )}
+
             <Button
               variant="secondary"
               size="sm"
@@ -173,11 +351,19 @@ export const ScannerPage: React.FC = () => {
         </div>
       </InView>
 
+      {/* Sync Feedback Toast */}
+      {syncFeedback && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-semibold text-emerald-800 flex items-center gap-2 animate-in fade-in duration-200">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>{syncFeedback}</span>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-12 gap-5 sm:gap-6">
         {/* Left Column: Camera Scanner & Manual Input */}
         <div className="md:col-span-6 space-y-4">
           <Card padding="sm" className="overflow-hidden">
-            <QrScanner onScanSuccess={handleScanSuccess} />
+            <QrScanner onScanSuccess={handleScanSuccess} isVerifying={verifying} />
           </Card>
 
           {/* Real-Time Scan Status Feed */}
@@ -193,6 +379,8 @@ export const ScannerPage: React.FC = () => {
               className={`p-4 rounded-2xl text-xs font-bold flex items-center justify-between gap-2.5 shadow-2xs border ${
                 scanResult.status === 'VALID' || scanResult.status === 'VALID_WORKER'
                   ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
+                  : scanResult.status === 'PENDING_SYNC'
+                  ? 'bg-amber-50 text-amber-900 border-amber-300'
                   : scanResult.status === 'ALREADY_USED'
                   ? 'bg-rose-50 text-rose-900 border-rose-300'
                   : scanResult.status === 'UNASSIGNED_WORKER'
@@ -203,6 +391,9 @@ export const ScannerPage: React.FC = () => {
               <div className="flex items-center gap-2.5 min-w-0">
                 {(scanResult.status === 'VALID' || scanResult.status === 'VALID_WORKER') && (
                   <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                )}
+                {scanResult.status === 'PENDING_SYNC' && (
+                  <Clock className="w-5 h-5 text-amber-600 shrink-0 animate-pulse" />
                 )}
                 {scanResult.status === 'ALREADY_USED' && (
                   <Clock className="w-5 h-5 text-rose-600 shrink-0" />
@@ -266,6 +457,8 @@ export const ScannerPage: React.FC = () => {
                   variant={
                     scanResult.status === 'VALID' || scanResult.status === 'VALID_WORKER'
                       ? 'emerald'
+                      : scanResult.status === 'PENDING_SYNC'
+                      ? 'amber'
                       : scanResult.status === 'UNASSIGNED_WORKER'
                       ? 'amber'
                       : scanResult.status === 'ALREADY_USED'
@@ -276,6 +469,7 @@ export const ScannerPage: React.FC = () => {
                 >
                   {scanResult.status === 'VALID' && <CheckCircle2 className="w-3.5 h-3.5" />}
                   {scanResult.status === 'VALID_WORKER' && <UserCheck className="w-3.5 h-3.5" />}
+                  {scanResult.status === 'PENDING_SYNC' && <Clock className="w-3.5 h-3.5" />}
                   {scanResult.status === 'UNASSIGNED_WORKER' && <UserPlus className="w-3.5 h-3.5" />}
                   {scanResult.status === 'ALREADY_USED' && <Clock className="w-3.5 h-3.5" />}
                   {scanResult.status === 'INVALID' && <XCircle className="w-3.5 h-3.5" />}
@@ -288,6 +482,11 @@ export const ScannerPage: React.FC = () => {
                     #{scanResult.ticket.sequenceNumber.toString().padStart(5, '0')}
                   </span>
                 )}
+                {scanResult.offlineScanId && (
+                  <span className="font-mono font-bold text-xs text-amber-900 bg-amber-100 px-2 py-0.5 rounded-lg border border-amber-300">
+                    QUEUED #{scanResult.offlineScanId.slice(0, 8)}
+                  </span>
+                )}
               </div>
 
               {/* Message Banner */}
@@ -295,6 +494,8 @@ export const ScannerPage: React.FC = () => {
                 className={`p-3.5 rounded-xl text-xs font-semibold leading-relaxed ${
                   scanResult.status === 'VALID' || scanResult.status === 'VALID_WORKER'
                     ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
+                    : scanResult.status === 'PENDING_SYNC'
+                    ? 'bg-amber-50 text-amber-900 border border-amber-300'
                     : scanResult.status === 'UNASSIGNED_WORKER'
                     ? 'bg-amber-50 text-amber-900 border border-amber-200'
                     : 'bg-rose-50 text-rose-900 border border-rose-200'
@@ -341,6 +542,24 @@ export const ScannerPage: React.FC = () => {
                       <span className="text-rose-600 font-semibold">Checked-in At:</span>
                       <span className="font-mono text-rose-700">
                         {new Date(scanResult.ticket.lastCheckinTime).toLocaleTimeString()}
+                      </span>
+                    </div>
+                  )}
+
+                  {scanResult.offlineScanId && (
+                    <div className="flex items-center justify-between pt-2 border-t border-amber-200/70">
+                      <span className="text-amber-700 font-semibold">Offline Scan ID:</span>
+                      <span className="font-mono text-amber-900 text-[11px]">
+                        {scanResult.offlineScanId}
+                      </span>
+                    </div>
+                  )}
+
+                  {scanResult.queuedAt && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-amber-700 font-semibold">Queued At:</span>
+                      <span className="font-mono text-amber-800">
+                        {new Date(scanResult.queuedAt).toLocaleTimeString()}
                       </span>
                     </div>
                   )}

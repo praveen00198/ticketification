@@ -27,6 +27,7 @@ export interface IEventCredentialCheckinDocument extends Document {
   gate: string;
   holderSnapshot: ICheckinHolderSnapshot;
   notes?: string | null;
+  idempotencyKey?: string | null;
   createdAt: Date;
 }
 
@@ -98,6 +99,13 @@ const EventCredentialCheckinSchema = new Schema<IEventCredentialCheckinDocument>
       default: null,
       maxlength: 500,
     },
+    idempotencyKey: {
+      type: String,
+      sparse: true,
+      trim: true,
+      maxlength: 128,
+      default: null,
+    },
   },
   {
     timestamps: { createdAt: true, updatedAt: false },
@@ -110,6 +118,11 @@ EventCredentialCheckinSchema.index({ eventId: 1, scannedAt: -1 });
 EventCredentialCheckinSchema.index({ credentialId: 1, scannedAt: -1 });
 EventCredentialCheckinSchema.index({ eventId: 1, scanStatus: 1 });
 EventCredentialCheckinSchema.index({ eventId: 1, gate: 1 });
+EventCredentialCheckinSchema.index(
+  { eventId: 1, idempotencyKey: 1 },
+  { unique: true, partialFilterExpression: { idempotencyKey: { $type: 'string' } } }
+);
+EventCredentialCheckinSchema.index({ eventId: 1, credentialId: 1, scanStatus: 1 });
 
 export const EventCredentialCheckinModel: Model<IEventCredentialCheckinDocument> =
   (mongoose.models.EventCredentialCheckin as Model<IEventCredentialCheckinDocument>) ||

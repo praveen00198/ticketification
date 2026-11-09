@@ -213,6 +213,74 @@ describe('FIX 3: Bulk Ticket Rendering Reliability & Terminal Job States Suite',
       }
       return all.filter((c) => !c.asset?.storagePath).slice(0, limit);
     });
+
+    jest.spyOn(credentialRepo, 'claimUnrenderedTicketLease').mockImplementation(
+      async (eId: string, workerId: string, leaseMs: number = 30000) => {
+        const now = new Date();
+        const all = Array.from(inMemoryCredentials.values()).filter(
+          (c) =>
+            c.eventId?.toString() === eId?.toString() &&
+            c.renderStatus !== 'COMPLETED' &&
+            !c.asset?.storagePath
+        );
+
+        // 1. Prioritize PENDING tickets first
+        const pending = all.find((c) => !c.renderStatus || c.renderStatus === 'PENDING');
+        if (pending) {
+          pending.renderStatus = 'PROCESSING';
+          pending.renderingLockedBy = workerId;
+          pending.renderingLockExpiresAt = new Date(now.getTime() + leaseMs);
+          return pending;
+        }
+
+        // 2. Retry FAILED or expired PROCESSING tickets
+        const retryable = all.find((c) => {
+          if (c.renderStatus === 'FAILED') return true;
+          if (c.renderStatus === 'PROCESSING') {
+            return c.renderingLockExpiresAt && new Date(c.renderingLockExpiresAt) < now;
+          }
+          return false;
+        });
+
+        if (retryable) {
+          retryable.renderStatus = 'PROCESSING';
+          retryable.renderingLockedBy = workerId;
+          retryable.renderingLockExpiresAt = new Date(now.getTime() + leaseMs);
+          return retryable;
+        }
+
+        return null;
+      }
+    );
+
+    (credentialRepo as any).markRenderCompleted = jest.fn().mockImplementation(
+      async (credId: string, assetData: any) => {
+        const cred = inMemoryCredentials.get(credId.toString());
+        if (!cred) return null;
+        cred.renderStatus = 'COMPLETED';
+        cred.renderingLockedBy = null;
+        cred.renderingLockExpiresAt = null;
+        cred.asset = {
+          storagePath: assetData.storagePath,
+          publicUrl: assetData.publicUrl,
+          renderedAt: assetData.renderedAt || new Date(),
+          mimeType: assetData.mimeType || 'image/png',
+        };
+        return cred;
+      }
+    );
+
+    (credentialRepo as any).markRenderFailed = jest.fn().mockImplementation(
+      async (credId: string, error: string) => {
+        const cred = inMemoryCredentials.get(credId.toString());
+        if (!cred) return null;
+        cred.renderStatus = 'FAILED';
+        cred.renderError = error;
+        cred.renderingLockedBy = null;
+        cred.renderingLockExpiresAt = null;
+        return cred;
+      }
+    );
   });
 
   describe('1. Scale & Pagination: More than 500 credentials across several batches', () => {

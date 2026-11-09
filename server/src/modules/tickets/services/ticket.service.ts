@@ -36,6 +36,7 @@ import {
 } from '../../events/services/event-credential-rendering.service';
 import { GenerateTicketsResult } from '../ticket.types';
 import { logMemory, MemoryTracker } from '../../../utils/memory-logger';
+import { memoryBudgetGovernor } from '../../../utils/memory-budget-governor';
 import { getTemplateById, DEFAULT_TEMPLATE_ID } from '../ticket-templates';
 
 export { formatTicketFileName };
@@ -144,26 +145,37 @@ export class TicketService {
           templateBuffer = await this.imageServ.resolveTemplateBuffer(templateConfig.filename);
         }
 
-        const credentials = await EventCredentialModel.find({
+        const totalGuests = await EventCredentialModel.countDocuments({
           eventId: new mongoose.Types.ObjectId(eventId),
-        }).sort({ sequenceNumber: 1 }).exec();
+        });
 
-        if (credentials.length === 0) {
+        if (totalGuests === 0) {
           throw new ValidationError('No guests found for this event. Please import guests first.');
         }
 
-        const pendingCredentials = credentials.filter((c) => !c.asset?.publicUrl);
-        if (pendingCredentials.length === 0) {
+        const unrenderedQuery = {
+          eventId: new mongoose.Types.ObjectId(eventId),
+          $or: [
+            { 'asset.publicUrl': { $exists: false } },
+            { 'asset.publicUrl': null },
+            { 'asset.publicUrl': '' },
+            { 'asset.renderedAt': { $exists: false } },
+            { 'asset.renderedAt': null },
+          ],
+        };
+
+        const pendingCount = await EventCredentialModel.countDocuments(unrenderedQuery);
+        if (pendingCount === 0) {
           return {
-            message: `All ${credentials.length} guests already have valid tickets generated.`,
+            message: `All ${totalGuests} guests already have valid tickets generated.`,
             generatedCount: 0,
-            totalGuests: credentials.length,
+            totalGuests,
           };
         }
 
-        if (pendingCredentials.length > 50) {
+        if (pendingCount > 50) {
           throw new ValidationError(
-            `Synchronous ticket generation is limited to 50 guests (found ${pendingCredentials.length} pending). Please dispatch an asynchronous bulk render job via POST /api/events/:eventId/jobs/bulk-render.`
+            `Synchronous ticket generation is limited to 50 guests (found ${pendingCount} pending). Please dispatch an asynchronous bulk render job via POST /api/events/:eventId/jobs/bulk-render.`
           );
         }
 
@@ -172,6 +184,13 @@ export class TicketService {
             'Supabase Storage is not configured. Please ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are configured in the environment.'
           );
         }
+
+        // Fetch pending credentials with lean() projection to minimize heap allocation
+        const pendingCredentials = await EventCredentialModel.find(unrenderedQuery)
+          .sort({ sequenceNumber: 1 })
+          .limit(50)
+          .lean()
+          .exec();
 
         const safePrefix =
           (mongoEv.name || 'EVT').trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase() || 'EVT';
@@ -197,16 +216,22 @@ export class TicketService {
           };
 
           const storagePath = cred.asset?.storagePath || `events/${eventId}/tickets/ticket-${displayId}.png`;
-          const rendered = await this.imageServ.generateTicketImage(ticketData);
+          let rendered: any = await this.imageServ.generateTicketImage(ticketData);
           if (!rendered || !isPngBuffer(rendered.pngBuffer)) {
             throw new StorageError(`Rendered ticket failed PNG binary validation for ticket ${displayId}`);
           }
 
+          let pngBuffer: Buffer | null = rendered.pngBuffer;
+          rendered = null;
+
           const uploadResult = await this.storageServ.uploadTicketImage(
             storagePath,
-            rendered.pngBuffer,
+            pngBuffer,
             'image/png'
           );
+
+          // Explicitly dereference buffer after upload
+          pngBuffer = null;
 
           await EventCredentialModel.updateOne(
             { _id: cred._id },
@@ -219,12 +244,15 @@ export class TicketService {
             }
           );
           generatedCount++;
+
+          memoryBudgetGovernor.triggerGarbageCollection();
+          logMemory('ticket_complete', { ticket: generatedCount, id: displayId });
         }
 
         return {
           message: `Successfully generated and uploaded ${generatedCount} PNG ticket(s) to Supabase Storage.`,
           generatedCount,
-          totalGuests: credentials.length,
+          totalGuests,
         };
       }
     }

@@ -4,9 +4,10 @@ import { Camera, AlertCircle, RefreshCw, CameraOff, SwitchCamera } from 'lucide-
 
 interface QrScannerProps {
   onScanSuccess: (scannedText: string) => void;
+  isVerifying?: boolean;
 }
 
-export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
+export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess, isVerifying = false }) => {
   const [cameras, setCameras] = useState<CameraDevice[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string>('');
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
@@ -15,27 +16,64 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
   const [isInitializing, setIsInitializing] = useState(true);
 
   const scannerRef = useRef<Html5Qrcode | null>(null);
-  const isCooldownRef = useRef(false);
   const isTransitioningRef = useRef(false);
   const isMountedRef = useRef(true);
   const containerId = useRef('qr-viewport-feed').current;
 
+  // In-flight verification request lock and token suppression cache
+  const isVerifyingRef = useRef(isVerifying);
+  const lastScannedTokenRef = useRef<string | null>(null);
+  const lastScannedTimeRef = useRef<number>(0);
+
+  // Sync isVerifying prop with internal ref
+  useEffect(() => {
+    isVerifyingRef.current = isVerifying;
+  }, [isVerifying]);
+
   const onScanSuccessRef = useRef(onScanSuccess);
   onScanSuccessRef.current = onScanSuccess;
 
+  /**
+   * Synchronously stops all MediaStreamTracks on the video element.
+   * Guarantees immediate hardware camera release upon unmount or camera switch.
+   */
+  const stopTracksSynchronously = useCallback(() => {
+    try {
+      const containerEl = document.getElementById(containerId);
+      const videoEl = containerEl?.querySelector('video') as HTMLVideoElement | null;
+      if (videoEl && videoEl.srcObject) {
+        const stream = videoEl.srcObject as MediaStream;
+        stream.getTracks().forEach((track) => {
+          try {
+            track.stop();
+          } catch (_e) {}
+        });
+        videoEl.srcObject = null;
+      }
+    } catch (_err) {
+      // Non-blocking track release
+    }
+  }, [containerId]);
+
   const stopScanner = useCallback(async () => {
+    // Release hardware camera tracks synchronously first
+    stopTracksSynchronously();
+
     if (isTransitioningRef.current) return;
     isTransitioningRef.current = true;
 
     try {
       if (scannerRef.current) {
-        if (scannerRef.current.isScanning) {
-          await scannerRef.current.stop();
+        const scanner = scannerRef.current;
+        scannerRef.current = null;
+        if (scanner.isScanning) {
+          try {
+            await scanner.stop();
+          } catch (_sErr) {}
         }
         try {
-          scannerRef.current.clear();
+          scanner.clear();
         } catch (_cErr) {}
-        scannerRef.current = null;
       }
     } catch (err) {
       console.warn('[QrScanner] Error stopping scanner:', err);
@@ -45,7 +83,7 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
       }
       isTransitioningRef.current = false;
     }
-  }, []);
+  }, [stopTracksSynchronously]);
 
   const startCamera = useCallback(
     async (targetCameraId?: string, targetFacingMode: 'environment' | 'user' = facingMode) => {
@@ -57,7 +95,7 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
       setIsInitializing(true);
       setScannerError(null);
 
-      // Clean up previous scanner
+      // Clean up previous scanner safely
       await stopScanner();
 
       if (!isMountedRef.current) return;
@@ -71,8 +109,8 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
           return;
         }
 
-        containerEl.innerHTML = '';
-
+        // Avoid destructive innerHTML = '' which breaks active listeners;
+        // Html5Qrcode manages DOM creation inside containerId cleanly.
         const html5QrCode = new Html5Qrcode(containerId);
         scannerRef.current = html5QrCode;
 
@@ -82,13 +120,49 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
           aspectRatio: 1.0,
         };
 
+        /**
+         * Frame decode handler:
+         * 1. Drops frame if verification is in flight (isVerifyingRef.current).
+         * 2. Suppresses duplicate scans of the SAME token within 4,000ms.
+         * 3. Scans a DIFFERENT token immediately (0ms delay).
+         */
         const handleDecoded = (decodedText: string) => {
-          if (isCooldownRef.current) return;
-          isCooldownRef.current = true;
-          onScanSuccessRef.current(decodedText);
-          setTimeout(() => {
-            isCooldownRef.current = false;
-          }, 1800);
+          const cleanToken = decodedText.trim();
+          if (!cleanToken) return;
+
+          // In-flight verification request lock: drop frame while server request is pending
+          if (isVerifyingRef.current) {
+            return;
+          }
+
+          const now = Date.now();
+          // Suppress duplicate frames of the same token for 4,000ms
+          if (
+            lastScannedTokenRef.current === cleanToken &&
+            now - lastScannedTimeRef.current < 4000
+          ) {
+            return;
+          }
+
+          // New or expired token: update cache and invoke callback immediately
+          lastScannedTokenRef.current = cleanToken;
+          lastScannedTimeRef.current = now;
+          isVerifyingRef.current = true;
+
+          try {
+            const result = onScanSuccessRef.current(cleanToken) as unknown;
+            if (result && typeof (result as Promise<unknown>).then === 'function') {
+              (result as Promise<unknown>)
+                .catch(() => {})
+                .finally(() => {
+                  if (!isVerifying) {
+                    isVerifyingRef.current = false;
+                  }
+                });
+            }
+          } catch (_e) {
+            isVerifyingRef.current = false;
+          }
         };
 
         if (targetCameraId) {
@@ -152,9 +226,12 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess }) => {
     return () => {
       isMountedRef.current = false;
       clearTimeout(timer);
-      stopScanner();
+      // Synchronously release camera hardware tracks on unmount
+      stopTracksSynchronously();
+      // Asynchronously clean up Html5Qrcode instance
+      stopScanner().catch(() => {});
     };
-  }, []);
+  }, [startCamera, stopScanner, stopTracksSynchronously]);
 
   const handleToggleFacingMode = () => {
     const nextMode = facingMode === 'environment' ? 'user' : 'environment';

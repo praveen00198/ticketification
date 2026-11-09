@@ -22,6 +22,8 @@ import { mongoEventCredentialRepository } from '../../events/repositories/mongo-
 import { qrService } from '../../tickets/services/qr.service';
 import { ticketImageService, TicketImageData, isPngBuffer } from '../../tickets/services/ticket-image.service';
 import { supabaseStorageService } from '../../tickets/services/supabase-storage.service';
+import { eventJobQueueService } from '../../events/services/event-job-queue.service';
+import { memoryBudgetGovernor } from '../../../utils/memory-budget-governor';
 import {
   HeaderAnalysisResult,
   ValidateImportDTO,
@@ -758,8 +760,9 @@ export class GuestImportService {
         let publicUrl: string | null = null;
         let renderedAt: Date | null = null;
 
-        // Immediately generate and store authentic PNG ticket in Supabase Storage upon guest import
-        if (supabaseStorageService.isConfigured()) {
+        // Immediately generate and store authentic PNG ticket in Supabase Storage upon guest import (<= 50 guests)
+        // For larger imports (> 50 guests), credentials are saved as unrendered and rendered via background job with BATCH_SIZE = 1
+        if (guestsToInsert.length <= 50 && supabaseStorageService.isConfigured()) {
           try {
             const qrDataUrl = await qrService.generateQrDataUrl(verificationToken);
             const ticketData: TicketImageData = {
@@ -775,16 +778,21 @@ export class GuestImportService {
               phone: row.phone || undefined,
             };
 
-            const rendered = await ticketImageService.generateTicketImage(ticketData);
+            let rendered: any = await ticketImageService.generateTicketImage(ticketData);
             if (rendered?.pngBuffer && isPngBuffer(rendered.pngBuffer)) {
+              let pngBuffer: Buffer | null = rendered.pngBuffer;
+              rendered = null;
               const uploadRes = await supabaseStorageService.uploadTicketImage(
                 storagePath,
-                rendered.pngBuffer,
+                pngBuffer,
                 'image/png'
               );
+              pngBuffer = null;
               publicUrl = uploadRes.publicUrl;
               renderedAt = new Date();
             }
+            rendered = null;
+            memoryBudgetGovernor.triggerGarbageCollection();
           } catch (genErr: any) {
             console.warn(`[GuestImportService] Immediate ticket rendering/upload failed for ${formattedId}:`, genErr.message);
           }
@@ -818,6 +826,15 @@ export class GuestImportService {
           createdBy: creatorObjectId,
         } as any);
         insertedCount++;
+      }
+
+      // If import had more than 50 guests, auto-enqueue background bulk render job with BATCH_SIZE=1 to prevent memory exhaustion
+      if (guestsToInsert.length > 50) {
+        try {
+          await eventJobQueueService.enqueueBulkRenderJob(eventId, userId, { terminology });
+        } catch (enqueueErr: any) {
+          console.warn('[GuestImportService] Failed to auto-enqueue bulk render job:', (enqueueErr as any)?.message);
+        }
       }
 
       // Clean up temporary disk staging file and in-memory cache

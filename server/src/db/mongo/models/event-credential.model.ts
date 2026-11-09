@@ -15,6 +15,14 @@ export const CREDENTIAL_STATUSES: CredentialStatus[] = [
   'EXPIRED',
 ];
 
+export type CredentialRenderStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+export const CREDENTIAL_RENDER_STATUSES: CredentialRenderStatus[] = [
+  'PENDING',
+  'PROCESSING',
+  'COMPLETED',
+  'FAILED',
+];
+
 export interface ICredentialHolder {
   name: string;
   email?: string | null;
@@ -31,6 +39,11 @@ export interface ICredentialAsset {
   publicUrl?: string | null;
   renderedAt?: Date | null;
   mimeType: string;
+  fileSizeBytes?: number | null;
+  dimensions?: {
+    width: number;
+    height: number;
+  } | null;
 }
 
 export interface IEventCredentialDocument extends Document {
@@ -43,6 +56,11 @@ export interface IEventCredentialDocument extends Document {
   terminology: string;
   usagePolicy: CredentialUsagePolicy;
   status: CredentialStatus;
+  renderStatus: CredentialRenderStatus;
+  renderError?: string | null;
+  renderAttempts?: number;
+  renderingLockedBy?: string | null;
+  renderingLockExpiresAt?: Date | null;
   holder: ICredentialHolder;
   asset: ICredentialAsset;
   metadata?: Record<string, any>;
@@ -76,6 +94,11 @@ const CredentialAssetSchema = new Schema<ICredentialAsset>(
     publicUrl: { type: String, trim: true, default: null },
     renderedAt: { type: Date, default: null },
     mimeType: { type: String, default: 'image/png' },
+    fileSizeBytes: { type: Number, default: null },
+    dimensions: {
+      width: { type: Number },
+      height: { type: Number },
+    },
   },
   { _id: false }
 );
@@ -131,6 +154,31 @@ export const EventCredentialSchema = new Schema<IEventCredentialDocument>(
       default: 'ACTIVE',
       index: true,
     },
+    renderStatus: {
+      type: String,
+      enum: CREDENTIAL_RENDER_STATUSES,
+      default: 'PENDING',
+      index: true,
+    },
+    renderError: {
+      type: String,
+      trim: true,
+      maxlength: 1000,
+      default: null,
+    },
+    renderAttempts: {
+      type: Number,
+      default: 0,
+    },
+    renderingLockedBy: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    renderingLockExpiresAt: {
+      type: Date,
+      default: null,
+    },
     holder: {
       type: CredentialHolderSchema,
       required: true,
@@ -180,17 +228,25 @@ export const EventCredentialSchema = new Schema<IEventCredentialDocument>(
 // Compound & Performance Indexes
 EventCredentialSchema.index({ eventId: 1, sequenceNumber: 1 }, { unique: true });
 EventCredentialSchema.index({ verificationToken: 1 }, { unique: true });
+EventCredentialSchema.index({ formattedId: 1 });
 EventCredentialSchema.index(
   { eventId: 1, 'metadata.importKey': 1 },
   { unique: true, partialFilterExpression: { 'metadata.importKey': { $type: 'string' } } }
 );
 EventCredentialSchema.index({ eventId: 1, status: 1 });
+EventCredentialSchema.index({ eventId: 1, status: 1, usagePolicy: 1 });
 EventCredentialSchema.index({ eventId: 1, credentialType: 1 });
 EventCredentialSchema.index({ eventId: 1, 'holder.email': 1 });
 EventCredentialSchema.index({ eventId: 1, 'holder.teamId': 1 });
 EventCredentialSchema.index({ eventId: 1, 'asset.storagePath': 1, _id: 1 });
 EventCredentialSchema.index({ eventId: 1, status: 1, sequenceNumber: 1 });
 EventCredentialSchema.index({ eventId: 1, _id: 1 });
+
+// Render status, worker leasing, and crash recovery indexes
+EventCredentialSchema.index({ eventId: 1, renderStatus: 1, sequenceNumber: 1 });
+EventCredentialSchema.index({ eventId: 1, renderStatus: 1, renderingLockExpiresAt: 1 });
+EventCredentialSchema.index({ renderingLockExpiresAt: 1 }, { sparse: true });
+EventCredentialSchema.index({ eventId: 1, renderStatus: 1, _id: 1 });
 
 export const EventCredentialModel: Model<IEventCredentialDocument> =
   mongoose.models.EventCredential ||

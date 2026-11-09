@@ -194,6 +194,7 @@ const EventJobSchema = new Schema<IEventJobDocument>(
 // Indexes for high-throughput lookup and queue monitoring
 EventJobSchema.index({ eventId: 1, createdAt: -1 });
 EventJobSchema.index({ status: 1, createdAt: 1 });
+EventJobSchema.index({ eventId: 1, jobType: 1, status: 1, createdAt: -1 });
 EventJobSchema.index({ status: 1, lockExpiresAt: 1, nextRunAt: 1, createdAt: 1 });
 
 export const EventJobModel: Model<IEventJobDocument> =

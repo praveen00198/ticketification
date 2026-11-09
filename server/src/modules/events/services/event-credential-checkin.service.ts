@@ -25,6 +25,7 @@ import {
   IEventCredentialDocument,
 } from '../../../db/mongo/models/event-credential.model';
 import {
+  EventCredentialCheckinModel,
   IEventCredentialCheckinDocument,
 } from '../../../db/mongo/models/event-credential-checkin.model';
 import {
@@ -38,6 +39,7 @@ export interface CheckinInputOptions {
   gate?: string;
   workerName?: string;
   notes?: string;
+  idempotencyKey?: string;
 }
 
 export interface CheckinResult {
@@ -56,6 +58,8 @@ export interface CheckinResult {
   firstCheckedInAt?: Date | null;
   lastCheckedInAt?: Date | null;
   checkInCount?: number;
+  isReplay?: boolean;
+  acknowledged?: boolean;
 }
 
 export class EventCredentialCheckinService {
@@ -159,6 +163,39 @@ export class EventCredentialCheckinService {
     }
 
     const gate = (input.gate || 'Main Gate').trim();
+    const idempotencyKey = input.idempotencyKey?.trim() || null;
+
+    // 0. Idempotency replay check
+    if (idempotencyKey) {
+      const existingLog = await EventCredentialCheckinModel.findOne({
+        eventId: new mongoose.Types.ObjectId(eventId),
+        idempotencyKey,
+      }).lean();
+
+      if (existingLog) {
+        if (existingLog.scanStatus === 'SUCCESS') {
+          return {
+            success: true,
+            code: existingLog.usagePolicy === 'SINGLE_USE' ? 'CHECKED_IN' : 'VALID_REUSABLE',
+            message: 'Check-in successful (Idempotent replay). Welcome!',
+            checkin: existingLog,
+            firstCheckedInAt: existingLog.scannedAt,
+            lastCheckedInAt: existingLog.scannedAt,
+            isReplay: true,
+            acknowledged: true,
+          };
+        } else {
+          return {
+            success: false,
+            code: 'ALREADY_CHECKED_IN',
+            message: existingLog.notes || 'Credential already processed.',
+            checkin: existingLog,
+            isReplay: true,
+            acknowledged: true,
+          };
+        }
+      }
+    }
 
     // 1. Resolve credential by 64-char token or mongo ID
     let credential: IEventCredentialDocument | null = null;
@@ -173,6 +210,7 @@ export class EventCredentialCheckinService {
         success: false,
         code: 'INVALID_TOKEN',
         message: 'Invalid credential token or pass belongs to another event',
+        acknowledged: true,
       };
     }
 
@@ -196,6 +234,7 @@ export class EventCredentialCheckinService {
         gate,
         holderSnapshot,
         notes: `Revocation Reason: ${credential.revokedReason || 'Not specified'}`,
+        idempotencyKey,
       });
 
       return {
@@ -203,6 +242,7 @@ export class EventCredentialCheckinService {
         code: 'CREDENTIAL_REVOKED',
         message: `Credential was revoked: ${credential.revokedReason || 'Revoked by organizer'}`,
         credential: this.sanitizeCredential(credential),
+        acknowledged: true,
       };
     }
 
@@ -220,6 +260,7 @@ export class EventCredentialCheckinService {
         gate,
         holderSnapshot,
         notes: 'Pass has expired',
+        idempotencyKey,
       });
 
       return {
@@ -227,6 +268,7 @@ export class EventCredentialCheckinService {
         code: 'CREDENTIAL_EXPIRED',
         message: 'Credential has expired and is no longer valid for admission',
         credential: this.sanitizeCredential(credential),
+        acknowledged: true,
       };
     }
 
@@ -250,6 +292,7 @@ export class EventCredentialCheckinService {
           gate,
           holderSnapshot,
           notes: `Attempted re-entry at ${gate}`,
+          idempotencyKey,
         });
 
         return {
@@ -260,6 +303,7 @@ export class EventCredentialCheckinService {
           firstCheckedInAt: credential.firstCheckedInAt,
           lastCheckedInAt: credential.lastCheckedInAt,
           checkInCount: credential.checkInCount,
+          acknowledged: true,
         };
       }
 
@@ -284,6 +328,7 @@ export class EventCredentialCheckinService {
           gate,
           holderSnapshot,
           notes: 'Concurrent scan collision detected',
+          idempotencyKey,
         });
 
         return {
@@ -294,6 +339,7 @@ export class EventCredentialCheckinService {
           firstCheckedInAt: refreshed?.firstCheckedInAt,
           lastCheckedInAt: refreshed?.lastCheckedInAt,
           checkInCount: refreshed?.checkInCount,
+          acknowledged: true,
         };
       }
 
@@ -310,6 +356,7 @@ export class EventCredentialCheckinService {
         gate,
         holderSnapshot,
         notes: input.notes || null,
+        idempotencyKey,
       });
 
       return {
@@ -321,6 +368,7 @@ export class EventCredentialCheckinService {
         firstCheckedInAt: updated.firstCheckedInAt,
         lastCheckedInAt: updated.lastCheckedInAt,
         checkInCount: updated.checkInCount,
+        acknowledged: true,
       };
     }
 
@@ -337,6 +385,7 @@ export class EventCredentialCheckinService {
           code: 'WORKER_NAME_REQUIRED',
           message: 'Unassigned worker pass requires crew member name assignment before admission',
           credential: this.sanitizeCredential(credential),
+          acknowledged: true,
         };
       }
 
@@ -369,6 +418,7 @@ export class EventCredentialCheckinService {
         gate,
         holderSnapshot: updatedSnapshot,
         notes: input.notes || `Reusable entry #${updated.checkInCount}`,
+        idempotencyKey,
       });
 
       return {
@@ -380,6 +430,7 @@ export class EventCredentialCheckinService {
         firstCheckedInAt: updated.firstCheckedInAt,
         lastCheckedInAt: updated.lastCheckedInAt,
         checkInCount: updated.checkInCount,
+        acknowledged: true,
       };
     }
 

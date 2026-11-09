@@ -4,6 +4,18 @@ import config from '../../../config/env';
 import { supabaseStorageAdmin } from '../../../config/supabase';
 import { StorageError } from '../../../middlewares/error.middleware';
 
+export interface StorageObjectMetadata {
+  name: string;
+  id?: string;
+  sizeBytes: number;
+  mimeType?: string;
+  createdAt: string;
+  updatedAt?: string;
+  etag?: string;
+  storagePath: string;
+  publicUrl: string;
+}
+
 export class SupabaseStorageService {
   private bucket: string;
   private bucketEnsured = false;
@@ -48,6 +60,67 @@ export class SupabaseStorageService {
     return {
       eventId: match[1],
       filename: match[2],
+    };
+  }
+
+  /**
+   * Normalizes any input storage path or URL into a clean canonical bucket-relative storage path.
+   * Strips leading slashes, full public/signed URL prefixes, and bucket prefixes.
+   */
+  public normalizeStoragePath(storagePath: string): string {
+    if (!storagePath) return '';
+    let clean = (storagePath || '').trim().replace(/^\/+/, '');
+
+    // Strip full public/signed URL prefixes if passed a full CDN URL
+    if (clean.startsWith('http://') || clean.startsWith('https://')) {
+      const publicMarker = `/storage/v1/object/public/${this.bucket}/`;
+      const signedMarker = `/storage/v1/object/sign/${this.bucket}/`;
+      const pIdx = clean.indexOf(publicMarker);
+      if (pIdx !== -1) {
+        clean = clean.substring(pIdx + publicMarker.length);
+      } else {
+        const sIdx = clean.indexOf(signedMarker);
+        if (sIdx !== -1) {
+          clean = clean.substring(sIdx + signedMarker.length).split('?')[0];
+        } else {
+          try {
+            const urlObj = new URL(clean);
+            clean = urlObj.pathname.replace(/^\/+/, '');
+          } catch {
+            // Keep clean as is
+          }
+        }
+      }
+    }
+
+    // Strip bucket prefix if present
+    if (clean.startsWith(`${this.bucket}/`)) {
+      clean = clean.substring(this.bucket.length + 1);
+    }
+
+    return clean.replace(/^\/+|\/+$/g, '');
+  }
+
+  /**
+   * Constructs the canonical credential storage path:
+   * events/{eventId}/credentials/{credentialId}.png
+   */
+  public buildCredentialStoragePath(eventId: string, credentialId: string): string {
+    const cleanEventId = (eventId || '').trim().replace(/^\/+|\/+$/g, '');
+    const cleanCredId = (credentialId || '').trim().replace(/^\/+|\/+$/g, '').replace(/\.png$/i, '');
+    return `events/${cleanEventId}/credentials/${cleanCredId}.png`;
+  }
+
+  /**
+   * Parses a canonical credential storage path into eventId and credentialId.
+   */
+  public parseCredentialStoragePath(storagePath: string): { eventId: string; credentialId: string } | null {
+    const clean = this.normalizeStoragePath(storagePath);
+    const match = clean.match(/^events\/([^/]+)\/credentials\/([^/]+)\.png$/i);
+    if (!match) return null;
+    return {
+      eventId: match[1],
+      credentialId: match[2],
     };
   }
 
@@ -633,6 +706,181 @@ export class SupabaseStorageService {
     } catch (err: any) {
       console.warn('[SupabaseStorageService] deleteFiles exception:', err?.message);
       return { deletedCount: 0, errors: [err?.message] };
+    }
+  }
+
+  /**
+   * Checks whether an object exists in Supabase Storage at the specified path without downloading its content.
+   * Performs an HTTP HEAD request via Supabase SDK exists() with listFolder fallback.
+   * Returns true if object exists, false if 404/not found or storage unconfigured.
+   */
+  public async checkObjectExists(storagePath: string): Promise<boolean> {
+    if (!this.isConfigured() || !this.client) {
+      return false;
+    }
+
+    const cleanPath = this.normalizeStoragePath(storagePath);
+    if (!cleanPath) return false;
+
+    try {
+      await this.ensureBucket();
+      const storageFrom = this.client.storage.from(this.bucket);
+
+      // 1. Primary: Native SDK exists() (HTTP HEAD request, 0 body bytes)
+      if (typeof storageFrom.exists === 'function') {
+        const { data, error } = await storageFrom.exists(cleanPath);
+        if (data === true) {
+          return true;
+        }
+        if (error) {
+          const status =
+            (error as any).status ||
+            (error as any).statusCode ||
+            (error as any).originalError?.status;
+          if (status === 404 || status === 400 || status === '404' || status === '400') {
+            return false;
+          }
+          if (status && Number(status) >= 500) {
+            throw new StorageError(
+              `Supabase Storage server error (${status}) during existence check for ${cleanPath}: ${error.message}`
+            );
+          }
+        }
+        return false;
+      }
+
+      // 2. Secondary fallback: SDK info() (GET /object/info metadata)
+      if (typeof storageFrom.info === 'function') {
+        const { data, error } = await storageFrom.info(cleanPath);
+        if (data && !error) {
+          return true;
+        }
+        if (error) {
+          const status =
+            (error as any).status ||
+            (error as any).statusCode ||
+            (error as any).originalError?.status;
+          if (
+            status === 404 ||
+            status === 400 ||
+            status === '404' ||
+            status === '400' ||
+            error.message?.includes('not found')
+          ) {
+            return false;
+          }
+          if (status && Number(status) >= 500) {
+            throw new StorageError(
+              `Supabase Storage server error (${status}) during info check for ${cleanPath}: ${error.message}`
+            );
+          }
+        }
+        return false;
+      }
+
+      // 3. Tertiary fallback: Check folder listing
+      const lastSlash = cleanPath.lastIndexOf('/');
+      const folder = lastSlash >= 0 ? cleanPath.substring(0, lastSlash) : '';
+      const filename = lastSlash >= 0 ? cleanPath.substring(lastSlash + 1) : cleanPath;
+      const items = await this.listFolder(folder, { limit: 100 });
+      return items.some((item) => item.name === filename);
+    } catch (err: any) {
+      if (err instanceof StorageError) {
+        throw err;
+      }
+      const status =
+        err?.status || err?.statusCode || (err?.originalError as any)?.status;
+      if (status === 404 || status === 400 || status === '404' || status === '400') {
+        return false;
+      }
+      const msg = err?.message || String(err);
+      if (msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('nosuchkey')) {
+        return false;
+      }
+      console.warn(`[SupabaseStorageService] checkObjectExists warning for (${cleanPath}):`, msg);
+      return false;
+    }
+  }
+
+  /**
+   * Retrieves metadata for an object in Supabase Storage without downloading its content.
+   * Returns null if object does not exist or storage is unconfigured.
+   */
+  public async getObjectMetadata(storagePath: string): Promise<StorageObjectMetadata | null> {
+    if (!this.isConfigured() || !this.client) {
+      return null;
+    }
+
+    const cleanPath = this.normalizeStoragePath(storagePath);
+    if (!cleanPath) return null;
+
+    try {
+      await this.ensureBucket();
+      const storageFrom = this.client.storage.from(this.bucket);
+
+      if (typeof storageFrom.info === 'function') {
+        const { data, error } = await storageFrom.info(cleanPath);
+        if (error) {
+          const status =
+            (error as any).status ||
+            (error as any).statusCode ||
+            (error as any).originalError?.status;
+          if (
+            status === 404 ||
+            status === 400 ||
+            status === '404' ||
+            status === '400' ||
+            error.message?.includes('not found')
+          ) {
+            return null;
+          }
+          throw new StorageError(
+            `Failed to retrieve storage object metadata (${cleanPath}): ${error.message}`
+          );
+        }
+        if (data) {
+          const publicUrl = this.getPublicUrl(cleanPath) || '';
+          return {
+            name: data.name,
+            id: data.id,
+            sizeBytes: data.size || 0,
+            mimeType: (data as any).mimetype || (data as any).mimeType || 'image/png',
+            createdAt: data.createdAt || (data as any).created_at || new Date().toISOString(),
+            updatedAt: data.updatedAt || (data as any).updated_at,
+            etag: (data as any).etag,
+            storagePath: cleanPath,
+            publicUrl,
+          };
+        }
+      }
+
+      // Fallback: listFolder
+      const lastSlash = cleanPath.lastIndexOf('/');
+      const folder = lastSlash >= 0 ? cleanPath.substring(0, lastSlash) : '';
+      const filename = lastSlash >= 0 ? cleanPath.substring(lastSlash + 1) : cleanPath;
+      const items = await this.listFolder(folder, { limit: 100 });
+      const match = items.find((item) => item.name === filename);
+      if (!match) return null;
+
+      return {
+        name: match.name,
+        id: match.id,
+        sizeBytes: match.sizeBytes,
+        mimeType: 'image/png',
+        createdAt: match.createdAt,
+        storagePath: cleanPath,
+        publicUrl: this.getPublicUrl(cleanPath) || '',
+      };
+    } catch (err: any) {
+      if (err instanceof StorageError) throw err;
+      const status =
+        err?.status || err?.statusCode || (err?.originalError as any)?.status;
+      if (status === 404 || status === 400 || status === '404' || status === '400') {
+        return null;
+      }
+      throw new StorageError(
+        `Error retrieving Supabase Storage object metadata (${cleanPath}): ${err?.message || err}`
+      );
     }
   }
 }

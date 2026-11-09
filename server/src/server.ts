@@ -73,7 +73,7 @@ async function startServer() {
 
   // Recover abandoned background jobs and start worker polling loop
   try {
-    const recoveryResult = await eventJobQueueService.recoverAbandonedJobs();
+    const recoveryResult = await eventJobQueueService.recoverAbandonedJobs(true);
     if (recoveryResult.recovered > 0 || recoveryResult.failed > 0) {
       console.log(`[JobQueue] Recovered ${recoveryResult.recovered} abandoned jobs, failed ${recoveryResult.failed} exhausted jobs.`);
     }

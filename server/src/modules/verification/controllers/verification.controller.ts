@@ -30,6 +30,8 @@ export class VerificationController {
       const token = validateVerificationToken(req.body.token);
       const eventId = validateOptionalEventId(req.body.eventId);
       const workerName = validateOptionalWorkerName(req.body.workerName);
+      const idempotencyKey = typeof req.body.idempotencyKey === 'string' ? req.body.idempotencyKey.trim() : undefined;
+      const gate = typeof req.body.gate === 'string' ? req.body.gate.trim() : undefined;
       const verifiedBy = req.user ? req.user.email : 'Admin Scanner';
       const callerUserId = req.user?.id || (req.user as any)?._id?.toString();
       const callerPlatformRole = req.user?.role;
@@ -41,6 +43,8 @@ export class VerificationController {
         verifiedBy,
         callerUserId,
         callerPlatformRole,
+        idempotencyKey,
+        gate,
       });
 
       res.status(200).json({
@@ -58,6 +62,8 @@ export class VerificationController {
       const token = validateVerificationToken(rawToken);
       const eventId = validateOptionalEventId(req.body.eventId || req.query.eventId);
       const workerName = validateOptionalWorkerName(req.body.workerName);
+      const idempotencyKey = typeof req.body.idempotencyKey === 'string' ? req.body.idempotencyKey.trim() : undefined;
+      const gate = typeof req.body.gate === 'string' ? req.body.gate.trim() : undefined;
       const verifiedBy = req.user ? req.user.email : 'Admin Scanner';
       const callerUserId = req.user?.id || (req.user as any)?._id?.toString();
       const callerPlatformRole = req.user?.role;
@@ -69,6 +75,8 @@ export class VerificationController {
         verifiedBy,
         callerUserId,
         callerPlatformRole,
+        idempotencyKey,
+        gate,
       });
 
       res.status(200).json({
@@ -78,6 +86,34 @@ export class VerificationController {
     } catch (err) {
       next(err);
     }
+  }
+
+  async syncBatch(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const { eventId, deviceScannerId, scans } = req.body;
+      const callerUserId = req.user?.id || (req.user as any)?._id?.toString();
+      const callerPlatformRole = req.user?.role;
+
+      const result = await verificationService.syncBatch({
+        eventId,
+        deviceScannerId,
+        scans,
+        callerUserId,
+        callerPlatformRole,
+      });
+
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  healthCheck(_req: Request, res: Response) {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.status(200).json({
+      status: 'OK',
+      timestamp: new Date().toISOString(),
+    });
   }
 
   async getRecentCheckins(req: AuthenticatedRequest, res: Response, next: NextFunction) {

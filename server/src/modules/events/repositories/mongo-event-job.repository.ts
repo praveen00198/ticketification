@@ -8,12 +8,37 @@ import {
   JobType,
 } from '../../../db/mongo/models/event-job.model';
 
+export type EventJobType = JobType;
+export type EventJobDocument = IEventJobDocument;
+
 export class MongoEventJobRepository {
   /**
    * Create and persist a new background job.
    */
   async createJob(data: Partial<IEventJobDocument>): Promise<IEventJobDocument> {
     return EventJobModel.create(data);
+  }
+
+  /**
+   * Find an active (QUEUED or PROCESSING) job for an event and job type.
+   */
+  async findActiveJob(
+    eventId: string,
+    jobType: JobType | string
+  ): Promise<IEventJobDocument | null> {
+    if (!mongoose.Types.ObjectId.isValid(eventId)) return null;
+
+    if (mongoose.connection.readyState !== 1) {
+      return null;
+    }
+
+    return EventJobModel.findOne({
+      eventId: new mongoose.Types.ObjectId(eventId),
+      jobType: jobType as JobType,
+      status: { $in: ['QUEUED', 'PROCESSING'] },
+    })
+      .sort({ createdAt: -1 })
+      .exec() as Promise<IEventJobDocument | null>;
   }
 
   /**
@@ -504,30 +529,48 @@ export class MongoEventJobRepository {
   /**
    * Recover abandoned jobs (e.g. after server restart or worker crash).
    * Either resets eligible jobs to QUEUED or marks exhausted jobs FAILED.
+   * When forceStartupReset is true (or leaseGraceMs < 0), reclaims all PROCESSING jobs
+   * immediately without imposing a 10-minute lockout.
    */
-  async recoverAbandonedJobs(leaseGraceMs: number = 0): Promise<{ recovered: number; failed: number }> {
+  async recoverAbandonedJobs(
+    leaseGraceMsOrForceReset: number | boolean = 0,
+    forceStartupReset: boolean = false
+  ): Promise<{ recovered: number; failed: number }> {
     if (mongoose.connection.readyState !== 1) {
       return { recovered: 0, failed: 0 };
     }
 
-    const now = new Date(Date.now() - leaseGraceMs);
+    const isBool = typeof leaseGraceMsOrForceReset === 'boolean';
+    const effectiveForceReset = isBool ? leaseGraceMsOrForceReset : forceStartupReset;
+    const effectiveGraceMs = isBool ? 0 : leaseGraceMsOrForceReset;
 
-    const abandonedJobs = await EventJobModel.find({
+    const isStartupReset = effectiveForceReset || effectiveGraceMs < 0;
+    const now = new Date(Date.now() - (isStartupReset ? 0 : effectiveGraceMs));
+
+    const query: any = {
       status: 'PROCESSING',
-      lockExpiresAt: { $lt: now },
-    }).exec();
+    };
+    if (!isStartupReset) {
+      query.lockExpiresAt = { $lt: now };
+    }
+
+    const abandonedJobs = await EventJobModel.find(query).exec();
 
     let recovered = 0;
     let failed = 0;
 
     for (const job of abandonedJobs) {
       if (job.attempts >= job.maxAttempts) {
+        const updateFilter: any = {
+          _id: job._id,
+          status: 'PROCESSING',
+        };
+        if (!isStartupReset) {
+          updateFilter.lockExpiresAt = { $lt: now };
+        }
+
         const failedJob = await EventJobModel.findOneAndUpdate(
-          {
-            _id: job._id,
-            status: 'PROCESSING',
-            lockExpiresAt: { $lt: now },
-          },
+          updateFilter,
           {
             $set: {
               status: 'FAILED',
@@ -542,12 +585,16 @@ export class MongoEventJobRepository {
         ).exec();
         if (failedJob) failed++;
       } else {
+        const updateFilter: any = {
+          _id: job._id,
+          status: 'PROCESSING',
+        };
+        if (!isStartupReset) {
+          updateFilter.lockExpiresAt = { $lt: now };
+        }
+
         const recoveredJob = await EventJobModel.findOneAndUpdate(
-          {
-            _id: job._id,
-            status: 'PROCESSING',
-            lockExpiresAt: { $lt: now },
-          },
+          updateFilter,
           {
             $set: {
               status: 'QUEUED',

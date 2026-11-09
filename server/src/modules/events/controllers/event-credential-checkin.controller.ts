@@ -21,13 +21,13 @@ export class EventCredentialCheckinController {
   ): Promise<void> => {
     try {
       const { eventId } = req.params;
-      const { token, gate, workerName, notes } = req.body;
+      const { token, gate, workerName, notes, idempotencyKey } = req.body;
       const callerUserId = req.user?.id || (req.user as any)?._id?.toString();
       const callerPlatformRole = req.user?.role;
 
       const result = await this.checkinService.verifyAndCheckIn(
         eventId,
-        { token, gate, workerName, notes },
+        { token, gate, workerName, notes, idempotencyKey },
         callerUserId,
         callerPlatformRole
       );

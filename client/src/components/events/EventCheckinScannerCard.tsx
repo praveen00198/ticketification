@@ -21,6 +21,7 @@ import {
   CredentialCheckinLog,
   CredentialCheckinStats,
 } from '../../api/events';
+import { playScannerChime } from '../../utils/scannerFeedback';
 
 interface EventCheckinScannerCardProps {
   eventId: string;
@@ -50,43 +51,10 @@ export const EventCheckinScannerCard: React.FC<EventCheckinScannerCardProps> = (
 
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Play synthetic audio chimes using Web Audio API
+  // Play synthetic audio chimes using shared AudioContext singleton
   const playChime = (type: 'SUCCESS' | 'ERROR' | 'PROMPT') => {
     if (!audioFeedback) return;
-    try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-
-      if (type === 'SUCCESS') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
-        osc.frequency.setValueAtTime(880.0, audioCtx.currentTime + 0.1); // A5
-        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.3);
-      } else if (type === 'ERROR') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(220.0, audioCtx.currentTime); // A3
-        osc.frequency.setValueAtTime(164.81, audioCtx.currentTime + 0.1); // E3
-        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.35);
-      } else {
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(440.0, audioCtx.currentTime); // A4
-        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.2);
-      }
-    } catch {
-      // Audio context might be restricted before user gesture
-    }
+    playScannerChime(type);
   };
 
   const loadData = async (silent = false) => {

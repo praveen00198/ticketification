@@ -122,6 +122,16 @@ describe('Consolidated Production Hardening Regression Suite', () => {
     } as any);
 
     // Mock Job Repo in-memory
+    jest.spyOn(jobRepo, 'findActiveJob').mockImplementation(async (eId: string, jType: any) => {
+      const active = Array.from(inMemoryJobs.values()).find(
+        (j) =>
+          j.eventId.toString() === eId.toString() &&
+          j.jobType === jType &&
+          ['QUEUED', 'PROCESSING'].includes(j.status)
+      );
+      return active ? (active as any) : null;
+    });
+
     jest.spyOn(jobRepo, 'createJob').mockImplementation(async (data: any) => {
       const id = new mongoose.Types.ObjectId();
       const doc = {
@@ -770,16 +780,23 @@ describe('Consolidated Production Hardening Regression Suite', () => {
       const eventWithoutDate = inMemoryEvents.get(eventId);
       delete eventWithoutDate.schedule.startAt;
 
-      jest.spyOn(credentialRepo, 'countUnrenderedByEvent').mockResolvedValue(1);
-      jest.spyOn(credentialRepo, 'findUnrenderedBatch').mockResolvedValue([
-        {
-          _id: new mongoose.Types.ObjectId(),
-          formattedId: 'TBA-00001',
-          verificationToken: 'token-tba-123',
-          holder: { name: 'Date Check Attendee' },
-          save: jest.fn().mockResolvedValue(true),
-        } as any,
-      ]);
+      const mockCred1 = {
+        _id: new mongoose.Types.ObjectId(),
+        formattedId: 'TBA-00001',
+        verificationToken: 'token-tba-123',
+        holder: { name: 'Date Check Attendee' },
+        save: jest.fn().mockResolvedValue(true),
+      } as any;
+      let claimed1 = false;
+      jest.spyOn(credentialRepo, 'countUnrenderedByEvent').mockImplementation(async () => (claimed1 ? 0 : 1));
+      jest.spyOn(credentialRepo, 'claimUnrenderedTicketLease').mockImplementation(async () => {
+        if (!claimed1) {
+          claimed1 = true;
+          return mockCred1;
+        }
+        return null;
+      });
+      jest.spyOn(credentialRepo, 'findUnrenderedBatch').mockResolvedValue([mockCred1]);
 
       let renderedDateParam: string | null = null;
       jest.spyOn(renderingService, 'renderAndUploadAsset').mockImplementation(async (_eId, _cId, _tmpl, renderData) => {
@@ -801,16 +818,23 @@ describe('Consolidated Production Hardening Regression Suite', () => {
       const testDate = new Date('2027-05-15T10:00:00Z');
       eventWithDate.schedule.startAt = testDate;
 
-      jest.spyOn(credentialRepo, 'countUnrenderedByEvent').mockResolvedValue(1);
-      jest.spyOn(credentialRepo, 'findUnrenderedBatch').mockResolvedValue([
-        {
-          _id: new mongoose.Types.ObjectId(),
-          formattedId: 'DATE-00001',
-          verificationToken: 'token-date-123',
-          holder: { name: 'Real Date Attendee' },
-          save: jest.fn().mockResolvedValue(true),
-        } as any,
-      ]);
+      const mockCred2 = {
+        _id: new mongoose.Types.ObjectId(),
+        formattedId: 'DATE-00001',
+        verificationToken: 'token-date-123',
+        holder: { name: 'Real Date Attendee' },
+        save: jest.fn().mockResolvedValue(true),
+      } as any;
+      let claimed2 = false;
+      jest.spyOn(credentialRepo, 'countUnrenderedByEvent').mockImplementation(async () => (claimed2 ? 0 : 1));
+      jest.spyOn(credentialRepo, 'claimUnrenderedTicketLease').mockImplementation(async () => {
+        if (!claimed2) {
+          claimed2 = true;
+          return mockCred2;
+        }
+        return null;
+      });
+      jest.spyOn(credentialRepo, 'findUnrenderedBatch').mockResolvedValue([mockCred2]);
 
       let renderedDateParam: string | null = null;
       jest.spyOn(renderingService, 'renderAndUploadAsset').mockImplementation(async (_eId, _cId, _tmpl, renderData) => {

@@ -2,7 +2,6 @@ import { initFonts } from '../../../utils/font-initializer';
 // Initialize Fontconfig with bundled Devanagari fonts before Sharp loads
 initFonts();
 
-import puppeteer, { Browser, Page } from 'puppeteer';
 import sharp from 'sharp';
 import path from 'path';
 import fs from 'fs';
@@ -549,50 +548,12 @@ export class TicketImageService {
   }
 
   /**
-   * Launch a shared Puppeteer browser instance with headless flags.
-   * Kept for backward compatibility; Sharp native engine is the primary production path.
-   */
-  async launchBrowser(): Promise<Browser> {
-    const launchArgs = [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-      '--no-first-run',
-      '--no-zygote',
-      '--single-process',
-      '--disable-extensions',
-    ];
-
-    try {
-      return await puppeteer.launch({
-        headless: true,
-        args: launchArgs,
-      });
-    } catch (err: any) {
-      try {
-        return await puppeteer.launch({
-          headless: 'shell',
-          args: launchArgs,
-        });
-      } catch (fallbackErr: any) {
-        throw new AppError(
-          `Headless Chromium browser process failed to launch: ${fallbackErr?.message || err?.message}. Sharp native engine should be used.`,
-          500,
-          undefined,
-          'BROWSER_LAUNCH_ERROR'
-        );
-      }
-    }
-  }
-
-  /**
    * Converts SVG markup to a genuine PNG image buffer using sharp native rasterization.
    * If customTemplateBuffer is provided, composites the SVG onto that template.
    * Otherwise, rasterizes the standalone Default Global Ticket SVG directly.
    * Validates that output is a valid PNG binary with standard PNG header (0x89504E47).
    */
-  async svgToPng(svg: string, sharedBrowser?: Browser, customTemplateBuffer?: Buffer | null): Promise<Buffer> {
+  async svgToPng(svg: string, sharedBrowser?: any, customTemplateBuffer?: Buffer | null): Promise<Buffer> {
     try {
       if (customTemplateBuffer) {
         logMemory('sharp_composite_before');
@@ -634,32 +595,14 @@ export class TicketImageService {
   }
 
   /**
-   * Fast rendering of SVG onto a pre-existing Puppeteer Page instance (legacy fallback).
-   */
-  async renderSvgOnPage(svg: string, page: Page): Promise<Buffer> {
-    const pngBuffer = await sharp(Buffer.from(svg)).png().toBuffer();
-    if (isPngBuffer(pngBuffer)) {
-      return pngBuffer;
-    }
-
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>* { margin: 0; padding: 0; box-sizing: border-box; } body { width: 1620px; height: 2025px; overflow: hidden; background-color: #000; }</style></head><body>${svg}</body></html>`;
-    await page.setContent(html, { waitUntil: 'domcontentloaded' });
-    const screenshot = await page.screenshot({ type: 'png', fullPage: true });
-    const fallbackBuffer = Buffer.from(screenshot);
-    if (!isPngBuffer(fallbackBuffer)) {
-      throw new Error('Rendered page screenshot failed PNG binary verification');
-    }
-    return fallbackBuffer;
-  }
-
-  /**
    * Generate an in-memory high-resolution PNG ticket asset.
+   * Pure binary output without Base64 allocations to prevent memory exhaustion on 512MB RAM.
    */
   async generateTicketImage(
     data: TicketImageData,
-    sharedBrowser?: Browser,
+    sharedBrowser?: any,
     customTemplateBuffer?: Buffer | null
-  ): Promise<{ pngBuffer: Buffer; svg: string; imageBase64: string; fileName: string }> {
+  ): Promise<{ pngBuffer: Buffer; svg: string; fileName: string }> {
     this.validateTicketData(data);
 
     // If verificationToken is provided but qrCodeDataUrl is missing, generate it dynamically
@@ -680,17 +623,17 @@ export class TicketImageService {
     const isCustom = !!customTemplateBuffer;
     const svg = this.buildSvg(data, { isCustomTemplate: isCustom });
     const pngBuffer = await this.svgToPng(svg, sharedBrowser, customTemplateBuffer);
-    const imageBase64 = `data:image/png;base64,${pngBuffer.toString('base64')}`;
 
-    return { pngBuffer, svg, imageBase64, fileName };
+    return { pngBuffer, svg, fileName };
   }
 
   /**
    * Batch render multiple tickets with high-speed native sharp rendering.
    * Eliminates browser process crashes and memory exhaustion in cloud containers.
+   * Strictly enforces sequential processing (concurrency = 1) for 512MB container stability.
    *
    * @param items - Ticket data items to render
-   * @param batchConcurrency - Max parallel renders per batch (bounded 1-2 for 512MB containers)
+   * @param batchConcurrency - Max parallel renders per batch (enforced = 1)
    * @param externalTemplateBuffer - Optional request-local template buffer. When provided and
    *   distinct from the default template, this buffer is used for composition.
    */
@@ -701,7 +644,8 @@ export class TicketImageService {
   ): Promise<Array<{ ticketId: string; pngBuffer: Buffer; fileName: string }>> {
     if (!Array.isArray(items) || items.length === 0) return [];
 
-    const concurrency = Math.max(1, Math.min(batchConcurrency, 2));
+    // Strictly enforce sequential processing (concurrency = 1)
+    const concurrency = 1;
 
     // If externalTemplateBuffer is provided and is NOT the default template, treat as custom
     const isCustom = !!(
@@ -712,36 +656,31 @@ export class TicketImageService {
 
     const results: Array<{ ticketId: string; pngBuffer: Buffer; fileName: string }> = [];
 
-    for (let i = 0; i < items.length; i += concurrency) {
-      const slice = items.slice(i, i + concurrency);
-      const batchResults = await Promise.all(
-        slice.map(async (item) => {
-          this.validateTicketData(item);
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      this.validateTicketData(item);
 
-          if (!item.qrCodeDataUrl && item.verificationToken) {
-            const verifyUrl = `https://ticketification.app/verify/${item.verificationToken.trim()}`;
-            item.qrCodeDataUrl = await QRCode.toDataURL(verifyUrl, {
-              width: 380,
-              margin: 1,
-              color: {
-                dark: '#0F172A',
-                light: '#FFFFFF',
-              },
-              errorCorrectionLevel: 'H',
-            });
-          }
+      if (!item.qrCodeDataUrl && item.verificationToken) {
+        const verifyUrl = `https://ticketification.app/verify/${item.verificationToken.trim()}`;
+        item.qrCodeDataUrl = await QRCode.toDataURL(verifyUrl, {
+          width: 380,
+          margin: 1,
+          color: {
+            dark: '#0F172A',
+            light: '#FFFFFF',
+          },
+          errorCorrectionLevel: 'H',
+        });
+      }
 
-          const fileName = `ticket-${item.ticketId}.png`;
-          const svg = this.buildSvg(item, { isCustomTemplate: isCustom });
-          const pngBuffer = await this.svgToPng(svg, undefined, customTemplate);
-          return {
-            ticketId: item.ticketId,
-            pngBuffer,
-            fileName,
-          };
-        })
-      );
-      results.push(...batchResults);
+      const fileName = `ticket-${item.ticketId}.png`;
+      const svg = this.buildSvg(item, { isCustomTemplate: isCustom });
+      const pngBuffer = await this.svgToPng(svg, undefined, customTemplate);
+      results.push({
+        ticketId: item.ticketId,
+        pngBuffer,
+        fileName,
+      });
     }
 
     return results;
