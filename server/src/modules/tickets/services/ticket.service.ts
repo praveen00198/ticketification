@@ -221,7 +221,7 @@ export class TicketService {
             throw new StorageError(`Rendered ticket failed PNG binary validation for ticket ${displayId}`);
           }
 
-          let pngBuffer: Buffer | null = rendered.pngBuffer;
+          const pngBuffer: Buffer = rendered.pngBuffer;
           rendered = null;
 
           const uploadResult = await this.storageServ.uploadTicketImage(
@@ -229,9 +229,6 @@ export class TicketService {
             pngBuffer,
             'image/png'
           );
-
-          // Explicitly dereference buffer after upload
-          pngBuffer = null;
 
           await EventCredentialModel.updateOne(
             { _id: cred._id },
