@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
 let fontsInitialized = false;
 
@@ -41,8 +42,20 @@ export function initFonts(): string | null {
   // Ensure fonts.conf exists with the exact absolute path to the resolved fonts directory
   const fontsConfPath = path.join(resolvedFontsDir, 'fonts.conf');
   try {
+    const isTest = process.env.NODE_ENV === 'test';
     const winFontsDir = process.env.WINDIR ? path.join(process.env.WINDIR, 'Fonts') : 'C:\\Windows\\Fonts';
-    const winDirXml = process.platform === 'win32' && fs.existsSync(winFontsDir) ? `\n  <dir>${winFontsDir}</dir>` : '';
+    // During tests, do not scan C:\Windows\Fonts if resolvedFontsDir is available to prevent scanning thousands of system fonts
+    const winDirXml = process.platform === 'win32' && !isTest && fs.existsSync(winFontsDir) ? `\n  <dir>${winFontsDir}</dir>` : '';
+
+    const cacheDir = (process.platform === 'win32'
+      ? path.join(os.tmpdir(), 'fonts-cache')
+      : '/tmp/fonts-cache').replace(/\\/g, '/');
+    if (!fs.existsSync(cacheDir)) {
+      try {
+        fs.mkdirSync(cacheDir, { recursive: true });
+      } catch {}
+    }
+
     const fontsConfXml = `<?xml version="1.0"?>
 <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
 <fontconfig>
@@ -50,7 +63,7 @@ export function initFonts(): string | null {
   <dir>/usr/share/fonts</dir>
   <dir>/usr/local/share/fonts</dir>
   <dir>~/.fonts</dir>
-  <cachedir>/tmp/fonts-cache</cachedir>
+  <cachedir>${cacheDir}</cachedir>
   <config></config>
 </fontconfig>
 `;

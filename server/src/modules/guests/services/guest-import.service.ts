@@ -132,8 +132,8 @@ export class GuestImportService {
     return { isMongo: false, event };
   }
 
-  private getUploadDir(): string {
-    const dir = path.resolve(process.cwd(), config.env.uploadDir);
+  public getUploadDir(): string {
+    const dir = path.resolve(process.cwd(), config.env.uploadDir || 'uploads');
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
@@ -144,12 +144,16 @@ export class GuestImportService {
     return path.join(this.getUploadDir(), `staging-${importId}${ext}`);
   }
 
+  private getStagingMetaPath(importId: string): string {
+    return path.join(this.getUploadDir(), `staging-${importId}.meta.json`);
+  }
+
   private findStagingPath(importId: string): string | null {
     const uploadDir = this.getUploadDir();
     const prefix = `staging-${importId}`;
     try {
       const files = fs.readdirSync(uploadDir);
-      const match = files.find((f) => f.startsWith(prefix));
+      const match = files.find((f) => f.startsWith(prefix) && !f.endsWith('.meta.json'));
       if (match) {
         return path.join(uploadDir, match);
       }
@@ -555,6 +559,23 @@ export class GuestImportService {
       cached.defaultCategory = defaultCategory;
     }
 
+    // Persist staging metadata sidecar file for disk recovery across cache evictions
+    try {
+      const metaPath = this.getStagingMetaPath(config.importId);
+      fs.writeFileSync(
+        metaPath,
+        JSON.stringify({
+          columnMapping: config.columnMapping,
+          requiredFields: Array.from(requiredFields),
+          categoryMapping: config.categoryMapping || {},
+          defaultCategory,
+        }),
+        'utf8'
+      );
+    } catch {
+      // non-fatal
+    }
+
     if (!isMongo) {
       // Update guest_imports audit record in PostgreSQL
       await this.importRepo.update(config.importId, {
@@ -637,9 +658,20 @@ export class GuestImportService {
     }
 
     if (isMongo) {
-      columnMapping = cached?.columnMapping || {};
-      requiredFields = new Set<string>((cached?.requiredFields || ['name']).map((f) => f.toLowerCase()));
-      categoryMapping = cached?.categoryMapping || {};
+      let meta: any = null;
+      const metaPath = this.getStagingMetaPath(dto.importId);
+      if (fs.existsSync(metaPath)) {
+        try {
+          meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+        } catch {
+          // ignore
+        }
+      }
+      columnMapping = cached?.columnMapping || meta?.columnMapping || {};
+      requiredFields = new Set<string>(
+        (cached?.requiredFields || meta?.requiredFields || ['name']).map((f: string) => f.toLowerCase())
+      );
+      categoryMapping = cached?.categoryMapping || meta?.categoryMapping || {};
     }
 
     const guestsToInsert: CreateGuestInput[] = [];
@@ -745,63 +777,79 @@ export class GuestImportService {
       const venueStr = (event as any).venue?.city || (event as any).venue?.name || 'Venue TBA';
 
       let insertedCount = 0;
+      const rowErrors: string[] = [];
       for (const row of guestsToInsert) {
-        const seq = await mongoEventCredentialRepository.getNextSequenceNumber(eventId);
-        const seqStr = seq.toString().padStart(5, '0');
-        const formattedId = `${safePrefix}-${seqStr}`;
-        const verificationToken = crypto.randomBytes(32).toString('hex');
-        const slug = (row.name || 'attendee').toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
-        const storagePath = `events/${eventId}/credentials/${slug}-${formattedId}.png`;
+        try {
+          const seq = await mongoEventCredentialRepository.getNextSequenceNumber(eventId);
+          const seqStr = seq.toString().padStart(5, '0');
+          const formattedId = `${safePrefix}-${seqStr}`;
+          const verificationToken = crypto.randomBytes(32).toString('hex');
+          const slug = (row.name || 'attendee').toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
+          const storagePath = `events/${eventId}/credentials/${slug}-${formattedId}.png`;
 
-
-        // Guest import NEVER generates PNG images. All credentials are created with
-        // renderStatus PENDING and rendered independently via a background bulk-render job.
-        // This keeps import lightweight, failure-independent, and memory-safe on 512 MB containers.
-        await EventCredentialModel.create({
-          eventId: new mongoose.Types.ObjectId(eventId),
-          sequenceNumber: seq,
-          formattedId,
-          verificationToken,
-          credentialType: row.category || 'GENERAL',
-          terminology,
-          usagePolicy: 'SINGLE_USE',
-          status: 'ACTIVE',
-          renderStatus: 'PENDING',
-          holder: {
-            name: row.name,
-            email: row.email || undefined,
-            phone: row.phone || undefined,
-            organization: row.organization || undefined,
-            designation: row.designation || undefined,
-            category: row.category || 'GENERAL',
-            isAssigned: true,
-          },
-          asset: {
-            storagePath,
-            publicUrl: null,
-            renderedAt: null,
-            mimeType: 'image/png',
-          },
-          metadata: row.metadata || {},
-          createdBy: creatorObjectId,
-        } as any);
-        insertedCount++;
+          // Guest import NEVER generates PNG images. All credentials are created with
+          // renderStatus PENDING and rendered independently via a background bulk-render job.
+          // This keeps import lightweight, failure-independent, and memory-safe on 512 MB containers.
+          await EventCredentialModel.create({
+            eventId: new mongoose.Types.ObjectId(eventId),
+            sequenceNumber: seq,
+            formattedId,
+            verificationToken,
+            credentialType: row.category || 'GENERAL',
+            terminology,
+            usagePolicy: 'SINGLE_USE',
+            status: 'ACTIVE',
+            renderStatus: 'PENDING',
+            holder: {
+              name: row.name,
+              email: row.email || undefined,
+              phone: row.phone || undefined,
+              organization: row.organization || undefined,
+              designation: row.designation || undefined,
+              category: row.category || 'GENERAL',
+              isAssigned: true,
+            },
+            asset: {
+              storagePath,
+              publicUrl: null,
+              renderedAt: null,
+              mimeType: 'image/png',
+            },
+            metadata: row.metadata || {},
+            createdBy: creatorObjectId,
+          } as any);
+          insertedCount++;
+        } catch (rowErr: any) {
+          console.warn(`[GuestImportService] Failed to insert credential for guest "${row.name}":`, rowErr?.message);
+          skippedCount++;
+          rowErrors.push(`Row for ${row.name || 'attendee'}: ${rowErr?.message || 'Creation failed'}`);
+        }
       }
 
-      // Always enqueue a background bulk render job after import completes.
+      // Always enqueue a background bulk render job after import completes if tickets were inserted.
       // This covers both small (<= 50) and large (> 50) imports consistently.
       // The job is idempotent: if one is already QUEUED or PROCESSING it is reused.
-      try {
-        await eventJobQueueService.enqueueBulkRenderJob(eventId, userId, undefined);
-      } catch (enqueueErr: any) {
-        console.warn('[GuestImportService] Failed to auto-enqueue bulk render job:', (enqueueErr as any)?.message);
+      if (insertedCount > 0) {
+        try {
+          await eventJobQueueService.enqueueBulkRenderJob(eventId, userId, undefined);
+        } catch (enqueueErr: any) {
+          console.warn('[GuestImportService] Failed to auto-enqueue bulk render job:', (enqueueErr as any)?.message);
+        }
       }
 
-      // Clean up temporary disk staging file and in-memory cache
+      // Clean up temporary disk staging file, metadata sidecar, and in-memory cache
       const stagingPath = cached?.filePath || this.findStagingPath(dto.importId);
       if (stagingPath && fs.existsSync(stagingPath)) {
         try {
           fs.unlinkSync(stagingPath);
+        } catch {
+          // ignore
+        }
+      }
+      const metaPath = this.getStagingMetaPath(dto.importId);
+      if (fs.existsSync(metaPath)) {
+        try {
+          fs.unlinkSync(metaPath);
         } catch {
           // ignore
         }
@@ -813,6 +861,7 @@ export class GuestImportService {
         importedCount: insertedCount,
         skippedCount,
         importId: dto.importId,
+        ...(rowErrors.length > 0 ? { errors: rowErrors } : {}),
       };
     }
 
@@ -826,11 +875,19 @@ export class GuestImportService {
       skippedRows: skippedCount,
     });
 
-    // Clean up temporary disk staging file and in-memory cache
+    // Clean up temporary disk staging file, metadata sidecar, and in-memory cache
     const stagingPath = cached?.filePath || this.findStagingPath(dto.importId);
     if (stagingPath && fs.existsSync(stagingPath)) {
       try {
         fs.unlinkSync(stagingPath);
+      } catch {
+        // ignore cleanup error
+      }
+    }
+    const metaPath = this.getStagingMetaPath(dto.importId);
+    if (fs.existsSync(metaPath)) {
+      try {
+        fs.unlinkSync(metaPath);
       } catch {
         // ignore cleanup error
       }

@@ -176,7 +176,7 @@ export class TicketImageService {
   public async generateDefaultTemplateBuffer(): Promise<Buffer> {
     const svg = this.buildDefaultBaseTemplateSvg();
     return sharp(Buffer.from(svg))
-      .png({ compressionLevel: 6 })
+      .png({ compressionLevel: 6, effort: 2 })
       .toBuffer();
   }
 
@@ -216,7 +216,7 @@ export class TicketImageService {
           }
           const normalized = await sharp(rawBuf)
             .resize(1620, 2025)
-            .png({ compressionLevel: 6 })
+            .png({ compressionLevel: 6, effort: 2 })
             .toBuffer();
           return normalized;
         } catch (e) {
@@ -375,20 +375,18 @@ export class TicketImageService {
 
     const safeQrCodeUrl = data.qrCodeDataUrl || '';
 
-    const embeddedFontFace = this.fontBase64
-      ? `@font-face {
-        font-family: 'Noto Sans Devanagari';
-        src: url('data:font/truetype;charset=utf-8;base64,${this.fontBase64}') format('truetype');
-        font-weight: 700;
-        font-style: normal;
-      }
-      @font-face {
-        font-family: 'Noto Sans Devanagari';
-        src: url('data:font/truetype;charset=utf-8;base64,${this.fontBase64}') format('truetype');
-        font-weight: 800;
-        font-style: normal;
-      }`
-      : `@import url('https://fonts.googleapis.com/css2?family=Mukta:wght@700;800&amp;family=Noto+Sans+Devanagari:wght@700;800;900&amp;display=swap');`;
+    const embeddedFontFace = `@font-face {
+      font-family: 'Noto Sans Devanagari';
+      src: local('Noto Sans Devanagari Bold'), local('Noto Sans Devanagari');
+      font-weight: 700;
+      font-style: normal;
+    }
+    @font-face {
+      font-family: 'Noto Sans Devanagari';
+      src: local('Noto Sans Devanagari Bold'), local('Noto Sans Devanagari');
+      font-weight: 800;
+      font-style: normal;
+    }`;
 
     const badgeTextWidth = Math.max(220, safeTicketType.length * 15 + 56);
     const attendeeY = safeTeamName ? 640 : 540;
@@ -559,7 +557,7 @@ export class TicketImageService {
         logMemory('sharp_composite_before');
         const pngBuffer = await sharp(customTemplateBuffer)
           .composite([{ input: Buffer.from(svg) }])
-          .png({ compressionLevel: 6 })
+          .png({ compressionLevel: 6, effort: 2 })
           .toBuffer();
         logMemory('sharp_composite_after', { pngSizeKB: Math.round(pngBuffer.length / 1024) });
         if (isPngBuffer(pngBuffer)) {
@@ -568,7 +566,7 @@ export class TicketImageService {
       } else {
         logMemory('sharp_svg_direct_before');
         const pngBuffer = await sharp(Buffer.from(svg))
-          .png({ compressionLevel: 6 })
+          .png({ compressionLevel: 6, effort: 2 })
           .toBuffer();
         logMemory('sharp_svg_direct_after', { pngSizeKB: Math.round(pngBuffer.length / 1024) });
         if (isPngBuffer(pngBuffer)) {

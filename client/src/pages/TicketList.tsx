@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useEvent } from '../context/EventContext';
 import { ticketsApi, TicketListItem, triggerBlobDownload } from '../api/tickets';
+import { eventsApi, EventJobItem } from '../api/events';
 import {
   Ticket,
   Search,
@@ -10,7 +11,6 @@ import {
   FileSpreadsheet,
   Download,
   Calendar,
-  Sparkles,
   Users,
   CheckCircle2,
   XCircle,
@@ -32,12 +32,11 @@ export const TicketList: React.FC = () => {
   const [tickets, setTickets] = useState<TicketListItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
+  const [activeJob, setActiveJob] = useState<EventJobItem | null>(null);
+  const [resumingJob, setResumingJob] = useState(false);
   const [generatingWorkers, setGeneratingWorkers] = useState(false);
   const [downloadingZip, setDownloadingZip] = useState(false);
   const [downloadingTicketId, setDownloadingTicketId] = useState<string | null>(null);
-  const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(DEFAULT_TEMPLATE_ID);
   const [isWorkerModalOpen, setIsWorkerModalOpen] = useState(false);
   const [workerCount, setWorkerCount] = useState(10);
   const [workerTemplateId, setWorkerTemplateId] = useState<string>(DEFAULT_TEMPLATE_ID);
@@ -361,6 +360,54 @@ export const TicketList: React.FC = () => {
     fetchTickets();
   }, [fetchTickets]);
 
+  // Check active background generation job on load and event switch
+  const checkActiveJob = useCallback(async () => {
+    if (!currentEvent) return;
+    try {
+      const jobs = await eventsApi.getEventJobs(currentEvent.id, {
+        jobType: 'BULK_RENDER_ASSETS',
+        limit: 5,
+      });
+      const running = jobs.find((j) => j.status === 'PROCESSING' || j.status === 'QUEUED');
+      if (running) {
+        setActiveJob(running);
+      } else {
+        const latestJob = jobs[0];
+        if (latestJob && (latestJob.status === 'FAILED' || latestJob.status === 'COMPLETED')) {
+          setActiveJob(latestJob);
+        }
+      }
+    } catch {
+      // Non-fatal if jobs endpoint fails
+    }
+  }, [currentEvent]);
+
+  useEffect(() => {
+    checkActiveJob();
+  }, [checkActiveJob]);
+
+  // Real-time polling every 2s while generation job is active
+  useEffect(() => {
+    let interval: any = null;
+    if (currentEvent && activeJob && (activeJob.status === 'QUEUED' || activeJob.status === 'PROCESSING')) {
+      interval = setInterval(async () => {
+        try {
+          const updated = await eventsApi.getEventJobStatus(currentEvent.id, activeJob._id);
+          setActiveJob(updated);
+          if (updated.status === 'COMPLETED') {
+            setMessage('Ticket generation completed successfully! All passes are ready.');
+            await fetchTickets();
+          }
+        } catch {
+          // Ignore polling errors
+        }
+      }, 2000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [currentEvent, activeJob, fetchTickets]);
+
   const handleDownloadZip = async () => {
     if (!currentEvent || downloadingZip) return;
     try {
@@ -458,22 +505,21 @@ export const TicketList: React.FC = () => {
     }
   };
 
-  const handleGenerateTickets = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!currentEvent) return;
+  const handleResumeGeneration = async () => {
+    if (!currentEvent || resumingJob) return;
 
     try {
-      setGenerating(true);
+      setResumingJob(true);
       setError(null);
       setMessage(null);
-      const result = await ticketsApi.generateTickets(currentEvent.id, selectedTemplateId);
-      setIsGenerateModalOpen(false);
-      setMessage(result.message || 'Tickets generated successfully!');
-      await fetchTickets();
+      const res = await eventsApi.createBulkRenderJob(currentEvent.id, {});
+      const job = (res as any).data || (res as any).job || res;
+      setActiveJob(job);
+      setMessage('Background ticket generation resumed. Monitoring progress...');
     } catch (err: any) {
-      setError(err.message || 'Failed to generate tickets');
+      setError(err?.response?.data?.message || err.message || 'Failed to resume ticket generation');
     } finally {
-      setGenerating(false);
+      setResumingJob(false);
     }
   };
 
@@ -593,25 +639,112 @@ export const TicketList: React.FC = () => {
             <span>Worker Tickets</span>
           </button>
 
-          <button
-            onClick={() => setIsGenerateModalOpen(true)}
-            disabled={generating}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-brand-600/20 active:scale-95 disabled:opacity-50"
-          >
-            {generating ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Generating...</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4" />
-                <span>Generate All Tickets</span>
-              </>
-            )}
-          </button>
+          {activeJob && (activeJob.status === 'PROCESSING' || activeJob.status === 'QUEUED') ? (
+            <div className="inline-flex items-center gap-2 px-3.5 py-2 bg-brand-50 border border-brand-200 text-brand-700 text-xs font-bold rounded-xl shadow-sm">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-brand-600" />
+              <span>Generating Passes ({activeJob.progress?.percentage || 0}%)</span>
+            </div>
+          ) : (
+            <button
+              onClick={handleResumeGeneration}
+              disabled={resumingJob}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-brand-600/20 active:scale-95 disabled:opacity-50"
+            >
+              {resumingJob ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Resuming...</span>
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4" />
+                  <span>Resume / Retry Generation</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Real-Time Background Generation Progress Card */}
+      {activeJob && (activeJob.status === 'QUEUED' || activeJob.status === 'PROCESSING') && (
+        <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-brand-50 border border-emerald-200 p-5 rounded-2xl shadow-sm space-y-3 animate-in fade-in">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-emerald-600 text-white rounded-xl shadow-sm">
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold text-zinc-900">
+                  Background Ticket Generation Active
+                </h3>
+                <p className="text-[11px] text-zinc-600">
+                  Passes are rendering sequentially in the background. Progress updates automatically.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                {activeJob.status}
+              </span>
+              <span className="text-xs font-black text-emerald-900 bg-white px-2.5 py-1 rounded-lg border border-emerald-200 shadow-xs">
+                {activeJob.progress?.percentage || 0}%
+              </span>
+            </div>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="w-full bg-emerald-200/60 rounded-full h-2.5 overflow-hidden">
+            <div
+              className="bg-emerald-600 h-2.5 rounded-full transition-all duration-300 ease-out"
+              style={{ width: `${Math.min(100, Math.max(0, activeJob.progress?.percentage || 0))}%` }}
+            />
+          </div>
+
+          <div className="flex items-center justify-between text-[11px] text-zinc-600 font-medium">
+            <span>
+              Passes: <strong className="text-zinc-900">{activeJob.progress?.processed || 0}</strong> of <strong className="text-zinc-900">{activeJob.progress?.total || 0}</strong> processed
+            </span>
+            <span>
+              <strong className="text-emerald-700">{activeJob.progress?.succeeded || 0}</strong> ready
+              {(activeJob.progress?.failed || 0) > 0 && (
+                <span className="text-rose-600 ml-1.5">
+                  ({activeJob.progress?.failed} failed)
+                </span>
+              )}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Generation Interrupted / Failed Recovery Card */}
+      {activeJob && activeJob.status === 'FAILED' && (
+        <div className="bg-amber-50 border border-amber-200 p-5 rounded-2xl shadow-sm space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-amber-600 text-white rounded-xl shadow-sm">
+                <AlertCircle className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold text-amber-950">
+                  Background Ticket Generation Interrupted
+                </h3>
+                <p className="text-[11px] text-amber-800">
+                  {activeJob.errorMessage || 'The background process encountered an issue. You can safely resume from the last completed pass.'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleResumeGeneration}
+              disabled={resumingJob}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm active:scale-95 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${resumingJob ? 'animate-spin' : ''}`} />
+              <span>{resumingJob ? 'Resuming...' : 'Resume / Retry Generation'}</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {message && (
         <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-800 flex items-center justify-between gap-2 shadow-sm">
@@ -734,15 +867,15 @@ export const TicketList: React.FC = () => {
           <div className="min-h-[360px] w-full flex flex-col items-center justify-center">
             <EmptyEventsState
               title="No Admission Passes Issued Yet"
-              description="No visual attendee badges or admission tickets have been generated for this event roster yet. Import your guest CSV roster or generate tickets to issue verified cryptographic passes."
+              description="No visual attendee badges or admission tickets have been generated for this event roster yet. Import your guest CSV roster or resume background generation to issue verified cryptographic passes."
               slotText="ROSTER UNISSUED"
               categoryText="TICKET PASSES • 0 ISSUED"
-              actionText="Generate Tickets"
-              actionIcon={<Sparkles className="w-3.5 h-3.5" />}
-              onAction={handleGenerateTickets}
-              secondaryActionText="Import Guests"
-              secondaryActionIcon={<FileSpreadsheet className="w-3.5 h-3.5" />}
-              onSecondaryAction={() => navigate('/import')}
+              actionText="Import Guests"
+              actionIcon={<FileSpreadsheet className="w-3.5 h-3.5" />}
+              onAction={() => navigate('/import')}
+              secondaryActionText={activeJob?.status === 'FAILED' ? 'Resume Generation' : undefined}
+              secondaryActionIcon={activeJob?.status === 'FAILED' ? <RefreshCw className="w-3.5 h-3.5" /> : undefined}
+              onSecondaryAction={activeJob?.status === 'FAILED' ? handleResumeGeneration : undefined}
             />
           </div>
         ) : (
@@ -1077,81 +1210,6 @@ export const TicketList: React.FC = () => {
                   className="px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-brand-600/20 disabled:opacity-50"
                 >
                   {generatingWorkers ? 'Generating Passes...' : `Generate ${workerCount} Passes`}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Generate All Tickets Modal with Template Selector */}
-      {isGenerateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white border border-surface-border w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-surface-border pb-3">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 bg-brand-50 text-brand-700 rounded-lg border border-brand-200">
-                  <Sparkles className="w-4 h-4" />
-                </div>
-                <h3 className="text-sm font-bold text-zinc-900">Generate All Tickets</h3>
-              </div>
-              <button
-                onClick={() => setIsGenerateModalOpen(false)}
-                className="text-zinc-400 hover:text-zinc-700 text-xs font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleGenerateTickets} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-zinc-700 mb-1">
-                  Ticket Template
-                </label>
-                <select
-                  value={selectedTemplateId}
-                  onChange={(e) => setSelectedTemplateId(e.target.value)}
-                  className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2 text-xs text-zinc-900 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 shadow-sm font-medium"
-                >
-                  {TICKET_TEMPLATES.map((tmpl) => (
-                    <option key={tmpl.id} value={tmpl.id}>
-                      {tmpl.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[11px] text-zinc-500 mt-1">
-                  Select the visual template applied to newly generated tickets for this event.
-                </p>
-              </div>
-
-              <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-xl text-[11px] text-zinc-600">
-                <span className="font-semibold text-zinc-800">Note:</span> Tickets will be generated for all imported guests who do not yet have a ticket. Existing tickets remain unchanged.
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsGenerateModalOpen(false)}
-                  className="px-4 py-2 text-xs font-bold text-zinc-600 hover:text-zinc-900"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={generating}
-                  className="inline-flex items-center gap-2 px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-brand-600/20 disabled:opacity-50"
-                >
-                  {generating ? (
-                    <>
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      <span>Generating Tickets...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>Generate Tickets</span>
-                    </>
-                  )}
                 </button>
               </div>
             </form>

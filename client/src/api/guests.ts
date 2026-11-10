@@ -43,6 +43,7 @@ export interface ImportConfirmationResult {
   importedCount: number;
   skippedCount: number;
   importId: string;
+  errors?: string[];
 }
 
 export const guestsApi = {
@@ -55,7 +56,7 @@ export const guestsApi = {
         'Content-Type': 'multipart/form-data',
       },
     });
-    return res.data;
+    return res?.data ?? res;
   },
 
   async validateImport(
@@ -69,7 +70,7 @@ export const guestsApi = {
     }
   ): Promise<ValidationSummaryData> {
     const res: any = await apiClient.post(`/guests/events/${eventId}/validate`, payload);
-    return res.data;
+    return res?.data ?? res;
   },
 
   async confirmImport(
@@ -80,18 +81,18 @@ export const guestsApi = {
     }
   ): Promise<ImportConfirmationResult> {
     const res: any = await apiClient.post(`/guests/events/${eventId}/confirm`, payload);
-    return res.data;
+    return res?.data ?? res;
   },
 
   async getGuests(eventId: string, limit = 500, offset = 0) {
     const res: any = await apiClient.get(`/guests/events/${eventId}`, {
       params: { limit, offset },
     });
-    return res.data;
+    return res?.data ?? res;
   },
 
   async getImportHistory(eventId: string) {
     const res: any = await apiClient.get(`/guests/events/${eventId}/imports`);
-    return res.data;
+    return res?.data ?? res;
   },
 };

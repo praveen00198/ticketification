@@ -28,6 +28,8 @@ import { EventMemberModel } from '../../../db/mongo/models/event-member.model';
 import { EventRegistrationModel } from '../../../db/mongo/models/event-registration.model';
 import { EventModel } from '../../../db/mongo/models/event.model';
 import { EventCredentialTemplateModel } from '../../../db/mongo/models/event-credential-template.model';
+import { UserModel } from '../../../db/mongo/models/user.model';
+import { isMongoConnected } from '../../../db/mongodb';
 import { mongoEventCredentialRepository } from '../../events/repositories/mongo-event-credential.repository';
 import { mongoEventCredentialTemplateRepository } from '../../events/repositories/mongo-event-credential-template.repository';
 import {
@@ -103,6 +105,69 @@ export class TicketService {
   ) {}
 
   /**
+   * Validates that the caller is the event owner, a super admin, or an active HOST/COORDINATOR
+   * in EventMemberModel. Prevents IDOR vulnerabilities.
+   */
+  private async verifyHostOrCoordinatorPermissions(mongoEvent: any, userId: string): Promise<void> {
+    let callerUser: any = null;
+    if (mongoose.Types.ObjectId.isValid(userId)) {
+      try {
+        callerUser = await UserModel.findById(userId).lean().exec();
+      } catch {
+        // ignore CastError
+      }
+    }
+    if (!callerUser) {
+      try {
+        callerUser = await UserModel.findOne({ supabaseUserId: userId }).lean().exec();
+      } catch {
+        // ignore
+      }
+    }
+
+    const callerMongoId = callerUser?._id ? callerUser._id.toString() : null;
+    const isOwner =
+      mongoEvent.ownerSupabaseId === userId ||
+      String(mongoEvent.ownerId) === userId ||
+      (callerMongoId && String(mongoEvent.ownerId) === callerMongoId) ||
+      (callerUser?.supabaseUserId && mongoEvent.ownerSupabaseId === callerUser.supabaseUserId);
+
+    if (isOwner) {
+      return;
+    }
+
+    if (callerUser && (callerUser.platformRole === 'ADMIN' || callerUser.platformRole === 'SUPER_ADMIN')) {
+      return;
+    }
+
+    const userConditions: any[] = [];
+    if (callerUser?._id) {
+      userConditions.push({ userId: callerUser._id });
+    }
+    if (mongoose.Types.ObjectId.isValid(userId)) {
+      userConditions.push({ userId: new mongoose.Types.ObjectId(userId) });
+    }
+    if (callerUser?.email) {
+      userConditions.push({ userEmail: callerUser.email.toLowerCase().trim() });
+    }
+
+    if (userConditions.length === 0) {
+      throw new NotFoundError('Event not found or unauthorized');
+    }
+
+    const member = await EventMemberModel.findOne({
+      eventId: mongoEvent._id,
+      status: 'ACTIVE',
+      role: { $in: ['HOST', 'COORDINATOR'] } as any,
+      $or: userConditions,
+    } as any);
+
+    if (!member) {
+      throw new NotFoundError('Event not found or unauthorized');
+    }
+  }
+
+  /**
    * Generate tickets for all guests of an event.
    * Produces genuine PNG binaries (0x89504E47) and uploads directly to Supabase Storage.
    */
@@ -117,24 +182,10 @@ export class TicketService {
     tracker.start('generation_start');
 
     // 0. Support MongoDB canonical events
-    if (mongoose.connection.readyState === 1 && mongoose.Types.ObjectId.isValid(eventId)) {
+    if ((mongoose.connection.readyState === 1 || isMongoConnected()) && mongoose.Types.ObjectId.isValid(eventId)) {
       const mongoEv = await EventModel.findById(eventId);
       if (mongoEv) {
-        const isOwner =
-          mongoEv.ownerSupabaseId === userId ||
-          String(mongoEv.ownerId) === userId ||
-          String(mongoEv.ownerSupabaseId) === userId;
-
-        if (!isOwner) {
-          const member = await EventMemberModel.findOne({
-            eventId: mongoEv._id,
-            status: 'ACTIVE',
-            role: { $in: ['HOST', 'COORDINATOR'] } as any,
-          } as any);
-          if (!member) {
-            throw new NotFoundError('Event not found or unauthorized');
-          }
-        }
+        await this.verifyHostOrCoordinatorPermissions(mongoEv, userId);
 
         const templateConfig = getTemplateById(templateId);
         let templateBuffer: Buffer | null = null;
@@ -644,24 +695,10 @@ export class TicketService {
    */
   async getTicketsByEvent(eventId: string, userId: string, options: TicketFilterOptions = {}) {
     // 1. Try MongoDB canonical event first
-    if (mongoose.Types.ObjectId.isValid(eventId)) {
+    if ((mongoose.connection.readyState === 1 || isMongoConnected()) && mongoose.Types.ObjectId.isValid(eventId)) {
       const mongoEvent = await EventModel.findById(eventId);
       if (mongoEvent) {
-        const isOwner =
-          mongoEvent.ownerSupabaseId === userId ||
-          String(mongoEvent.ownerId) === userId ||
-          String(mongoEvent.ownerSupabaseId) === userId;
-
-        if (!isOwner) {
-          const member = await EventMemberModel.findOne({
-            eventId: mongoEvent._id,
-            status: 'ACTIVE',
-            role: { $in: ['HOST', 'COORDINATOR'] } as any,
-          } as any);
-          if (!member) {
-            throw new NotFoundError('Event not found or unauthorized');
-          }
-        }
+        await this.verifyHostOrCoordinatorPermissions(mongoEvent, userId);
 
         const { credentials, total } = await mongoEventCredentialRepository.findByEvent(eventId, {
           status: options.status,
@@ -1253,25 +1290,11 @@ export class TicketService {
     let isMongoEvent = false;
     let mongoEvent: any = null;
 
-    if (mongoose.Types.ObjectId.isValid(eventId)) {
+    if ((mongoose.connection.readyState === 1 || isMongoConnected()) && mongoose.Types.ObjectId.isValid(eventId)) {
       mongoEvent = await EventModel.findById(eventId);
       if (mongoEvent) {
         isMongoEvent = true;
-        const isOwner =
-          mongoEvent.ownerSupabaseId === userId ||
-          String(mongoEvent.ownerId) === userId ||
-          String(mongoEvent.ownerSupabaseId) === userId;
-
-        if (!isOwner) {
-          const member = await EventMemberModel.findOne({
-            eventId: mongoEvent._id,
-            status: 'ACTIVE',
-            role: { $in: ['HOST', 'COORDINATOR'] } as any,
-          } as any);
-          if (!member) {
-            throw new NotFoundError('Event not found or unauthorized');
-          }
-        }
+        await this.verifyHostOrCoordinatorPermissions(mongoEvent, userId);
         eventName = mongoEvent.name || 'EVT';
       }
     }
@@ -1581,25 +1604,11 @@ export class TicketService {
     let isMongoEvent = false;
     let mongoEvent: any = null;
 
-    if (mongoose.connection.readyState === 1 && mongoose.Types.ObjectId.isValid(eventId)) {
+    if ((mongoose.connection.readyState === 1 || isMongoConnected()) && mongoose.Types.ObjectId.isValid(eventId)) {
       mongoEvent = await EventModel.findById(eventId);
       if (mongoEvent) {
         isMongoEvent = true;
-        const isOwner =
-          mongoEvent.ownerSupabaseId === userId ||
-          String(mongoEvent.ownerId) === userId ||
-          String(mongoEvent.ownerSupabaseId) === userId;
-
-        if (!isOwner) {
-          const member = await EventMemberModel.findOne({
-            eventId: mongoEvent._id,
-            status: 'ACTIVE',
-            role: { $in: ['HOST', 'COORDINATOR'] } as any,
-          } as any);
-          if (!member) {
-            throw new NotFoundError('Event not found or unauthorized');
-          }
-        }
+        await this.verifyHostOrCoordinatorPermissions(mongoEvent, userId);
         eventName = mongoEvent.name || 'Event';
       }
     }
@@ -1612,106 +1621,61 @@ export class TicketService {
       eventName = event.name || 'Event';
     }
 
-    // Fetch all tickets for this event (up to 50,000)
-    const { tickets } = await this.getTicketsByEvent(eventId, userId, { limit: 50000 });
-
-    let targetTickets: any[] = tickets;
-    if (ticketIds && ticketIds.length > 0) {
-      const idSet = new Set(ticketIds);
-      targetTickets = tickets.filter((t) => idSet.has(t.id));
-    }
-
     const safePrefix =
       (eventName || 'EVT').trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase() || 'EVT';
     const baseUrl = (config.env.appUrl || 'http://localhost:5173').replace(/\/+$/, '');
 
-    // Ensure all tickets have authentic, direct Supabase Storage public URLs before building spreadsheet
-    if (isMongoEvent && this.storageServ.isConfigured()) {
-      for (const t of targetTickets) {
-        if (!t.assetUrl || !t.assetUrl.startsWith('http')) {
-          try {
-            const cred = await EventCredentialModel.findById(t.id).exec();
-            if (cred) {
-              const seqStr = (cred.sequenceNumber || 1).toString().padStart(5, '0');
-              const displayId = cred.formattedId || `${safePrefix}-${seqStr}`;
-              const storagePath = cred.asset?.storagePath || `events/${eventId}/credentials/${displayId}.png`;
+    let targetTickets: any[] = [];
 
-              // 1. Storage Pre-Check: If asset already exists in Supabase Storage, retrieve direct URL with zero Sharp overhead
-              try {
-                const exists = await this.storageServ.checkObjectExists(storagePath);
-                if (exists) {
-                  const publicUrl = this.storageServ.getPublicUrl(storagePath);
-                  if (publicUrl) {
-                    await EventCredentialModel.updateOne(
-                      { _id: cred._id },
-                      {
-                        $set: {
-                          'asset.publicUrl': publicUrl,
-                          'asset.storagePath': storagePath,
-                          'asset.renderedAt': new Date(),
-                          renderStatus: 'COMPLETED',
-                        },
-                      }
-                    );
-                    t.assetUrl = publicUrl;
-                    continue;
-                  }
-                }
-              } catch (storageCheckErr: any) {
-                console.warn(`[generateTicketsExcel] Storage existence check failed for ${storagePath}:`, storageCheckErr.message);
-              }
+    if (isMongoEvent) {
+      // Query all event credentials directly using event isolation filter { eventId }
+      const credentials = await mongoEventCredentialRepository.findAllForExport(eventId, {
+        status: 'ALL',
+      });
 
-              // 2. Bound memory: Do not run synchronous Sharp rendering during Excel export for bulk rosters (> 5 tickets)
-              // Background worker handles bulk rasterization asynchronously; spreadsheet falls back to download route
-              if (targetTickets.length > 5) {
-                continue;
-              }
+      targetTickets = credentials.map((c) => {
+        const seqStr = (c.sequenceNumber || 1).toString().padStart(5, '0');
+        const displayId = c.formattedId || `${safePrefix}-${seqStr}`;
 
-              // 3. For small batches (<= 5), render with bounded buffer dereferencing and immediate GC trigger
-              const eventDateStr = ((mongoEvent as any)?.date && (mongoEvent as any).date !== '2026-10-10')
-                ? (mongoEvent as any).date
-                : (mongoEvent?.schedule?.startAt
-                    ? new Date(mongoEvent.schedule.startAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                    : 'Date TBA');
-              const qrDataUrl = await this.qrServ.generateQrDataUrl(cred.verificationToken);
-              const ticketData: TicketImageData = {
-                ticketId: displayId,
-                guestName: cred.holder?.name || 'Valued Guest',
-                eventName: mongoEvent?.name || eventName || 'Event Pass',
-                eventDate: eventDateStr,
-                ticketType: cred.credentialType || cred.holder?.category || 'General Admission',
-                verificationToken: cred.verificationToken,
-                qrCodeDataUrl: qrDataUrl,
-                venue: mongoEvent?.venue?.city || mongoEvent?.venue?.name || 'Venue TBA',
-                organization: cred.holder?.organization || undefined,
-                phone: cred.holder?.phone || undefined,
-              };
-
-              const rendered = await this.imageServ.generateTicketImage(ticketData);
-              if (rendered?.pngBuffer && isPngBuffer(rendered.pngBuffer)) {
-                const uploadRes = await this.storageServ.uploadTicketImage(storagePath, rendered.pngBuffer, 'image/png');
-                rendered.pngBuffer = null as any;
-                if (uploadRes?.publicUrl) {
-                  await EventCredentialModel.updateOne(
-                    { _id: cred._id },
-                    {
-                      $set: {
-                        'asset.publicUrl': uploadRes.publicUrl,
-                        'asset.storagePath': uploadRes.storagePath,
-                        'asset.renderedAt': new Date(),
-                        renderStatus: 'COMPLETED',
-                      },
-                    }
-                  );
-                  t.assetUrl = uploadRes.publicUrl;
-                }
-              }
-              memoryBudgetGovernor.triggerGarbageCollection();
-            }
-          } catch (e: any) {
-            console.warn(`[generateTicketsExcel] Failed to generate missing asset for ${t.id}:`, e.message);
-          }
+        let assetUrl = c.asset?.publicUrl || null;
+        if (!assetUrl && c.asset?.storagePath && this.storageServ.isConfigured()) {
+          assetUrl = this.storageServ.getPublicUrl(c.asset.storagePath);
         }
+
+        return {
+          id: c._id.toString(),
+          sequenceNumber: c.sequenceNumber,
+          verificationToken: c.verificationToken,
+          status: c.status,
+          usagePolicy: c.usagePolicy || 'SINGLE_USE',
+          assetUrl,
+          createdAt: c.createdAt,
+          guest: {
+            id: c._id.toString(),
+            name: c.holder?.name || 'UNASSIGNED',
+            email: c.holder?.email,
+            phone: c.holder?.phone,
+            organization: c.holder?.organization,
+            designation: c.holder?.designation,
+            category: c.credentialType || c.holder?.category,
+          },
+          ticketType: {
+            name: c.credentialType || c.holder?.category || 'General Admission',
+          },
+        };
+      });
+
+      if (ticketIds && ticketIds.length > 0) {
+        const idSet = new Set(ticketIds);
+        targetTickets = targetTickets.filter((t) => idSet.has(t.id));
+      }
+    } else {
+      // Fetch all tickets for relational event (up to 50,000)
+      const { tickets } = await this.getTicketsByEvent(eventId, userId, { limit: 50000 });
+      targetTickets = tickets;
+      if (ticketIds && ticketIds.length > 0) {
+        const idSet = new Set(ticketIds);
+        targetTickets = tickets.filter((t) => idSet.has(t.id));
       }
     }
 
@@ -1850,24 +1814,10 @@ export class TicketService {
     reason?: string
   ): Promise<{ id: string; status: string; message: string }> {
     // 1. Check MongoDB credentials first
-    if (mongoose.connection.readyState === 1 && mongoose.Types.ObjectId.isValid(eventId)) {
+    if ((mongoose.connection.readyState === 1 || isMongoConnected()) && mongoose.Types.ObjectId.isValid(eventId)) {
       const mongoEvent = await EventModel.findById(eventId);
       if (mongoEvent) {
-        const isOwner =
-          mongoEvent.ownerSupabaseId === userId ||
-          String(mongoEvent.ownerId) === userId ||
-          String(mongoEvent.ownerSupabaseId) === userId;
-
-        if (!isOwner) {
-          const member = await EventMemberModel.findOne({
-            eventId: mongoEvent._id,
-            status: 'ACTIVE',
-            role: { $in: ['HOST', 'COORDINATOR'] } as any,
-          } as any);
-          if (!member) {
-            throw new NotFoundError('Event not found or unauthorized');
-          }
-        }
+        await this.verifyHostOrCoordinatorPermissions(mongoEvent, userId);
 
         const updated = await mongoEventCredentialRepository.updateStatus(
           eventId,

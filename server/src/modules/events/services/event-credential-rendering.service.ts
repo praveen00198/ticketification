@@ -261,20 +261,18 @@ export class EventCredentialRenderingService {
       );
     }
 
-    const embeddedFontFace = this.fontBase64
-      ? `@font-face {
-          font-family: 'Noto Sans Devanagari';
-          src: url('data:font/truetype;charset=utf-8;base64,${this.fontBase64}') format('truetype');
-          font-weight: 700;
-          font-style: normal;
-        }
-        @font-face {
-          font-family: 'Noto Sans Devanagari';
-          src: url('data:font/truetype;charset=utf-8;base64,${this.fontBase64}') format('truetype');
-          font-weight: 800;
-          font-style: normal;
-        }`
-      : `@import url('https://fonts.googleapis.com/css2?family=Mukta:wght@700;800&amp;family=Noto+Sans+Devanagari:wght@700;800;900&amp;display=swap');`;
+    const embeddedFontFace = `@font-face {
+      font-family: 'Noto Sans Devanagari';
+      src: local('Noto Sans Devanagari Bold'), local('Noto Sans Devanagari');
+      font-weight: 700;
+      font-style: normal;
+    }
+    @font-face {
+      font-family: 'Noto Sans Devanagari';
+      src: local('Noto Sans Devanagari Bold'), local('Noto Sans Devanagari');
+      font-weight: 800;
+      font-style: normal;
+    }`;
 
     return `
       <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
@@ -353,7 +351,7 @@ export class EventCredentialRenderingService {
     const resultBuffer = await sharp(bgBuffer)
       .resize(width, height, { fit: 'cover' })
       .composite(compositeLayers)
-      .png({ compressionLevel: 8 })
+      .png({ compressionLevel: 6, effort: 2 })
       .toBuffer();
 
     // Dereference intermediate buffers to facilitate immediate V8 GC on 512MB RAM

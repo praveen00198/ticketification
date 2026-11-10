@@ -168,6 +168,7 @@ export const GuestImport: React.FC = () => {
 
   // Step 2 -> Step 3: Validate Mappings
   const handleProceedToCategories = () => {
+    setError(null);
     // Check if category is mapped
     const hasCategoryMapped = Object.values(columnMapping).includes('category');
     if (hasCategoryMapped && analysis?.detectedCategories && analysis.detectedCategories.length > 0) {
@@ -194,6 +195,7 @@ export const GuestImport: React.FC = () => {
       });
 
       setValidationSummary(result);
+      setError(null);
       setStep('preview');
     } catch (err: any) {
       setError(err.message || 'Validation failed');
@@ -215,6 +217,7 @@ export const GuestImport: React.FC = () => {
       });
 
       setConfirmResult(result);
+      setError(null);
       setStep('complete');
     } catch (err: any) {
       setError(err.message || 'Failed to commit import');
@@ -349,7 +352,7 @@ export const GuestImport: React.FC = () => {
         </div>
       </div>
 
-      {error && (
+      {error && step !== 'complete' && (
         <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-800 flex items-center justify-between gap-2 shadow-sm">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
@@ -561,7 +564,10 @@ export const GuestImport: React.FC = () => {
 
           <div className="flex items-center justify-between pt-2">
             <button
-              onClick={() => setStep('upload')}
+              onClick={() => {
+                setError(null);
+                setStep('upload');
+              }}
               className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-zinc-500 hover:text-zinc-900"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -633,7 +639,10 @@ export const GuestImport: React.FC = () => {
 
           <div className="flex items-center justify-between pt-2">
             <button
-              onClick={() => setStep('mapping')}
+              onClick={() => {
+                setError(null);
+                setStep('mapping');
+              }}
               className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-zinc-500 hover:text-zinc-900"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -818,7 +827,10 @@ export const GuestImport: React.FC = () => {
 
           <div className="flex items-center justify-between pt-2">
             <button
-              onClick={() => setStep('categories')}
+              onClick={() => {
+                setError(null);
+                setStep('categories');
+              }}
               className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-zinc-500 hover:text-zinc-900"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -872,9 +884,21 @@ export const GuestImport: React.FC = () => {
             </div>
           </div>
 
+          {confirmResult.errors && confirmResult.errors.length > 0 && (
+            <div className="text-left bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 space-y-1">
+              <div className="font-semibold text-amber-900">{confirmResult.errors.length} record(s) skipped with issues:</div>
+              <ul className="list-disc list-inside space-y-0.5 text-[11px] text-amber-700 max-h-32 overflow-y-auto">
+                {confirmResult.errors.map((err, i) => (
+                  <li key={i}>{err}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
             <button
               onClick={() => {
+                setError(null);
                 setStep('upload');
                 setFile(null);
                 setAnalysis(null);

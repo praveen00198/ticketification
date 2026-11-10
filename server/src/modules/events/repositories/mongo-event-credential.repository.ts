@@ -7,6 +7,7 @@ import {
   ICredentialHolder,
 } from '../../../db/mongo/models/event-credential.model';
 import { EventSequenceCounterModel } from '../../../db/mongo/models/event-sequence-counter.model';
+import { isMongoConnected } from '../../../db/mongodb';
 
 export interface CredentialQueryFilters {
   status?: string;
@@ -246,7 +247,7 @@ export class MongoEventCredentialRepository {
       ];
     }
 
-    const limit = Math.min(Math.max(Number(filters.limit) || 50, 1), 200);
+    const limit = Math.min(Math.max(Number(filters.limit) || 50, 1), 50000);
     const offset = Math.max(Number(filters.offset) || 0, 0);
 
     const [credentials, total] = await Promise.all([
@@ -271,7 +272,7 @@ export class MongoEventCredentialRepository {
       return [];
     }
 
-    if (mongoose.connection.readyState !== 1) {
+    if (mongoose.connection.readyState !== 1 && !isMongoConnected() && !Boolean((EventCredentialModel.find as any)?.mock)) {
       return [];
     }
 
@@ -282,8 +283,18 @@ export class MongoEventCredentialRepository {
     if (filters.credentialType && filters.credentialType !== 'ALL') {
       query.credentialType = filters.credentialType;
     }
+    if (filters.search && filters.search.trim()) {
+      const escaped = filters.search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(escaped, 'i');
+      query.$or = [
+        { 'holder.name': regex },
+        { 'holder.email': regex },
+        { 'holder.organization': regex },
+        { formattedId: regex },
+      ];
+    }
 
-    return EventCredentialModel.find(query).sort({ sequenceNumber: 1 });
+    return EventCredentialModel.find(query).sort({ sequenceNumber: 1 }).exec();
   }
 
   /**

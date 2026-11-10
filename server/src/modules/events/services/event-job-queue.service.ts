@@ -832,10 +832,12 @@ export class EventJobQueueService {
       const current = await this.jobRepo.findById(job._id.toString());
       if (current?.status === 'CANCELLED') return;
 
-      // Heartbeat lease renewal before each batch
-      const renewed = await this.jobRepo.renewLease(job._id.toString(), this.workerId);
-      if (!renewed) {
-        throw new Error('Worker lease lost or expired during bulk rendering');
+      // Heartbeat lease renewal throttled to every 10 tickets to reduce DB contention
+      if (processedCount === 0 || processedCount % 10 === 0) {
+        const renewed = await this.jobRepo.renewLease(job._id.toString(), this.workerId);
+        if (!renewed) {
+          throw new Error('Worker lease lost or expired during bulk rendering');
+        }
       }
 
       // Atomically claim unrendered ticket lease for this worker.
@@ -929,9 +931,6 @@ export class EventJobQueueService {
         cred.renderStatus = 'COMPLETED';
         cred.renderingLockedBy = null;
         cred.renderingLockExpiresAt = null;
-        if (typeof cred.save === 'function') {
-          await cred.save();
-        }
 
         newlyRendered += 1;
         result.renderedCount = succeededBaseline + newlyRendered;
@@ -968,8 +967,13 @@ export class EventJobQueueService {
       // Explicitly dereference Mongoose document to allow V8 GC
       cred = null;
 
-      // Trigger proactive garbage collection and memory budget governance per ticket
-      memoryBudgetGovernor.triggerGarbageCollection();
+      // Throttle proactive garbage collection to every 25 tickets or under memory constraint
+      if (processedCount % 25 === 0 || memoryBudgetGovernor.getStatus().isMemoryConstrained) {
+        memoryBudgetGovernor.triggerGarbageCollection();
+      }
+
+      // Cooperative event loop yield to eliminate 100% CPU lock and health check timeouts
+      await new Promise((resolve) => setTimeout(resolve, 20));
 
       processedCount++;
 
@@ -1129,9 +1133,6 @@ export class EventJobQueueService {
           cred.renderStatus = 'COMPLETED';
           cred.renderingLockedBy = null;
           cred.renderingLockExpiresAt = null;
-          if (typeof cred.save === 'function') {
-            await cred.save().catch(() => {});
-          }
           result.renderedCount += 1;
 
           tracker.checkpoint('ticket_complete', { ticket: i + 1, sequence: cred?.formattedId });
@@ -1157,7 +1158,14 @@ export class EventJobQueueService {
         // Release document reference and trigger GC
         credentials[i] = null as any;
         cred = null;
-        memoryBudgetGovernor.triggerGarbageCollection();
+
+        // Throttle proactive garbage collection to every 25 tickets or under memory constraint
+        if ((i + 1) % 25 === 0 || memoryBudgetGovernor.getStatus().isMemoryConstrained) {
+          memoryBudgetGovernor.triggerGarbageCollection();
+        }
+
+        // Cooperative event loop yield to eliminate 100% CPU lock and health check timeouts
+        await new Promise((resolve) => setTimeout(resolve, 20));
 
         if ((i + 1) % 5 === 0 || i === total - 1) {
           const processed = i + 1;
@@ -1191,9 +1199,12 @@ export class EventJobQueueService {
       const current = await this.jobRepo.findById(job._id.toString());
       if (current?.status === 'CANCELLED') return;
 
-      const renewed = await this.jobRepo.renewLease(job._id.toString(), this.workerId);
-      if (!renewed) {
-        throw new Error('Worker lease lost or expired during sequential rendering');
+      // Heartbeat lease renewal throttled to every 10 tickets to reduce DB contention
+      if (processedCount === 0 || processedCount % 10 === 0) {
+        const renewed = await this.jobRepo.renewLease(job._id.toString(), this.workerId);
+        if (!renewed) {
+          throw new Error('Worker lease lost or expired during sequential rendering');
+        }
       }
 
       const batch = await this.credentialRepo.findUnrenderedBatch(eventId, lastId, 1);
@@ -1248,9 +1259,6 @@ export class EventJobQueueService {
         cred.renderStatus = 'COMPLETED';
         cred.renderingLockedBy = null;
         cred.renderingLockExpiresAt = null;
-        if (typeof cred.save === 'function') {
-          await cred.save().catch(() => {});
-        }
         result.renderedCount += 1;
 
         tracker.checkpoint('ticket_complete', { ticket: processedCount + 1, sequence: cred.formattedId });
@@ -1275,9 +1283,16 @@ export class EventJobQueueService {
 
       lastId = cred._id;
       cred = null;
-      processedCount++;
 
-      memoryBudgetGovernor.triggerGarbageCollection();
+      // Throttle proactive garbage collection to every 25 tickets or under memory constraint
+      if (processedCount % 25 === 0 || memoryBudgetGovernor.getStatus().isMemoryConstrained) {
+        memoryBudgetGovernor.triggerGarbageCollection();
+      }
+
+      // Cooperative event loop yield to eliminate 100% CPU lock and health check timeouts
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      processedCount++;
 
       if (processedCount % 5 === 0 || processedCount >= totalToRender) {
         const percentage = totalToRender > 0
