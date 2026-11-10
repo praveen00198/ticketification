@@ -9,6 +9,7 @@ import {
   Settings,
   FileSpreadsheet,
   CheckCircle2,
+  AlertCircle,
   Plus,
 } from 'lucide-react';
 import { EventItem, TicketType } from '../../types';
@@ -55,6 +56,7 @@ interface ContextAwareHostConsoleProps {
   onUpdateEvent: (e: React.FormEvent) => Promise<void>;
   saving: boolean;
   saveSuccess: boolean;
+  saveError?: string | null;
   onOpenAddTicketType: () => void;
 }
 
@@ -67,6 +69,7 @@ export const ContextAwareHostConsole: React.FC<ContextAwareHostConsoleProps> = (
   onUpdateEvent,
   saving,
   saveSuccess,
+  saveError,
   onOpenAddTicketType,
 }) => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -201,6 +204,12 @@ export const ContextAwareHostConsole: React.FC<ContextAwareHostConsoleProps> = (
                   <span className="flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     <span>Saved successfully</span>
+                  </span>
+                )}
+                {saveError && (
+                  <span className="flex items-center gap-1 text-xs font-bold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-200">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>{saveError}</span>
                   </span>
                 )}
               </div>

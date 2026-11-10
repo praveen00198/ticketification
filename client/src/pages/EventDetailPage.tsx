@@ -22,7 +22,8 @@ export const EventDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Edit form state
   const [formData, setFormData] = useState<UpdateEventPayload>({});
@@ -38,7 +39,7 @@ export const EventDetailPage: React.FC = () => {
     if (!eventId) return;
     try {
       setLoading(true);
-      setError(null);
+      setLoadError(null);
       const data = await eventsApi.getEvent(eventId);
 
       // If caller is an attendee without host management permissions, route to Attendee Workspace
@@ -64,7 +65,7 @@ export const EventDetailPage: React.FC = () => {
         navigate(`/events/${eventId}/attendee`, { replace: true });
         return;
       }
-      setError(err?.response?.data?.message || err.message || 'Failed to load event details');
+      setLoadError(err?.response?.data?.message || err.message || 'Failed to load event details');
     } finally {
       setLoading(false);
     }
@@ -80,14 +81,43 @@ export const EventDetailPage: React.FC = () => {
 
     try {
       setSaving(true);
-      setError(null);
-      const updated = await eventsApi.updateEvent(eventId, formData);
+      setSaveError(null);
+
+      // Prepare payload: format venue appropriately so it adheres to backend schema
+      const payload: any = { ...formData };
+      delete payload.status; // Protected field handled by publication lifecycle
+
+      if (typeof formData.venue === 'string') {
+        const vTrimmed = formData.venue.trim();
+        const isOnline = vTrimmed.toLowerCase().includes('online') || vTrimmed.toLowerCase().includes('zoom') || vTrimmed.toLowerCase().includes('meet');
+        payload.venue = {
+          type: isOnline ? 'ONLINE' : ((event as any)?.venueDetails?.type || 'PHYSICAL'),
+          name: vTrimmed || 'Main Venue',
+          address: vTrimmed || undefined,
+          city: (event as any)?.venueDetails?.city || vTrimmed || undefined,
+          country: (event as any)?.venueDetails?.country || 'India',
+        };
+      }
+
+      if (formData.date && (!payload.schedule || typeof payload.schedule !== 'object')) {
+        const timeStr = formData.time ? formData.time : '09:00';
+        const startAt = new Date(`${formData.date}T${timeStr}:00Z`).toISOString();
+        const endAt = new Date(new Date(startAt).getTime() + 8 * 60 * 60 * 1000).toISOString();
+        payload.schedule = {
+          startAt,
+          endAt,
+          timezone: (event as any)?.scheduleDetails?.timezone || 'UTC',
+        };
+      }
+
+      const updated = await eventsApi.updateEvent(eventId, payload);
       setEvent(updated);
       setSaveSuccess(true);
       await refreshEvents();
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err: any) {
-      setError(err.message || 'Failed to update event');
+      setSaveError(err?.response?.data?.message || err.message || 'Failed to update event');
+      setTimeout(() => setSaveError(null), 5000);
     } finally {
       setSaving(false);
     }
@@ -123,12 +153,12 @@ export const EventDetailPage: React.FC = () => {
     );
   }
 
-  if (error || !event) {
+  if (loadError || !event) {
     return (
       <div className="max-w-2xl mx-auto py-12 text-center bg-white border border-surface-border rounded-2xl p-8 shadow-sm">
         <AlertCircle className="w-10 h-10 text-rose-500 mx-auto mb-3" />
         <h2 className="text-base font-bold text-zinc-900 mb-2">Event Not Found</h2>
-        <p className="text-xs text-zinc-500 mb-6">{error || 'Could not find this event.'}</p>
+        <p className="text-xs text-zinc-500 mb-6">{loadError || 'Could not find this event.'}</p>
         <button
           onClick={() => navigate('/events')}
           className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold rounded-lg shadow-sm"
@@ -151,6 +181,7 @@ export const EventDetailPage: React.FC = () => {
         onUpdateEvent={handleUpdate}
         saving={saving}
         saveSuccess={saveSuccess}
+        saveError={saveError}
         onOpenAddTicketType={() => setIsAddTypeOpen(true)}
       />
 

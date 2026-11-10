@@ -288,10 +288,7 @@ export function validateEventDraftUpdate(body: any): UpdateEventDraftDTO {
     throw new ValidationError('Request body must be a JSON object.');
   }
 
-  // Guard against attempts to mutate protected fields
-  if (body.status !== undefined && body.status !== 'DRAFT') {
-    throw new ValidationError('Event status cannot be changed via draft update.');
-  }
+  // Guard against attempts to mutate protected fields (status changes are handled by dedicated lifecycle endpoints)
   if (body.ownerId !== undefined || body.ownerSupabaseId !== undefined || body.id !== undefined || body._id !== undefined) {
     throw new ValidationError('Owner and ID fields cannot be modified.');
   }
@@ -354,15 +351,40 @@ export function validateEventDraftUpdate(body: any): UpdateEventDraftDTO {
     updates.attendanceMode = body.attendanceMode;
   }
 
-  if (body.venue !== undefined) {
-    if (typeof body.venue !== 'object' || !body.venue) {
-      throw new ValidationError('Venue update must be an object.');
+  if (body.venue !== undefined && body.venue !== null) {
+    if (typeof body.venue === 'string') {
+      const vStr = body.venue.trim();
+      const isOnline = vStr.toLowerCase().includes('online') || vStr.toLowerCase().includes('zoom') || vStr.toLowerCase().includes('meet');
+      updates.venue = {
+        type: isOnline ? 'ONLINE' : 'PHYSICAL',
+        name: vStr || 'Main Venue',
+        address: vStr || undefined,
+        city: vStr || undefined,
+      };
+    } else if (typeof body.venue === 'object') {
+      const venueType = body.venue.type as VenueType;
+      if (venueType && !VENUE_TYPES.includes(venueType)) {
+        throw new ValidationError(`Invalid venue type: "${venueType}".`);
+      }
+      updates.venue = body.venue;
+    } else {
+      throw new ValidationError('Venue update must be an object or string.');
     }
-    const venueType = body.venue.type as VenueType;
-    if (venueType && !VENUE_TYPES.includes(venueType)) {
-      throw new ValidationError(`Invalid venue type: "${venueType}".`);
+  }
+
+  // Map legacy date/time fields to schedule if schedule object was not provided directly
+  if (body.date !== undefined && (!body.schedule || typeof body.schedule !== 'object')) {
+    const rawDate = typeof body.date === 'string' ? body.date.trim() : '';
+    if (rawDate && !isNaN(Date.parse(rawDate))) {
+      const timeStr = typeof body.time === 'string' && body.time.trim() ? body.time.trim() : '09:00';
+      const startAt = new Date(`${rawDate}T${timeStr}:00Z`).toISOString();
+      const endAt = new Date(new Date(startAt).getTime() + 8 * 60 * 60 * 1000).toISOString();
+      updates.schedule = {
+        startAt,
+        endAt,
+        timezone: typeof body.timezone === 'string' ? body.timezone : 'UTC',
+      };
     }
-    updates.venue = body.venue;
   }
 
   if (body.schedule !== undefined) {
