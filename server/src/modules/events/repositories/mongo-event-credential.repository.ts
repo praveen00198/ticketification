@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+﻿import mongoose from 'mongoose';
 import {
   EventCredentialModel,
   IEventCredentialDocument,
@@ -29,10 +29,47 @@ export interface RenderAssetData {
 
 export class MongoEventCredentialRepository {
   /**
+   * Reconcile the sequence counter to be at least as large as the actual max
+   * sequenceNumber in the event_credentials collection for this event.
+   * This prevents E11000 collisions when the counter document was lost,
+   * migrated, or starts at 0 while credentials with higher sequences already exist.
+   * Safe to call concurrently: $max operator is idempotent and atomic.
+   */
+  private async reconcileCounterWithActualMax(eventId: string): Promise<void> {
+    if (mongoose.connection.readyState !== 1) return;
+    const eventObjId = new mongoose.Types.ObjectId(eventId);
+
+    // Find the highest existing sequence number for this event
+    const highest = await EventCredentialModel.findOne(
+      { eventId: eventObjId },
+      { sequenceNumber: 1 },
+      { sort: { sequenceNumber: -1 }, lean: true }
+    );
+
+    if (highest && typeof (highest as any).sequenceNumber === 'number' && (highest as any).sequenceNumber > 0) {
+      // Atomically bump counter to at least this value using $max (idempotent, safe under concurrency)
+      await EventSequenceCounterModel.findOneAndUpdate(
+        { eventId: eventObjId },
+        { $max: { lastSequenceNumber: (highest as any).sequenceNumber } },
+        { upsert: true }
+      );
+    }
+  }
+
+  /**
    * Atomically allocate the next monotonic sequence number for an event.
+   * Reconciles the counter with the actual collection max on first call (counter absent)
+   * to prevent E11000 collisions after counter document loss or migration.
    */
   async getNextSequenceNumber(eventId: string): Promise<number> {
     const eventObjId = new mongoose.Types.ObjectId(eventId);
+
+    // Only reconcile when the counter document is absent to avoid a redundant read
+    // on every steady-state allocation.
+    const existing = await EventSequenceCounterModel.findOne({ eventId: eventObjId }).lean();
+    if (!existing) {
+      await this.reconcileCounterWithActualMax(eventId);
+    }
 
     const counter = await EventSequenceCounterModel.findOneAndUpdate(
       { eventId: eventObjId },
@@ -46,10 +83,18 @@ export class MongoEventCredentialRepository {
   /**
    * Atomically reserve a block of N sequence numbers for batch issuance.
    * Returns the starting sequence number of the allocated block.
+   * Reconciles the counter with the actual collection max on first call (counter absent)
+   * to prevent E11000 collisions after counter document loss or migration.
    */
   async allocateSequenceBlock(eventId: string, count: number): Promise<number> {
     if (count <= 0) return 1;
     const eventObjId = new mongoose.Types.ObjectId(eventId);
+
+    // Only reconcile when the counter document is absent
+    const existing = await EventSequenceCounterModel.findOne({ eventId: eventObjId }).lean();
+    if (!existing) {
+      await this.reconcileCounterWithActualMax(eventId);
+    }
 
     const counter = await EventSequenceCounterModel.findOneAndUpdate(
       { eventId: eventObjId },

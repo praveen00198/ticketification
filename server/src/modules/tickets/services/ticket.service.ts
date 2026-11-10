@@ -1637,6 +1637,40 @@ export class TicketService {
             if (cred) {
               const seqStr = (cred.sequenceNumber || 1).toString().padStart(5, '0');
               const displayId = cred.formattedId || `${safePrefix}-${seqStr}`;
+              const storagePath = cred.asset?.storagePath || `events/${eventId}/credentials/${displayId}.png`;
+
+              // 1. Storage Pre-Check: If asset already exists in Supabase Storage, retrieve direct URL with zero Sharp overhead
+              try {
+                const exists = await this.storageServ.checkObjectExists(storagePath);
+                if (exists) {
+                  const publicUrl = this.storageServ.getPublicUrl(storagePath);
+                  if (publicUrl) {
+                    await EventCredentialModel.updateOne(
+                      { _id: cred._id },
+                      {
+                        $set: {
+                          'asset.publicUrl': publicUrl,
+                          'asset.storagePath': storagePath,
+                          'asset.renderedAt': new Date(),
+                          renderStatus: 'COMPLETED',
+                        },
+                      }
+                    );
+                    t.assetUrl = publicUrl;
+                    continue;
+                  }
+                }
+              } catch (storageCheckErr: any) {
+                console.warn(`[generateTicketsExcel] Storage existence check failed for ${storagePath}:`, storageCheckErr.message);
+              }
+
+              // 2. Bound memory: Do not run synchronous Sharp rendering during Excel export for bulk rosters (> 5 tickets)
+              // Background worker handles bulk rasterization asynchronously; spreadsheet falls back to download route
+              if (targetTickets.length > 5) {
+                continue;
+              }
+
+              // 3. For small batches (<= 5), render with bounded buffer dereferencing and immediate GC trigger
               const eventDateStr = ((mongoEvent as any)?.date && (mongoEvent as any).date !== '2026-10-10')
                 ? (mongoEvent as any).date
                 : (mongoEvent?.schedule?.startAt
@@ -1658,8 +1692,8 @@ export class TicketService {
 
               const rendered = await this.imageServ.generateTicketImage(ticketData);
               if (rendered?.pngBuffer && isPngBuffer(rendered.pngBuffer)) {
-                const storagePath = cred.asset?.storagePath || `events/${eventId}/credentials/${displayId}.png`;
                 const uploadRes = await this.storageServ.uploadTicketImage(storagePath, rendered.pngBuffer, 'image/png');
+                rendered.pngBuffer = null as any;
                 if (uploadRes?.publicUrl) {
                   await EventCredentialModel.updateOne(
                     { _id: cred._id },
@@ -1668,12 +1702,14 @@ export class TicketService {
                         'asset.publicUrl': uploadRes.publicUrl,
                         'asset.storagePath': uploadRes.storagePath,
                         'asset.renderedAt': new Date(),
+                        renderStatus: 'COMPLETED',
                       },
                     }
                   );
                   t.assetUrl = uploadRes.publicUrl;
                 }
               }
+              memoryBudgetGovernor.triggerGarbageCollection();
             }
           } catch (e: any) {
             console.warn(`[generateTicketsExcel] Failed to generate missing asset for ${t.id}:`, e.message);

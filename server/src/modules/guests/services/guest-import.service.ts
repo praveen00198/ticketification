@@ -1,4 +1,4 @@
-import * as xlsx from 'xlsx';
+﻿import * as xlsx from 'xlsx';
 import fs from 'fs';
 import path from 'path';
 import config from '../../../config/env';
@@ -19,11 +19,7 @@ import { EventModel } from '../../../db/mongo/models/event.model';
 import { EventMemberModel } from '../../../db/mongo/models/event-member.model';
 import { EventCredentialModel } from '../../../db/mongo/models/event-credential.model';
 import { mongoEventCredentialRepository } from '../../events/repositories/mongo-event-credential.repository';
-import { qrService } from '../../tickets/services/qr.service';
-import { ticketImageService, TicketImageData, isPngBuffer } from '../../tickets/services/ticket-image.service';
-import { supabaseStorageService } from '../../tickets/services/supabase-storage.service';
 import { eventJobQueueService } from '../../events/services/event-job-queue.service';
-import { memoryBudgetGovernor } from '../../../utils/memory-budget-governor';
 import {
   HeaderAnalysisResult,
   ValidateImportDTO,
@@ -757,47 +753,10 @@ export class GuestImportService {
         const slug = (row.name || 'attendee').toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
         const storagePath = `events/${eventId}/credentials/${slug}-${formattedId}.png`;
 
-        let publicUrl: string | null = null;
-        let renderedAt: Date | null = null;
 
-        // Immediately generate and store authentic PNG ticket in Supabase Storage upon guest import (<= 50 guests)
-        // For larger imports (> 50 guests), credentials are saved as unrendered and rendered via background job with BATCH_SIZE = 1
-        if (guestsToInsert.length <= 50 && supabaseStorageService.isConfigured()) {
-          try {
-            const qrDataUrl = await qrService.generateQrDataUrl(verificationToken);
-            const ticketData: TicketImageData = {
-              ticketId: formattedId,
-              guestName: row.name || 'Valued Guest',
-              eventName: event.name || 'Event Pass',
-              eventDate: eventDateStr,
-              ticketType: row.category || 'General Admission',
-              verificationToken,
-              qrCodeDataUrl: qrDataUrl,
-              venue: venueStr,
-              organization: row.organization || undefined,
-              phone: row.phone || undefined,
-            };
-
-            let rendered: any = await ticketImageService.generateTicketImage(ticketData);
-            if (rendered?.pngBuffer && isPngBuffer(rendered.pngBuffer)) {
-              let pngBuffer: Buffer | null = rendered.pngBuffer;
-              rendered = null;
-              const uploadRes = await supabaseStorageService.uploadTicketImage(
-                storagePath,
-                pngBuffer,
-                'image/png'
-              );
-              pngBuffer = null;
-              publicUrl = uploadRes.publicUrl;
-              renderedAt = new Date();
-            }
-            rendered = null;
-            memoryBudgetGovernor.triggerGarbageCollection();
-          } catch (genErr: any) {
-            console.warn(`[GuestImportService] Immediate ticket rendering/upload failed for ${formattedId}:`, genErr.message);
-          }
-        }
-
+        // Guest import NEVER generates PNG images. All credentials are created with
+        // renderStatus PENDING and rendered independently via a background bulk-render job.
+        // This keeps import lightweight, failure-independent, and memory-safe on 512 MB containers.
         await EventCredentialModel.create({
           eventId: new mongoose.Types.ObjectId(eventId),
           sequenceNumber: seq,
@@ -807,6 +766,7 @@ export class GuestImportService {
           terminology,
           usagePolicy: 'SINGLE_USE',
           status: 'ACTIVE',
+          renderStatus: 'PENDING',
           holder: {
             name: row.name,
             email: row.email || undefined,
@@ -818,8 +778,8 @@ export class GuestImportService {
           },
           asset: {
             storagePath,
-            publicUrl,
-            renderedAt,
+            publicUrl: null,
+            renderedAt: null,
             mimeType: 'image/png',
           },
           metadata: row.metadata || {},
@@ -828,13 +788,13 @@ export class GuestImportService {
         insertedCount++;
       }
 
-      // If import had more than 50 guests, auto-enqueue background bulk render job with BATCH_SIZE=1 to prevent memory exhaustion
-      if (guestsToInsert.length > 50) {
-        try {
-          await eventJobQueueService.enqueueBulkRenderJob(eventId, userId, { terminology });
-        } catch (enqueueErr: any) {
-          console.warn('[GuestImportService] Failed to auto-enqueue bulk render job:', (enqueueErr as any)?.message);
-        }
+      // Always enqueue a background bulk render job after import completes.
+      // This covers both small (<= 50) and large (> 50) imports consistently.
+      // The job is idempotent: if one is already QUEUED or PROCESSING it is reused.
+      try {
+        await eventJobQueueService.enqueueBulkRenderJob(eventId, userId, undefined);
+      } catch (enqueueErr: any) {
+        console.warn('[GuestImportService] Failed to auto-enqueue bulk render job:', (enqueueErr as any)?.message);
       }
 
       // Clean up temporary disk staging file and in-memory cache

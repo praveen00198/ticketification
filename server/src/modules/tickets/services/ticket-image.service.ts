@@ -412,9 +412,9 @@ export class TicketImageService {
 
       return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1620 2025" width="1620" height="2025">
   <defs>
-    <style>
-      ${embeddedFontFace}
-    </style>
+    <!-- Font base64 is intentionally NOT embedded in the overlay SVG to prevent libvips native RSS growth.
+         The NotoSansDevanagari font is registered via system fontconfig at startup by initFonts(),
+         and libvips resolves it automatically without inline data-URI embedding. -->
     <filter id="card-shadow" x="-10%" y="-10%" width="120%" height="120%">
       <feDropShadow dx="0" dy="16" stdDeviation="20" flood-opacity="0.5"/>
     </filter>

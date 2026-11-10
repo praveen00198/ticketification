@@ -803,6 +803,13 @@ export class EventJobQueueService {
       throw new NotFoundError('No credential template available for rendering');
     }
 
+    // Reclaim any abandoned ticket leases from prior crashed workers before starting
+    try {
+      await this.credentialRepo.reclaimAbandonedTicketLeases(eventId, 0);
+    } catch {
+      // Non-fatal if repository call fails
+    }
+
     const tracker = new MemoryTracker();
     tracker.start('bulk_render_job_start');
     logMemory('bulk_render_job_start', { eventId, totalTarget, unrendered: initialUnrendered });
